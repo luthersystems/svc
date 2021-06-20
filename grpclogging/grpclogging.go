@@ -1,3 +1,5 @@
+// Copyright © 2021 Luther Systems, Ltd. All right reserved.
+
 /*
 HTTP interceptors for grpc-middleware for logging.
 */

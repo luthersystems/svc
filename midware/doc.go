@@ -1,3 +1,5 @@
+// Copyright © 2021 Luther Systems, Ltd. All right reserved.
+
 /*
 Package midware defines an interface for the common http middleware pattern and
 provides functionality for sensibly chaining middleware to create complex http

@@ -1,3 +1,5 @@
+// Copyright © 2021 Luther Systems, Ltd. All right reserved.
+
 /*
 Helper library to register prometheus metrics for logrus errors.
 Inspired by Matthias Friedrich's blog post:

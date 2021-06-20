@@ -1,3 +1,5 @@
+// Copyright © 2021 Luther Systems, Ltd. All right reserved.
+
 /*
 Helper library to register error handling HTTP middleware and convert various
 error types defined in api/ into proper HTTP status codes.
