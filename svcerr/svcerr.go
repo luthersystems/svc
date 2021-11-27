@@ -1,13 +1,14 @@
 // Copyright © 2021 Luther Systems, Ltd. All right reserved.
 
 /*
-Helper library to register error handling HTTP middleware and convert various
+Package svcerr is a library to register error handling HTTP middleware and convert various
 error types defined in api/ into proper HTTP status codes.
 */
 package svcerr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -29,6 +30,88 @@ const (
 
 // incExceptionMetric records prometheus metrics about a returned exception.
 var incExceptionMetric func(*common.Exception)
+
+var _ error = &lutherError{}
+
+// lutherError represents a Luther managed error.
+type lutherError struct {
+	common.Exception
+}
+
+// Error implements error.
+func (s lutherError) Error() string {
+	return s.GetDescription()
+}
+
+// NewUnexpectedError constructs an unexpected error.
+func NewUnexpectedError(message string) *UnexpectedError {
+	return &UnexpectedError{
+		lutherError{
+			*UnexpectedException(context.TODO(), message),
+		},
+	}
+}
+
+// UnexpectedError is a raw Luther expected business logic error.
+type UnexpectedError struct {
+	lutherError
+}
+
+// NewBusinessError constructs a business error.
+func NewBusinessError(message string) *BusinessError {
+	return &BusinessError{
+		lutherError{
+			*BusinessException(context.TODO(), message),
+		},
+	}
+}
+
+// BusinessError is a raw Luther expected business logic error.
+type BusinessError struct {
+	lutherError
+}
+
+// NewSecurityError constructs a security error.
+func NewSecurityError(message string) *SecurityError {
+	return &SecurityError{
+		lutherError{
+			*SecurityException(context.TODO(), message),
+		},
+	}
+}
+
+// SecurityError is a raw Luther security error.
+type SecurityError struct {
+	lutherError
+}
+
+// NewInfrastructureError constructs a infrastructure error.
+func NewInfrastructureError(message string) *InfrastructureError {
+	return &InfrastructureError{
+		lutherError{
+			*InfrastructureException(context.TODO(), message),
+		},
+	}
+}
+
+// InfrastructureError is a raw Luther infrastructure error.
+type InfrastructureError struct {
+	lutherError
+}
+
+// NewServiceError constructs a service error.
+func NewServiceError(message string) *ServiceError {
+	return &ServiceError{
+		lutherError{
+			*ServiceException(context.TODO(), message),
+		},
+	}
+}
+
+// ServiceError is a raw Luther service error.
+type ServiceError struct {
+	lutherError
+}
 
 func init() {
 	{ // register exception type counts
@@ -64,15 +147,33 @@ func internalError(ctx context.Context) error {
 func grpcToLutherError(ctx context.Context, log grpclogging.ServiceLogger, err error) error {
 	stat, ok := status.FromError(err)
 	if !ok {
-		// An unhandled error. A non-grpc wrapped error which we
-		// assume has not yet been logged, and for which we must mask.
-		// By convention this should not happen, however it can occur
-		// if an error is accidently passed up the call stack without
-		// transforming it to a gRPC error first. In any case, this
-		// error is not conventional and should not be presented to the
-		// caller.
-		log(ctx).WithError(err).Errorf("unhandled error")
-		return internalError(ctx)
+		// not a grpc error, but possibly a raw luther error.
+		var eu *UnexpectedError
+		var eb *BusinessError
+		var es *SecurityError
+		var ei *InfrastructureError
+		var ev *ServiceError
+		if errors.As(err, &eu) {
+			stat = status.New(codes.Unknown, eu.Error())
+		} else if errors.As(err, &eb) {
+			stat = status.New(codes.InvalidArgument, eb.Error())
+		} else if errors.As(err, &es) {
+			stat = status.New(codes.PermissionDenied, es.Error())
+		} else if errors.As(err, &ei) {
+			stat = status.New(codes.Internal, ei.Error())
+		} else if errors.As(err, &ev) {
+			stat = status.New(codes.Unavailable, ev.Error())
+		} else {
+			// An unhandled error. A non-grpc wrapped error which we
+			// assume has not yet been logged, and for which we must mask.
+			// By convention this should not happen, however it can occur
+			// if an error is accidently passed up the call stack without
+			// transforming it to a gRPC error first. In any case, this
+			// error is not conventional and should not be presented to the
+			// caller.
+			log(ctx).WithError(err).Errorf("unhandled error")
+			return internalError(ctx)
+		}
 	}
 
 	if len(stat.Details()) > 1 {
