@@ -12,13 +12,16 @@ import (
 // logMetadataCtxKey is a key to store logging data within context.
 type logMetadataCtxKey struct{}
 
-// ctxSetLogMetadata adds logging metadata to context.
-func ctxSetLogMetadata(ctx context.Context, fields logrus.Fields) context.Context {
+// NewContext returns a new context initialized with logging metadata.
+func NewContext(ctx context.Context) context.Context {
 	fieldMap := new(sync.Map)
-	for key, val := range fields {
-		fieldMap.Store(key, val)
-	}
 	return context.WithValue(ctx, logMetadataCtxKey{}, fieldMap)
+}
+
+func newContextWithFields(ctx context.Context, fields logrus.Fields) context.Context {
+	newCtx := NewContext(ctx)
+	AddLogrusFields(newCtx, fields)
+	return newCtx
 }
 
 // ctxGetLogMetadata retrieves logging metadata from context.
@@ -52,13 +55,26 @@ func GetLogrusEntry(ctx context.Context, base *logrus.Entry) *logrus.Entry {
 	return base
 }
 
-// AddLogrusField adds a log field to the request context for later retrieval.
-// This is intended to be used from a handler once `LogrusMethodInterceptor` has
-// been used to initialize the context.
+// AddLogrusField adds a log field to the supplied context for later retrieval.
+// The context must have been previously initialized with log metadata via
+// `LogrusMethodInterceptor` or `NewContext`.
 func AddLogrusField(ctx context.Context, key, value string) {
 	fieldMap := ctxGetLogMetadata(ctx)
 	if fieldMap == nil {
 		return
 	}
 	fieldMap.Store(key, value)
+}
+
+// AddLogrusField adds log fields to the supplied context for later retrieval.
+// The context must have been previously initialized with log metadata via
+// `LogrusMethodInterceptor` or `NewContext`.
+func AddLogrusFields(ctx context.Context, fields logrus.Fields) {
+	fieldMap := ctxGetLogMetadata(ctx)
+	if fieldMap == nil {
+		return
+	}
+	for key, val := range fields {
+		fieldMap.Store(key, val)
+	}
 }

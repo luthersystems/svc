@@ -33,7 +33,7 @@ func newGRPCMethodLogInterceptor(base *logrus.Entry, t Timer, lutherTime Time) g
 				reqID = mdID[0]
 			}
 		}
-		ctx = ctxSetLogMetadata(ctx, logrus.Fields{
+		ctx = newContextWithFields(ctx, logrus.Fields{
 			"rpc_method": info.FullMethod,
 			"req_id":     reqID,
 		})
