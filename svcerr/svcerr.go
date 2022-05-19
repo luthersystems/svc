@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/protos/common"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/prometheus/client_golang/prometheus"
@@ -362,7 +362,7 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 		for _, handler := range handlers {
 			handler(ctx, mux, marshaler, w, r, err)
 		}
-		w.Header().Set("Content-Type", marshaler.ContentType())
+		w.Header().Set("Content-Type", marshaler.ContentType(nil))
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		if !ok || len(stat.Details()) != 1 {
