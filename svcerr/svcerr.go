@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	//lint:ignore SA1019 we are not ready to upgrade proto lib yet
 	"github.com/golang/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/protos/common"
@@ -376,7 +377,10 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 				log(ctx).WithError(err).Errorf("marshal unexpected error")
 				b = []byte(cannedExceptionJSON(ctx))
 			}
-			w.Write(b)
+			_, err = w.Write(b)
+			if err != nil {
+				log(ctx).WithError(err).Errorf("write")
+			}
 			incExceptionMetric(pbErr.GetException())
 			return
 		}
@@ -390,7 +394,10 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 				log(ctx).WithError(err).Errorf("marshal detail error")
 				b = []byte(cannedExceptionJSON(ctx))
 			}
-			w.Write(b)
+			_, err = w.Write(b)
+			if err != nil {
+				log(ctx).WithError(err).Errorf("write")
+			}
 			return
 		}
 		pbErr := &common.ExceptionResponse{
@@ -402,7 +409,10 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 			b = []byte(cannedExceptionJSON(ctx))
 		}
 		incExceptionMetric(pbErr.GetException())
-		w.Write(b)
+		_, err = w.Write(b)
+		if err != nil {
+			log(ctx).WithError(err).Errorf("write")
+		}
 	}
 }
 

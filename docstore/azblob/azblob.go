@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -45,7 +46,8 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 		return nil, fmt.Errorf("oauth config: %w", err)
 	}
 
-	certData, err := ioutil.ReadFile(path)
+	path = filepath.Clean(path)
+	certData, err := ioutil.ReadFile(path) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the certificate file (%s): %w", path, err)
 	}
@@ -56,6 +58,9 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromCertificate(*oauthConfig, clientID, certificate, rsaPrivateKey, azureStorageResourceName)
+	if err != nil {
+		return nil, fmt.Errorf("new token: %w", err)
+	}
 
 	// obtain a fresh token
 	err = spt.Refresh()
