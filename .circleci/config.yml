@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: luthersystems/build-go:0.0.51
+      - image: luthersystems/build-go:v0.0.57
     steps:
       - checkout
       - run: make citest

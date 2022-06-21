@@ -13,8 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	//lint:ignore SA1019 we are not ready to upgrade proto lib yet
-	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto" //nolint:staticcheck // SA1019 we are not ready to upgrade proto lib yet
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/protos/common"
 	"github.com/luthersystems/svc/grpclogging"
