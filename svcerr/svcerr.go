@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/protobuf/proto" //nolint:staticcheck // SA1019 we are not ready to upgrade proto lib yet
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/protos/common"
 	"github.com/luthersystems/svc/grpclogging"
@@ -21,6 +20,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/runtime/protoiface"
 )
 
 const (
@@ -39,7 +40,7 @@ type lutherError struct {
 }
 
 // Error implements error.
-func (s lutherError) Error() string {
+func (s *lutherError) Error() string {
 	return s.GetDescription()
 }
 
@@ -328,7 +329,12 @@ func AppErrorUnaryInterceptor(log grpclogging.ServiceLogger) func(ctx context.Co
 			} else {
 				details = except
 			}
-			stat, err := status.New(code, except.GetDescription()).WithDetails(details)
+			msg, ok := details.(protoiface.MessageV1)
+			if !ok {
+				log(ctx).Errorf("wrong message type: %T", details)
+				return nil, internalError(ctx)
+			}
+			stat, err := status.New(code, except.GetDescription()).WithDetails(msg)
 			if err == nil {
 				// case 1: we coerced a response with an exception into a proper
 				// gRPC error.
