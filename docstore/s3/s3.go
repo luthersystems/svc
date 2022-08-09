@@ -56,8 +56,9 @@ type Store struct {
 
 // Put writes bytes to an S3 object.
 func (a *Store) Put(key string, body []byte) error {
-	if key == "" {
-		return fmt.Errorf("missing key")
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return err
 	}
 
 	input := &s3.PutObjectInput{
@@ -69,7 +70,7 @@ func (a *Store) Put(key string, body []byte) error {
 	request, _ := a.svc.PutObjectRequest(input)
 	request.Retryer = client.DefaultRetryer{NumMaxRetries: 5}
 
-	err := request.Send()
+	err = request.Send()
 	if err != nil {
 		return fmt.Errorf("s3 put: %w", err)
 	}
@@ -79,6 +80,10 @@ func (a *Store) Put(key string, body []byte) error {
 
 // Get reads bytes stored in an S3 document.
 func (a *Store) Get(key string) ([]byte, error) {
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return nil, err
+	}
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(fmt.Sprintf("%s/%s", a.prefix, key)),
@@ -87,7 +92,7 @@ func (a *Store) Get(key string) ([]byte, error) {
 	// retry requests that aren't in S3 for about 1 second to avoid issues
 	// when rapidly writing and reading requests
 	request.Retryer = missingRetryer{client.DefaultRetryer{NumMaxRetries: 5}}
-	err := request.Send()
+	err = request.Send()
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -137,11 +142,16 @@ func (a *Store) GetStreaming(key string, w http.ResponseWriter) error {
 
 // Delete removes an object from the S3 bucket.
 func (a *Store) Delete(key string) error {
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return err
+	}
+
 	input := &s3.DeleteObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(fmt.Sprintf("%s/%s", a.prefix, key)),
 	}
-	_, err := a.svc.DeleteObject(input)
+	_, err = a.svc.DeleteObject(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
