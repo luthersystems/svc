@@ -166,6 +166,10 @@ func getBufFromBlob(ctx context.Context, blobURL azblob.BlockBlobURL) ([]byte, e
 
 // Get reads bytes from azure blob.
 func (s *Store) Get(key string) ([]byte, error) {
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return nil, err
+	}
 	ctx := context.Background()
 	blobURL := s.containerURL.NewBlockBlobURL(fmt.Sprintf("%s/%s", s.prefix, key))
 	b, err := getBufFromBlob(ctx, blobURL)
@@ -190,9 +194,14 @@ func putBufToBlob(ctx context.Context, blobURL azblob.BlockBlobURL, blob []byte)
 
 // Put writes bytes to azure blob.
 func (s *Store) Put(key string, body []byte) error {
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	blobURL := s.containerURL.NewBlockBlobURL(fmt.Sprintf("%s/%s", s.prefix, key))
-	err := putBufToBlob(ctx, blobURL, body)
+	err = putBufToBlob(ctx, blobURL, body)
 	if err != nil {
 		return fmt.Errorf("az put: %w", err)
 	}
