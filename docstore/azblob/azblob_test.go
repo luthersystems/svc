@@ -2,14 +2,20 @@
 package azblob
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/luthersystems/svc/docstore"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	reqTimeout = 30 * time.Second
 )
 
 var (
@@ -64,16 +70,25 @@ func do(t *testing.T, store *Store) {
 	var err error
 	testKey := fmt.Sprintf("%s-%s", "test", uuid.New().String())
 	data := []byte("test")
-	err = store.Put(testKey, data)
+	bg := context.Background()
+	ctx, done := context.WithTimeout(bg, reqTimeout)
+	defer done()
+	err = store.Put(ctx, testKey, data)
 	require.NoError(t, err)
 
-	b, err := store.Get(testKey)
+	ctx, done = context.WithTimeout(bg, reqTimeout)
+	defer done()
+	b, err := store.Get(ctx, testKey)
 	require.NoError(t, err)
 	require.Equal(t, b, data)
 
-	_, err = store.Get("fnord-missing")
+	ctx, done = context.WithTimeout(bg, reqTimeout)
+	defer done()
+	_, err = store.Get(ctx, "fnord-missing")
 	require.Error(t, err, docstore.ErrRequestNotFound)
 
-	_, err = store.Get("public-009e2eb9-0e36-45b3-9697-f3903f96344f.jpeg")
+	ctx, done = context.WithTimeout(bg, reqTimeout)
+	defer done()
+	_, err = store.Get(ctx, "public-009e2eb9-0e36-45b3-9697-f3903f96344f.jpeg")
 	require.NoError(t, err)
 }

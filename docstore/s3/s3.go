@@ -4,6 +4,7 @@ package s3
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -55,7 +56,7 @@ type Store struct {
 }
 
 // Put writes bytes to an S3 object.
-func (a *Store) Put(key string, body []byte) error {
+func (a *Store) Put(ctx context.Context, key string, body []byte) error {
 	err := docstore.ValidKey(key)
 	if err != nil {
 		return err
@@ -69,7 +70,7 @@ func (a *Store) Put(key string, body []byte) error {
 
 	request, _ := a.svc.PutObjectRequest(input)
 	request.Retryer = client.DefaultRetryer{NumMaxRetries: 5}
-
+	request.SetContext(ctx)
 	err = request.Send()
 	if err != nil {
 		return fmt.Errorf("s3 put: %w", err)
@@ -79,7 +80,7 @@ func (a *Store) Put(key string, body []byte) error {
 }
 
 // Get reads bytes stored in an S3 document.
-func (a *Store) Get(key string) ([]byte, error) {
+func (a *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	err := docstore.ValidKey(key)
 	if err != nil {
 		return nil, err
@@ -92,6 +93,7 @@ func (a *Store) Get(key string) ([]byte, error) {
 	// retry requests that aren't in S3 for about 1 second to avoid issues
 	// when rapidly writing and reading requests
 	request.Retryer = missingRetryer{client.DefaultRetryer{NumMaxRetries: 5}}
+	request.SetContext(ctx)
 	err = request.Send()
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {

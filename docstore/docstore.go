@@ -3,6 +3,7 @@
 package docstore
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"regexp"
@@ -17,13 +18,13 @@ var (
 // Getter gets documents.
 type Getter interface {
 	// Get retrieves the document.
-	Get(key string) ([]byte, error)
+	Get(ctx context.Context, key string) ([]byte, error)
 }
 
 // Putter stores documents.
 type Putter interface {
 	// Put stores the document.
-	Put(key string, body []byte) error
+	Put(ctx context.Context, key string, body []byte) error
 }
 
 // DocStore provides document services.
