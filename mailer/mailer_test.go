@@ -3,11 +3,14 @@
 package mailer
 
 import (
+	"context"
 	"os"
 	"testing"
+	"time"
 )
 
 const (
+	reqTimeout          = 30 * time.Second
 	DefaultSuccessEmail = "success@simulator.amazonses.com"
 	SESRegion           = "eu-west-1"
 	EmailSender         = "noreply@testing.luthersystemsapp.com"
@@ -48,7 +51,9 @@ func TestSend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init mailer: %v", err)
 	}
-	err = mailer.Send(HTMLTemplateText, recipient, SubjectTemplateText)
+	ctx, done := context.WithTimeout(context.Background(), reqTimeout)
+	defer done()
+	err = mailer.Send(ctx, HTMLTemplateText, recipient, SubjectTemplateText)
 	if err != nil {
 		t.Fatalf("send mailer: %v", err)
 	}

@@ -3,6 +3,8 @@
 package mailer
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ses"
@@ -35,7 +37,7 @@ func NewSES(region string, sender string) (*SES, error) {
 }
 
 // Send send an email to a person.
-func (m *SES) Send(content string, email string, subject string) error {
+func (m *SES) Send(ctx context.Context, content string, email string, subject string) error {
 	// Assemble the email.
 	input := &ses.SendEmailInput{
 		Destination: &ses.Destination{
@@ -59,7 +61,7 @@ func (m *SES) Send(content string, email string, subject string) error {
 		Source: aws.String(m.sender),
 	}
 	// Attempt to send the email.
-	_, err := m.svc.SendEmail(input)
+	_, err := m.svc.SendEmailWithContext(ctx, input)
 	if err != nil {
 		return err
 	}
