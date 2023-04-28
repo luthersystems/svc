@@ -1,0 +1,15 @@
+name: CI Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: luthersystems/build-go:v0.0.57
+    steps:
+    - uses: actions/checkout@v3.5.0
+    - name: Run CI tests
+      run: make citest
