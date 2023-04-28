@@ -1,4 +1,5 @@
-name: luthersystems/svc/luthersystems/svc
+name: CI Tests
+
 on:
   pull_request:
     branches:
@@ -10,4 +11,5 @@ jobs:
       image: luthersystems/build-go:v0.0.57
     steps:
     - uses: actions/checkout@v3.5.0
-    - run: make citest
+    - name: Run CI tests
+      run: make citest
