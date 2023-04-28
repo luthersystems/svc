@@ -1,0 +1,13 @@
+name: luthersystems/svc/luthersystems/svc
+on:
+  push:
+    branches:
+    - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: luthersystems/build-go:v0.0.57
+    steps:
+    - uses: actions/checkout@v3.5.0
+    - run: make citest
