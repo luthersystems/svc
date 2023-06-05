@@ -206,3 +206,19 @@ func (s *Store) Put(ctx context.Context, key string, body []byte) error {
 
 	return nil
 }
+
+// Delete deletes bytes from azure blob.
+func (s *Store) Delete(ctx context.Context, key string) error {
+	err := docstore.ValidKey(key)
+	if err != nil {
+		return err
+	}
+
+	blobURL := s.containerURL.NewBlockBlobURL(fmt.Sprintf("%s/%s", s.prefix, key))
+	_, err = blobURL.Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+	if err != nil {
+		return fmt.Errorf("az delete: %w", err)
+	}
+
+	return nil
+}
