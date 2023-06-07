@@ -27,10 +27,17 @@ type Putter interface {
 	Put(ctx context.Context, key string, body []byte) error
 }
 
+// Deleter deletes documents.
+type Deleter interface {
+	// Put stores the document.
+	Delete(ctx context.Context, key string) error
+}
+
 // DocStore provides document services.
 type DocStore interface {
 	Getter
 	Putter
+	Deleter
 }
 
 var validKeyRegexp = regexp.MustCompile(`^[a-zA-Z0-9_./()-]*$`)

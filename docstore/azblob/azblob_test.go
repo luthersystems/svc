@@ -84,6 +84,11 @@ func do(t *testing.T, store *Store) {
 
 	ctx, done = context.WithTimeout(bg, reqTimeout)
 	defer done()
+	err = store.Delete(ctx, testKey)
+	require.NoError(t, err)
+
+	ctx, done = context.WithTimeout(bg, reqTimeout)
+	defer done()
 	_, err = store.Get(ctx, "fnord-missing")
 	require.Error(t, err, docstore.ErrRequestNotFound)
 

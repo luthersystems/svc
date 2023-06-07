@@ -143,7 +143,7 @@ func (a *Store) GetStreaming(key string, w http.ResponseWriter) error {
 }
 
 // Delete removes an object from the S3 bucket.
-func (a *Store) Delete(key string) error {
+func (a *Store) Delete(ctx context.Context, key string) error {
 	err := docstore.ValidKey(key)
 	if err != nil {
 		return err
@@ -153,7 +153,8 @@ func (a *Store) Delete(key string) error {
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(fmt.Sprintf("%s/%s", a.prefix, key)),
 	}
-	_, err = a.svc.DeleteObject(input)
+
+	_, err = a.svc.DeleteObjectWithContext(ctx, input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
