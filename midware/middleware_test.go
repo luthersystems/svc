@@ -70,4 +70,19 @@ func TestTraceHeaders(t *testing.T) {
 		fixed := "yes"
 		assert.Equal(t, fixed, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{fixed}}, nil).Header.Get(DefaultTraceHeader))
 	})
+	h = TraceHeaders(DefaultAzureHeader, true).Wrap(basicHandler)
+	testServer(t, h, func(t *testing.T, server *httptest.Server) {
+		traceId1 := "ee59e664-dda3-4cea-b9e2-17ff84770814"
+		assert.Equal(t, traceId1, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{traceId1}}, nil).Header.Get(DefaultTraceHeader))
+
+		traceId2 := "585d8935-11bd-4c7e-a428-9a9094adf28b"
+		assert.Equal(t, traceId2, testResponseHeaders(t, server, "GET", "/", http.Header{
+			DefaultAWSHeader:   []string{traceId1},
+			DefaultAzureHeader: []string{traceId2},
+		}, nil).Header.Get(DefaultAzureHeader))
+		assert.Equal(t, "", testResponseHeaders(t, server, "GET", "/", http.Header{
+			DefaultAWSHeader:   []string{traceId1},
+			DefaultAzureHeader: []string{traceId2},
+		}, nil).Header.Get(DefaultAWSHeader))
+	})
 }
