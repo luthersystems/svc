@@ -178,18 +178,29 @@ func (h *traceRequestHeader) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	precedenceHeaders := []string{DefaultTraceHeader, DefaultAzureHeader, DefaultAWSHeader}
 
 	if h.allow {
+		reqid = r.Header.Get(h.header)
 		for _, header := range precedenceHeaders {
-			if r.Header.Get(header) != "" {
+			headerValue := r.Header.Get(header)
+
+			if headerValue != "" {
 				h.header = header
+				reqid = headerValue
 				break
 			}
 		}
-		reqid = r.Header.Get(h.header)
 	}
 	if reqid == "" {
 		reqid = uuid.New().String()
 		r.Header.Set(h.header, reqid)
 	}
+
+	// Always set DefaultTraceHeader on request and response since a lot of
+	// logging is hard-coded to use this header.
+	if h.header != DefaultTraceHeader {
+		r.Header.Set(DefaultTraceHeader, reqid)
+		w.Header().Set(DefaultTraceHeader, reqid)
+	}
+
 	w.Header().Set(h.header, reqid)
 	h.next.ServeHTTP(w, r)
 }
