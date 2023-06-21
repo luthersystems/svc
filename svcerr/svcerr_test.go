@@ -26,6 +26,14 @@ func TestRawError(t *testing.T) {
 		require.Len(t, stat.Details(), 1)
 	})
 
+	t.Run("internal (canceled)", func(t *testing.T) {
+		err := grpcToLutherError(ctx, log, status.Error(codes.Canceled, context.Canceled.Error()))
+		stat, ok := status.FromError(err)
+		require.True(t, ok, "expected ok status")
+		require.Equal(t, stat.Code(), codes.Canceled)
+		require.Len(t, stat.Details(), 1)
+	})
+
 	t.Run("unexpected", func(t *testing.T) {
 		err := fmt.Errorf("error: %w", NewUnexpectedError("unexpected"))
 		require.Equal(t, "error: unexpected", err.Error())
