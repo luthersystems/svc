@@ -172,7 +172,10 @@ func grpcToLutherError(ctx context.Context, log grpclogging.ServiceLogger, err e
 			// transforming it to a gRPC error first. In any case, this
 			// error is not conventional and should not be presented to the
 			// caller.
-			log(ctx).WithError(err).Errorf("unhandled error")
+			if !errors.Is(err, context.Canceled) {
+				// ignore client cancelations of request
+				log(ctx).WithError(err).Errorf("unhandled error")
+			}
 			return internalError(ctx)
 		}
 	}
