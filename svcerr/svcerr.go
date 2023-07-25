@@ -146,6 +146,9 @@ func internalError(ctx context.Context) error {
 }
 
 func grpcToLutherError(ctx context.Context, log grpclogging.ServiceLogger, err error) error {
+	if !errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
+		err = fmt.Errorf("%w: %s", context.Canceled, err)
+	}
 	stat, ok := status.FromError(err)
 	if !ok {
 		// not a grpc error, but possibly a raw luther error.
