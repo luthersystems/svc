@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -104,7 +103,7 @@ func (a *Store) Get(ctx context.Context, key string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("s3 get: %w", err)
 	}
-	body, err := ioutil.ReadAll(result.Body)
+	body, err := io.ReadAll(result.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read result body: %w", err)
 	}

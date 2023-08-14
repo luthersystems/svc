@@ -7,8 +7,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -47,7 +47,7 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 	}
 
 	path = filepath.Clean(path)
-	certData, err := ioutil.ReadFile(path) // #nosec G304
+	certData, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the certificate file (%s): %w", path, err)
 	}

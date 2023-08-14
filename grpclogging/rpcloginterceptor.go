@@ -4,6 +4,7 @@ package grpclogging
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+func isHealthCheck(method string) bool {
+	lowerCaseMethod := strings.ToLower(method)
+	return strings.Contains(lowerCaseMethod, "healthcheck")
+}
 
 // newGRPCMethodLogInterceptor returns a grpc.UnaryServerInterceptor that logs
 // the grpc method being handled and its duration. A debug message is printed
@@ -55,7 +61,11 @@ func newGRPCMethodLogInterceptor(base *logrus.Entry, t Timer, lutherTime Time) g
 		dur := stopTimer()
 		mLog = mLog.WithField("rpc_dur", dur)
 
-		mLog.Infof("RPC method called")
+		if isHealthCheck(info.FullMethod) {
+			mLog.Debug("RPC method called")
+		} else {
+			mLog.Info("RPC method called")
+		}
 
 		return resp, err
 	}
