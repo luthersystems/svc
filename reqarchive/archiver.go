@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -61,11 +61,11 @@ func copyBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return []byte{}, nil
 	}
-	bodyContent, err := ioutil.ReadAll(r.Body)
+	bodyContent, err := io.ReadAll(r.Body)
 	if err == nil {
 		_ = r.Body.Close()
 	}
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyContent))
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyContent))
 	return bodyContent, err
 }
 
