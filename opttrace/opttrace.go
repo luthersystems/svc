@@ -102,7 +102,7 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 			return nil, err
 		}
 	}
-	resources, err := resource.New(context.Background(),
+	resources, err := resource.New(ctx,
 		resource.WithAttributes(
 			attribute.String("service.name", serviceName)),
 		resource.WithFromEnv(),
