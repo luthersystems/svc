@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -160,4 +161,10 @@ func (t Tracer) Shutdown(ctx context.Context) error {
 		return t.exportTP.Shutdown(ctx)
 	}
 	return nil
+}
+
+func (t Tracer) SetGlobalTracer() {
+	if t.exportTP != nil {
+		otel.SetTracerProvider(t.exportTP)
+	}
 }
