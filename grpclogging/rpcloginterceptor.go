@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -44,6 +46,9 @@ func newGRPCMethodLogInterceptor(base *logrus.Entry, t Timer, lutherTime Time) g
 			"req_id":     reqID,
 		})
 		GetLogrusEntry(ctx, base).Debug("RPC method begin")
+
+		span := trace.SpanFromContext(ctx)
+		span.SetAttributes(attribute.String("app.request.id", reqID))
 
 		// Defer to the method's handler and save the results to pass through
 		// for the interceptor's caller.

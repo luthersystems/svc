@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -104,8 +104,7 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 		}
 	}
 	resources, err := resource.New(ctx,
-		resource.WithAttributes(
-			attribute.String("service.name", serviceName)),
+		resource.WithAttributes(semconv.ServiceName(serviceName)),
 		resource.WithFromEnv(),
 		resource.WithProcess(),
 		resource.WithOS(),
@@ -163,6 +162,7 @@ func (t Tracer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// SetGlobalTracer sets the global tracer provider to this tracer instance
 func (t Tracer) SetGlobalTracer() {
 	if t.exportTP != nil {
 		otel.SetTracerProvider(t.exportTP)
