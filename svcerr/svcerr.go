@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"time"
 
+	common "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/common/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/luthersystems/protos/common"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
@@ -259,17 +259,17 @@ func grpcToLutherError(ctx context.Context, log grpclogging.ServiceLogger, err e
 // By convention, the application should only return errors that fall into the
 // following handled cases:
 //
-//   1) a response without an error has body with a populated `exception` field.
-//      We inspect the exception object and construct a grpc error with the
-//      appropriate status code and include the original exception proto message
-//      in the gRPC error `details` field.
+//  1. a response without an error has body with a populated `exception` field.
+//     We inspect the exception object and construct a grpc error with the
+//     appropriate status code and include the original exception proto message
+//     in the gRPC error `details` field.
 //
-//   2) A response without a response body and with a gRPC error, where the
-//      gRPC error has a `details` field populated containing a single element
-//      of type common.Exception.
+//  2. A response without a response body and with a gRPC error, where the
+//     gRPC error has a `details` field populated containing a single element
+//     of type common.Exception.
 //
-//   3) A response without a response body and with a gRPC error, where the
-//      gRPC error does not have the `details` field populated.
+//  3. A response without a response body and with a gRPC error, where the
+//     gRPC error does not have the `details` field populated.
 //
 // All other cases are a convention failure and indicate a bug in the error
 // handling logic itself, which must be made conventional. Non-conventional
@@ -277,7 +277,6 @@ func grpcToLutherError(ctx context.Context, log grpclogging.ServiceLogger, err e
 // contains information not explicilty treated as presentable to the caller.
 // Non-conventional errors are replaced with a generic "Internal server error"
 // error, and must log the original error so that we can debug and remove them.
-//
 func AppErrorUnaryInterceptor(log grpclogging.ServiceLogger) func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		// Defer to the method's handler and save the results to pass through
@@ -312,7 +311,7 @@ func AppErrorUnaryInterceptor(log grpclogging.ServiceLogger) func(ctx context.Co
 				log(ctx).Errorf("exception missing type")
 				code = codes.Internal // 500
 			case common.Exception_BUSINESS:
-				//code = codes.FailedPrecondition // Docs say this maps  to 400, but it maps to 412 unforuntately.
+				// code = codes.FailedPrecondition // Docs say this maps  to 400, but it maps to 412 unforuntately.
 				// Unfortunately we use InvalidArgument, which is not really
 				// correct, but does properly map to status 400.
 				code = codes.InvalidArgument
