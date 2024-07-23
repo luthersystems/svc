@@ -1,6 +1,6 @@
 module github.com/luthersystems/svc
 
-go 1.21
+go 1.22
 
 require (
 	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.34.2-20240723195405-818c6eb6be7e.2
