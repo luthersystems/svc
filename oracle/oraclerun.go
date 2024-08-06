@@ -143,10 +143,13 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	}()
 
 	orc.log(ctx).WithFields(logrus.Fields{
-		"version":        orc.cfg.Version,
-		"service":        orc.cfg.ServiceName,
-		"phylum_name":    orc.cfg.PhylumServiceName,
-		"listen_address": orc.cfg.ListenAddress,
+		"gateway_endpoint": orc.cfg.GatewayEndpoint,
+		"phylum_path":      orc.cfg.PhylumPath,
+		"emulate_cc":       orc.cfg.EmulateCC,
+		"version":          orc.cfg.Version,
+		"service":          orc.cfg.ServiceName,
+		"phylum_name":      orc.cfg.PhylumServiceName,
+		"listen_address":   orc.cfg.ListenAddress,
 	}).Infof("starting oracle")
 
 	// Start a grpc server listening on the unix socket at grpcAddr

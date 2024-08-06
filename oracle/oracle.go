@@ -114,9 +114,6 @@ func (c *Config) Valid() error {
 	if c.PhylumPath == "" {
 		return fmt.Errorf("missing phylum path")
 	}
-	if !c.EmulateCC && c.GatewayEndpoint == "" {
-		return fmt.Errorf("missing gateway endpoint")
-	}
 	if c.PhylumServiceName == "" {
 		return fmt.Errorf("missing phylum service name")
 	}
@@ -264,12 +261,6 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	}
 	t.SetGlobalTracer()
 	oracle.tracer = t
-
-	oracle.log(context.Background()).WithFields(logrus.Fields{
-		"emulate_cc":       oracle.cfg.EmulateCC,
-		"phylum_path":      oracle.cfg.PhylumPath,
-		"gateway_endpoint": oracle.cfg.GatewayEndpoint,
-	}).Infof("new oracle")
 
 	return oracle, nil
 }
