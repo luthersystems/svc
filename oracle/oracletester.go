@@ -5,7 +5,6 @@ package oracle
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -65,23 +64,27 @@ func WithSnapshot(b []byte) TestOpt {
 }
 
 // NewTestOracle is used to create an oracle for testing.
-func NewTestOracle(t *testing.T, testOpts ...TestOpt) (*Oracle, func()) {
+func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, func()) {
+	cfg.Verbose = testing.Verbose()
+	require.NoError(t, cfg.Valid())
+
 	testCfg := &testCfg{}
 	for _, opt := range testOpts {
 		opt(testCfg)
 	}
-	cfg := DefaultConfig()
-	cfg.Verbose = testing.Verbose()
+
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
-	var r io.Reader
-	if testCfg.snapshot != nil {
-		r = bytes.NewReader(testCfg.snapshot)
-	}
+
 	orcOpts := []option{
 		withLogBase(logger.WithFields(nil)),
-		withMockPhylumFrom("../../../phylum", r),
 	}
+
+	if testCfg.snapshot != nil {
+		r := bytes.NewReader(testCfg.snapshot)
+		orcOpts = append(orcOpts, withMockPhylumFrom(cfg.PhylumPath, r))
+	}
+
 	server, err := newOracle(cfg, orcOpts...)
 	server.state = oracleStateTesting
 	if err != nil {
