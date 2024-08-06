@@ -116,7 +116,7 @@ type GrpcGatewayConfig interface {
 	RegisterServiceClient(ctx context.Context, grpcCon *grpc.ClientConn, mux *runtime.ServeMux) error
 }
 
-func (orc *Oracle) StartGateway(grpcConfig GrpcGatewayConfig) error {
+func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfig) error {
 	orc.stateMut.Lock()
 	if orc.state != oracleStateInit {
 		return fmt.Errorf("run: invalid oracle state: %d", orc.state)
@@ -133,7 +133,6 @@ func (orc *Oracle) StartGateway(grpcConfig GrpcGatewayConfig) error {
 		}
 	}
 	errServe := make(chan error, 1)
-	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
