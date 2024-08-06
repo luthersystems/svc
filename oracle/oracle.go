@@ -97,7 +97,7 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
 func (c *Config) SetOTLPEndpoint(endpoint string) {
-	if c == nil {
+	if c == nil || endpoint == "" {
 		return
 	}
 	c.TraceOpts = append(c.TraceOpts, opttrace.WithOTLPExporter(endpoint))
