@@ -66,15 +66,15 @@ func WithSnapshot(b []byte) TestOpt {
 // NewTestOracle is used to create an oracle for testing.
 func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, func()) {
 	cfg.Verbose = testing.Verbose()
+	cfg.EmulateCC = true
+	cfg.Version = "test"
+
 	require.NoError(t, cfg.Valid())
 
 	testCfg := &testCfg{}
 	for _, opt := range testOpts {
 		opt(testCfg)
 	}
-
-	cfg.EmulateCC = true
-	cfg.Version = "test"
 
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
