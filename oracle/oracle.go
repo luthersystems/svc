@@ -44,8 +44,8 @@ const (
 	metricsAddr = ":9600"
 )
 
-// defaultConfig returns a default config.
-func defaultConfig() *Config {
+// DefaultConfig returns a default config.
+func DefaultConfig() *Config {
 	return &Config{
 		Verbose:   true,
 		EmulateCC: false,
@@ -53,7 +53,6 @@ func defaultConfig() *Config {
 		// FakeAuth IDP. Only change this if you know what you're doing!
 		ListenAddress:     ":8080",
 		PhylumPath:        "./phylum",
-		GatewayEndpoint:   "http://shiroclient_gw:8082",
 		PhylumServiceName: "phylum",
 		ServiceName:       "oracle",
 		RequestIDHeader:   "X-Request-ID",
@@ -63,64 +62,45 @@ func defaultConfig() *Config {
 
 // Config configures an oracle.
 type Config struct {
+	// swaggerHandler configures an endpoint to serve the
+	// swagger API.
+	swaggerHandler http.Handler
 	// ListenAddress is an address the oracle HTTP listens on.
 	ListenAddress string `yaml:"listen-address"`
 	// PhylumPath is the the path for the business logic.
 	PhylumPath string `yaml:"phylum-path"`
 	// GatewayEndpoint is an address to the shiroclient gateway.
 	GatewayEndpoint string `yaml:"gateway-endpoint"`
-	// OTLPEndpoint optionally configures OTLP tracing and sends traces to
-	// the supplied OTLP endpoint
-	OTLPEndpoint string `yaml:"otlp-endpoint"`
 	// PhylumServiceName is the app-specific name of the conneted phylum.
 	PhylumServiceName string `yaml:"phylum-service-name"`
-	// PhylumServiceName is the app-specific name of the Oracle.
+	// ServiceName is the app-specific name of the Oracle.
 	ServiceName string `yaml:"service-name"`
 	// RequestIDHeader is the HTTP header encoding the request ID.
 	RequestIDHeader string `yaml:"request-id-header"`
 	// Version is the oracle version.
 	Version string `yaml:"version"`
+	// TraceOpts are tracing options.
+	TraceOpts []opttrace.Option
 	// Verbose increases logging.
 	Verbose bool `yaml:"verbose"`
 	// EmulateCC emulates chaincode in memory (for testing).
 	EmulateCC bool `yaml:"emulate-cc"`
-
-	// swaggerHandler configures an endpoint to serve the
-	// swagger API.
-	swaggerHandler http.Handler
 }
 
 // SetSwaggerHandler configures an endpoint to serve the swagger API.
 func (c *Config) SetSwaggerHandler(h http.Handler) {
+	if c == nil {
+		return
+	}
 	c.swaggerHandler = h
 }
 
-func (c *Config) SetDefaults() {
-	d := defaultConfig()
-	if c.ListenAddress == "" {
-		c.ListenAddress = d.ListenAddress
+// SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
+func (c *Config) SetOTLPEndpoint(endpoint string) {
+	if c == nil {
+		return
 	}
-	if c.PhylumPath == "" {
-		c.PhylumPath = d.PhylumPath
-	}
-	if c.GatewayEndpoint == "" {
-		c.GatewayEndpoint = d.GatewayEndpoint
-	}
-	if c.OTLPEndpoint == "" {
-		c.OTLPEndpoint = d.OTLPEndpoint
-	}
-	if c.PhylumServiceName == "" {
-		c.PhylumServiceName = d.PhylumServiceName
-	}
-	if c.ServiceName == "" {
-		c.ServiceName = d.ServiceName
-	}
-	if c.RequestIDHeader == "" {
-		c.RequestIDHeader = d.RequestIDHeader
-	}
-	if c.Version == "" {
-		c.Version = d.Version
-	}
+	c.TraceOpts = append(c.TraceOpts, opttrace.WithOTLPExporter(endpoint))
 }
 
 // Valid validates an oracle configuration.
@@ -163,10 +143,7 @@ const (
 
 // Oracle provides services.
 type Oracle struct {
-	//  stateMut guards state.
-	stateMut sync.RWMutex
-
-	state oracleState
+	swaggerHandler http.Handler
 
 	// log provides logging.
 	logBase *logrus.Entry
@@ -174,29 +151,23 @@ type Oracle struct {
 	// phylum interacts with phylum.
 	phylum *phylum.Client
 
-	// txConfigs generates default transaction configs
-	txConfigs func(context.Context, ...shiroclient.Config) []shiroclient.Config
-
 	// Optional application tracing provider
 	tracer *opttrace.Tracer
 
-	listenAddress string
-
-	// version is the version of the oracle.
-	version string
-
-	// phylumVersionMut guards cachedPhylumVersion.
-	phylumVersionMut sync.RWMutex
+	// txConfigs generates default transaction configs
+	txConfigs func(context.Context, ...shiroclient.Config) []shiroclient.Config
 
 	cachedPhylumVersion string
 
-	phylumServiceName string
+	cfg Config
 
-	serviceName string
+	state oracleState
 
-	requestIDHeader string
+	//  stateMut guards state.
+	stateMut sync.RWMutex
 
-	swaggerHandler http.Handler
+	// phylumVersionMut guards cachedPhylumVersion.
+	phylumVersionMut sync.RWMutex
 }
 
 // option provides additional configuration to the oracle. Primarily for
@@ -255,7 +226,6 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	config.SetDefaults()
 	if err := config.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -268,12 +238,8 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	oracle := &Oracle{
-		listenAddress:     config.ListenAddress,
-		serviceName:       config.ServiceName,
-		phylumServiceName: config.PhylumServiceName,
-		requestIDHeader:   config.RequestIDHeader,
-		version:           config.Version,
-		swaggerHandler:    config.swaggerHandler,
+		cfg:            *config,
+		swaggerHandler: config.swaggerHandler,
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {
@@ -283,17 +249,16 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		}
 	}
 	if oracle.phylum == nil {
-		err := withPhylum(config.GatewayEndpoint)(oracle)
+		if oracle.cfg.GatewayEndpoint == "" {
+			oracle.cfg.GatewayEndpoint = fmt.Sprintf("http://shiroclient_gw_%s:8082", oracle.cfg.PhylumServiceName)
+		}
+		err := withPhylum(oracle.cfg.GatewayEndpoint)(oracle)
 		if err != nil {
 			return nil, err
 		}
 	}
 	oracle.txConfigs = txConfigs()
-	traceOpts := []opttrace.Option{}
-	if config.OTLPEndpoint != "" {
-		traceOpts = append(traceOpts, opttrace.WithOTLPExporter(config.OTLPEndpoint))
-	}
-	t, err := opttrace.New(context.Background(), "oracle", traceOpts...)
+	t, err := opttrace.New(context.Background(), "oracle", oracle.cfg.TraceOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -301,10 +266,9 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	oracle.tracer = t
 
 	oracle.log(context.Background()).WithFields(logrus.Fields{
-		"emulate_cc":       config.EmulateCC,
-		"phylum_path":      config.PhylumPath,
-		"gateway_endpoint": config.GatewayEndpoint,
-		"otlp_endpoint":    config.OTLPEndpoint,
+		"emulate_cc":       oracle.cfg.EmulateCC,
+		"phylum_path":      oracle.cfg.PhylumPath,
+		"gateway_endpoint": oracle.cfg.GatewayEndpoint,
 	}).Infof("new oracle")
 
 	return oracle, nil
@@ -321,7 +285,7 @@ func txConfigs() func(context.Context, ...shiroclient.Config) []shiroclient.Conf
 			shiroclient.WithLogrusFields(fields),
 		}
 		if fields["req_id"] != nil {
-			logrus.WithField("req_id", fields["req_id"]).Infof("setting request id")
+			logrus.WithField("req_id", fields["req_id"]).Debugf("setting request id")
 			configs = append(configs, shiroclient.WithID(fmt.Sprint(fields["req_id"])))
 		}
 		configs = append(configs, extend...)
@@ -335,7 +299,7 @@ func (orc *Oracle) setPhylumVersion(version string) {
 	defer orc.phylumVersionMut.Unlock()
 	orc.cachedPhylumVersion = version
 	if orc.cachedPhylumVersion != "" {
-		versionTotal.WithLabelValues(orc.serviceName, orc.version, orc.phylumServiceName, orc.cachedPhylumVersion).Inc()
+		versionTotal.WithLabelValues(orc.cfg.ServiceName, orc.cfg.Version, orc.cfg.PhylumServiceName, orc.cachedPhylumVersion).Inc()
 	}
 }
 
@@ -351,7 +315,7 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 	ccHealth, err := orc.phylum.GetHealthCheck(ctx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return []*healthcheck.HealthCheckReport{{
-			ServiceName:    orc.phylumServiceName,
+			ServiceName:    orc.cfg.PhylumServiceName,
 			ServiceVersion: "",
 			Timestamp:      time.Now().Format(timestampFormat),
 			Status:         "DOWN",
@@ -359,13 +323,13 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 	}
 	reports := ccHealth.GetReports()
 	for _, report := range reports {
-		if strings.EqualFold(report.GetServiceName(), orc.phylumServiceName) {
+		if strings.EqualFold(report.GetServiceName(), orc.cfg.PhylumServiceName) {
 			orc.setPhylumVersion(report.GetServiceVersion())
 			break
 		}
 	}
 	if orc.getLastPhylumVersion() == "" {
-		orc.log(ctx).Errorf("missing phylum version")
+		orc.log(ctx).Warnf("missing phylum version")
 	}
 	return reports
 }
@@ -386,8 +350,8 @@ func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealt
 		}
 	}
 	reports = append(reports, &healthcheck.HealthCheckReport{
-		ServiceName:    orc.serviceName,
-		ServiceVersion: orc.version,
+		ServiceName:    orc.cfg.ServiceName,
+		ServiceVersion: orc.cfg.Version,
 		Timestamp:      time.Now().Format(timestampFormat),
 		Status:         "UP",
 	})

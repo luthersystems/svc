@@ -49,27 +49,44 @@ func (orc *Oracle) Snapshot(t *testing.T) []byte {
 	return snapshot.Bytes()
 }
 
-// NewTestOracleFrom is used to create an oracle for testing, loading the
-// state from an optional snapshot.
-func NewTestOracleFrom(t *testing.T, phylumPath string, snapshot []byte) (*Oracle, func()) {
-	cfg := defaultConfig()
+type testCfg struct {
+	snapshot []byte
+}
+
+// TestOpt configures a test oracle.
+type TestOpt func(*testCfg)
+
+// WithSnapshot restores the test oracle from a snapshot.
+func WithSnapshot(b []byte) TestOpt {
+	return func(cfg *testCfg) {
+		cfg.snapshot = make([]byte, len(b))
+		copy(cfg.snapshot, b)
+	}
+}
+
+// NewTestOracle is used to create an oracle for testing.
+func NewTestOracle(t *testing.T, testOpts ...TestOpt) (*Oracle, func()) {
+	testCfg := &testCfg{}
+	for _, opt := range testOpts {
+		opt(testCfg)
+	}
+	cfg := DefaultConfig()
 	cfg.Verbose = testing.Verbose()
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
 	var r io.Reader
-	if snapshot != nil {
-		r = bytes.NewReader(snapshot)
+	if testCfg.snapshot != nil {
+		r = bytes.NewReader(testCfg.snapshot)
 	}
-	opts := []option{
+	orcOpts := []option{
 		withLogBase(logger.WithFields(nil)),
-		withMockPhylumFrom(phylumPath, r),
+		withMockPhylumFrom("../../../phylum", r),
 	}
-	server, err := newOracle(cfg, opts...)
+	server, err := newOracle(cfg, orcOpts...)
+	server.state = oracleStateTesting
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	server.state = oracleStateTesting
 
 	if cfg.Verbose {
 		logger.SetLevel(logrus.DebugLevel)

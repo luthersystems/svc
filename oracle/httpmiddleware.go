@@ -33,11 +33,11 @@ import (
 // response header.
 func (orc *Oracle) addServerHeader() midware.Middleware {
 	return midware.ServerResponseHeader(
-		midware.ServerFixed(orc.serviceName, orc.version),
+		midware.ServerFixed(orc.cfg.ServiceName, orc.cfg.Version),
 		func() string {
 			cachedPhylumVersion := orc.getLastPhylumVersion()
 			if cachedPhylumVersion != "" {
-				return fmt.Sprintf("%s/%s", orc.phylumServiceName, cachedPhylumVersion)
+				return fmt.Sprintf("%s/%s", orc.cfg.PhylumServiceName, cachedPhylumVersion)
 			}
 			return ""
 		})
@@ -85,8 +85,8 @@ func (orc *Oracle) healthCheckHandler() http.Handler {
 			resp = &healthcheck.GetHealthCheckResponse{
 				Reports: []*healthcheck.HealthCheckReport{
 					{
-						ServiceName:    orc.serviceName,
-						ServiceVersion: orc.version,
+						ServiceName:    orc.cfg.ServiceName,
+						ServiceVersion: orc.cfg.Version,
 						Timestamp:      time.Now().Format(timestampFormat),
 						Status:         "DOWN",
 					},

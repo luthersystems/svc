@@ -54,7 +54,7 @@ func (orc *Oracle) gatewayForwardedHeaders() []string {
 		"User-Agent",
 		"X-Forwarded-User-Agent",
 		"Referer",
-		orc.requestIDHeader,
+		orc.cfg.RequestIDHeader,
 	}
 }
 
@@ -98,7 +98,7 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, 
 		// The trace header middleware appears early in the chain
 		// because of how important it is that they happen for essentially all
 		// requests.
-		midware.TraceHeaders(orc.requestIDHeader, true),
+		midware.TraceHeaders(orc.cfg.RequestIDHeader, true),
 		orc.addServerHeader(),
 		// PathOverrides and other middleware that may serve requests or have
 		// potential failure states should appear below here so they may rely
@@ -109,16 +109,15 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, 
 	return jsonapi, middleware.Wrap(jsonapi)
 }
 
-type PortalConfig interface {
+type GrpcGatewayConfig interface {
 	// RegisterServiceServer is required to be overidden by the implementation.
 	RegisterServiceServer(grpcServer *grpc.Server)
 	// RegisterServiceClient is required to be overidden by the implementation.
 	RegisterServiceClient(ctx context.Context, grpcCon *grpc.ClientConn, mux *runtime.ServeMux) error
 }
 
-func (orc *Oracle) Run(portalConfig PortalConfig) error {
+func (orc *Oracle) StartGateway(grpcConfig GrpcGatewayConfig) error {
 	orc.stateMut.Lock()
-	defer orc.stateMut.Unlock()
 	if orc.state != oracleStateInit {
 		return fmt.Errorf("run: invalid oracle state: %d", orc.state)
 	}
@@ -139,17 +138,16 @@ func (orc *Oracle) Run(portalConfig PortalConfig) error {
 	defer cancel()
 
 	defer func() {
-		err := orc.close()
-		if err != nil {
+		if err := orc.close(); err != nil {
 			orc.log(ctx).WithError(err).Warn("failed to close oracle")
 		}
 	}()
 
 	orc.log(ctx).WithFields(logrus.Fields{
-		"version":        orc.version,
-		"service":        orc.serviceName,
-		"phylum_name":    orc.phylumServiceName,
-		"listen_address": orc.listenAddress,
+		"version":        orc.cfg.Version,
+		"service":        orc.cfg.ServiceName,
+		"phylum_name":    orc.cfg.PhylumServiceName,
+		"listen_address": orc.cfg.ListenAddress,
 	}).Infof("starting oracle")
 
 	// Start a grpc server listening on the unix socket at grpcAddr
@@ -163,12 +161,20 @@ func (orc *Oracle) Run(portalConfig PortalConfig) error {
 				grpclogging.RealTime()),
 			svcerr.AppErrorUnaryInterceptor(orc.log))))
 
-	portalConfig.RegisterServiceServer(grpcServer)
+	grpcConfig.RegisterServiceServer(grpcServer)
+
+	orc.stateMut.Unlock()
 
 	listener, err := net.Listen("unix", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("grpc listen: %w", err)
 	}
+	defer func() {
+		if err := listener.Close(); err != nil {
+			orc.log(ctx).WithError(err).Warn("failed to close listener")
+		}
+	}()
+
 	go func() {
 		trySendError(errServe, grpcServer.Serve(listener))
 	}()
@@ -183,7 +189,7 @@ func (orc *Oracle) Run(portalConfig PortalConfig) error {
 	}
 
 	mux, httpHandler := orc.grpcGateway(orc.swaggerHandler)
-	if err := portalConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
+	if err := grpcConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
 		return fmt.Errorf("register service client: %w", err)
 	}
 
@@ -197,7 +203,7 @@ func (orc *Oracle) Run(portalConfig PortalConfig) error {
 	go func() {
 		orc.log(ctx).Infof("oracle listen")
 		server := &http.Server{
-			Addr:              orc.listenAddress,
+			Addr:              orc.cfg.ListenAddress,
 			Handler:           httpHandler,
 			ReadHeaderTimeout: 3 * time.Second,
 		}
