@@ -76,13 +76,14 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
 
-	orcOpts := []option{
-		withLogBase(logger.WithFields(nil)),
+	var r *bytes.Reader
+	if testCfg.snapshot != nil {
+		r = bytes.NewReader(testCfg.snapshot)
 	}
 
-	if testCfg.snapshot != nil {
-		r := bytes.NewReader(testCfg.snapshot)
-		orcOpts = append(orcOpts, withMockPhylumFrom(cfg.PhylumPath, r))
+	orcOpts := []option{
+		withLogBase(logger.WithFields(nil)),
+		withMockPhylumFrom(cfg.PhylumPath, r),
 	}
 
 	server, err := newOracle(cfg, orcOpts...)
