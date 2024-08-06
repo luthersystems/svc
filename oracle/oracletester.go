@@ -73,6 +73,8 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 		opt(testCfg)
 	}
 
+	cfg.EmulateCC = true
+
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
 
