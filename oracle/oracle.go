@@ -319,9 +319,6 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 			break
 		}
 	}
-	if orc.getLastPhylumVersion() == "" {
-		orc.log(ctx).Warnf("missing phylum version")
-	}
 	return reports
 }
 
@@ -340,6 +337,10 @@ func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealt
 			}
 		}
 	}
+	if orc.getLastPhylumVersion() == "" && !orc.cfg.EmulateCC {
+		orc.log(ctx).Warnf("missing phylum version")
+	}
+
 	reports = append(reports, &healthcheck.HealthCheckReport{
 		ServiceName:    orc.cfg.ServiceName,
 		ServiceVersion: orc.cfg.Version,
