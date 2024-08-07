@@ -109,6 +109,7 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, 
 	return jsonapi, middleware.Wrap(jsonapi)
 }
 
+// GrpcGatewayConfig configures the grpc gateway used by the oracle.
 type GrpcGatewayConfig interface {
 	// RegisterServiceServer is required to be overidden by the implementation.
 	RegisterServiceServer(grpcServer *grpc.Server)
