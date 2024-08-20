@@ -2,7 +2,10 @@ package oracle
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math"
+	"math/big"
 	"net"
 	"net/http"
 	"strings"
@@ -153,8 +156,14 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		"listen_address":   orc.cfg.ListenAddress,
 	}).Infof("starting oracle")
 
+	nBig, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
+	if err != nil {
+		panic(err)
+	}
+
 	// Start a grpc server listening on the unix socket at grpcAddr
-	grpcAddr := "/tmp/oracle.grpc.sock"
+	grpcAddr := fmt.Sprintf("/tmp/oracle.grpc.%d.sock", nBig.Int64())
+
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
