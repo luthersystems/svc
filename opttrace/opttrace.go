@@ -16,7 +16,10 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-const tracerName = "opttrace"
+const (
+	tracerName                     = "opttrace"
+	disableElpsFilteringTraceState = "disable_elps_filtering"
+)
 
 var noopTracerProvider = noop.NewTracerProvider()
 
@@ -145,13 +148,37 @@ func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, er
 	return otlptracegrpc.New(ctx, otlpOpts...)
 }
 
+// TraceContextWithoutELPSFilter takes adds trace state into the propagated
+// context to signify that elps filtering should be disabled for the request.
+// NOTE: this results in very large traces.
+func TraceContextWithoutELPSFilter(ctx context.Context) (context.Context, error) {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if !spanCtx.IsValid() {
+		return ctx, fmt.Errorf("not trace context")
+	}
+
+	traceState := spanCtx.TraceState()
+	if value := traceState.Get(disableElpsFilteringTraceState); value == "true" {
+		return ctx, nil
+	}
+
+	newTraceState, err := traceState.Insert(disableElpsFilteringTraceState, "true")
+	if err != nil {
+		return ctx, fmt.Errorf("state insert: %w", err)
+	}
+
+	newSpanCtx := spanCtx.WithTraceState(newTraceState)
+	return trace.ContextWithSpanContext(ctx, newSpanCtx), nil
+}
+
 // Span creates a new trace span and returns the supplied context with span
 // added.  The returned span must be ended to avoid leaking resources.
 func (t *Tracer) Span(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	if t == nil || t.exportTP == nil {
 		return noopTracerProvider.Tracer(tracerName).Start(ctx, spanName, opts...)
 	}
-	return t.exportTP.Tracer(tracerName).Start(ctx, spanName, opts...)
+	tracer := t.exportTP.Tracer(tracerName)
+	return tracer.Start(ctx, spanName, opts...)
 }
 
 // Shutdown releases all resources allocated by the tracing provider.
