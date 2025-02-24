@@ -3,7 +3,7 @@ module github.com/luthersystems/svc
 go 1.22
 
 require (
-	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.34.2-20240723225114-9e2ac79af3a8.2
+	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.5-20250224214741-b97f9dda9589.1
 	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Azure/go-autorest/autorest v0.11.29
 	github.com/Azure/go-autorest/autorest/adal v0.9.23
@@ -31,7 +31,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0
 	golang.org/x/crypto v0.25.0
 	google.golang.org/grpc v1.65.0
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.36.5
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -88,5 +89,4 @@ require (
 	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240723171418-e6d459c13d2a // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

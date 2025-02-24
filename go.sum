@@ -1,5 +1,5 @@
-buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.34.2-20240723225114-9e2ac79af3a8.2 h1:5Qvw6WhcCG+JuscNjWIWlqcKUtI8gwoGt5GQV1uwzv0=
-buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.34.2-20240723225114-9e2ac79af3a8.2/go.mod h1:viSD+PgypYpUnYVvl3Ai2ASZYkXC932irRD9FCu0Ut4=
+buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.5-20250224214741-b97f9dda9589.1 h1:+YEXdfeAxFZiuQ6a+PHJicGl3MDTW6SVL55NtZJ0vyM=
+buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.5-20250224214741-b97f9dda9589.1/go.mod h1:2hux50WWzXhYwhPd7tP3JAjTkgNKDN7CafYESiZrxXY=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/Azure/azure-pipeline-go v0.2.3 h1:7U9HBg1JFK3jHl5qmo4CTZKFTVgMwdFHMVtCdfBE21U=
 github.com/Azure/azure-pipeline-go v0.2.3/go.mod h1:x841ezTBIMG6O3lAcl8ATHnsOPVl2bqk7S3ta6S6u4k=
@@ -147,8 +147,6 @@ github.com/luthersystems/elps v1.16.1 h1:jh9rh2aGQpfoypvlNQnvCB6rNLHWwut5W/ptKyN
 github.com/luthersystems/elps v1.16.1/go.mod h1:EoXUrydN9n2cEc7dzkPyEYlTYBGv3ncv5tShYGdQ/dc=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d h1:luzD59ecCtffdjonvQHZXnAbxSG2BtUPXoZaBBUVJp8=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d/go.mod h1:maDY7J3mlP6v6PpI/btDa9r3/gvbYbVKm+tz2DZaTZU=
-github.com/luthersystems/shiroclient-sdk-go v0.10.1-0.20240724001858-cf5928a51a3d h1:iaNfF6gQo9bfuHiBpZuqvItc2Fcu3InzIXvripW2+2M=
-github.com/luthersystems/shiroclient-sdk-go v0.10.1-0.20240724001858-cf5928a51a3d/go.mod h1:RjziHTEjVvVHfhbHZBllYF63NErZmcIYnsWoJEJFv/4=
 github.com/luthersystems/shiroclient-sdk-go v0.11.0 h1:cpK/6ig1dEdCGFH0NqRb4n/tjYDj+mkTvfiJVPjv5jc=
 github.com/luthersystems/shiroclient-sdk-go v0.11.0/go.mod h1:RjziHTEjVvVHfhbHZBllYF63NErZmcIYnsWoJEJFv/4=
 github.com/mattn/go-colorable v0.1.9/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
@@ -347,8 +345,8 @@ google.golang.org/grpc v1.27.0/go.mod h1:qbnxyOmOxrQa7FizSgH+ReBfzJrCY1pSN7KXBS8
 google.golang.org/grpc v1.29.1/go.mod h1:itym6AZVZYACWQqET3MqgPpjcuV5QH3BxFS3IjizoKk=
 google.golang.org/grpc v1.65.0 h1:bs/cUb4lp1G5iImFFd3u5ixQzweKizoZJAwBNLR42lc=
 google.golang.org/grpc v1.65.0/go.mod h1:WgYC2ypjlB0EiQi6wdKixMqukr6lBc0Vo+oOgjrM5ZQ=
-google.golang.org/protobuf v1.34.2 h1:6xV6lTsCfpGD21XK49h7MhtcApnLqkfYgPcdHftf6hg=
-google.golang.org/protobuf v1.34.2/go.mod h1:qYOHts0dSfpeUzUFpOMr/WGzszTmLH+DiWniOlNbLDw=
+google.golang.org/protobuf v1.36.5 h1:tPhr+woSbjfYvY6/GPufUoYizxw1cF/yFoxJ2fmpwlM=
+google.golang.org/protobuf v1.36.5/go.mod h1:9fA7Ob0pmnwhb644+1+CVWFRbNajQ6iRojtC/QF5bRE=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
