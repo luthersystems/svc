@@ -14,8 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ParseConfig converts YAML input into a ConnectorConfig protobuf struct.
-func ParseConfig(yamlContent string) (*cnpb.ConnectorConfig, error) {
+// ParseConnectorsConfig converts YAML input into a ConnectorConfig protobuf struct.
+func ParseConnectorsConfig(yamlContent string) (*cnpb.ConnectorConfig, error) {
 	// Convert YAML → JSON
 	jsonBytes, err := yamlToJSON([]byte(yamlContent))
 	if err != nil {
