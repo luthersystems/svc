@@ -416,7 +416,15 @@ func addHelpers(tpl *raymond.Template) {
 			return rawNum
 		}
 
-		if phonenumbers.IsValidNumber(formattedNum) && formattedNum.GetCountryCode() == int32(phonenumbers.GetCountryCodeForRegion("GB")) {
+		countryCode := phonenumbers.GetCountryCodeForRegion("GB")
+
+		// Explicit check to ensure safe conversion
+		if countryCode > math.MaxInt32 || countryCode < math.MinInt32 {
+			return rawNum // avoid unsafe conversion
+		}
+		countryCode32 := int32(countryCode)
+
+		if phonenumbers.IsValidNumber(formattedNum) && formattedNum.GetCountryCode() == countryCode32 {
 			return phonenumbers.Format(formattedNum, phonenumbers.NATIONAL)
 		}
 
