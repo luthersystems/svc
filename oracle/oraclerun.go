@@ -3,6 +3,7 @@ package oracle
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -90,6 +91,7 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 		}),
 	}
 	if orc.cfg.DependentTxCookie != "" {
+		fmt.Printf("WTF: SET forwarder: [%s]\n", orc.cfg.DependentTxCookie)
 		// set outgoing deptx cookie
 		opts = append(opts, runtime.WithForwardResponseOption(cookieHandler(
 			dependentTxMetadataKey,
@@ -104,11 +106,14 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 }
 
 func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	fmt.Printf("WTF: txctx interceptor called!\n")
 	newCtx := txctx.Context(ctx)
 	resp, err := handler(newCtx, req)
+	fmt.Printf("WTF: Interceptor Response Type: %T\n", resp)
 	txID := txctx.GetTransactionDetails(newCtx).TransactionID
 	if txID != "" {
 		grpclogging.AddLogrusField(newCtx, "commit_transaction_id", txID)
+		fmt.Printf("WTF: txinterceptorm grpcKey=[%s] setgrpc value=[%s]\n", dependentTxMetadataKey, txID)
 		setGRPCHeader(newCtx, dependentTxMetadataKey, txID)
 	}
 	return resp, err
@@ -145,15 +150,55 @@ type GrpcGatewayConfig interface {
 	RegisterServiceClient(ctx context.Context, grpcCon *grpc.ClientConn, mux *runtime.ServeMux) error
 }
 
+func createGRPCServer(orc *Oracle) *grpc.Server {
+	return grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			grpclogging.LogrusMethodInterceptor(
+				orc.logBase,
+				grpclogging.UpperBoundTimer(time.Millisecond),
+				grpclogging.RealTime()),
+			txctxInterceptor, // Ensures transaction context is set
+			svcerr.AppErrorUnaryInterceptor(orc.Log),
+		)),
+	)
+}
+
+// createGRPCGatewayClient initializes the gRPC client connection and registers services to the gRPC gateway mux.
+func createGRPCGatewayClient(ctx context.Context, orc *Oracle, grpcAddr string, grpcConfig GrpcGatewayConfig) (*runtime.ServeMux, error) {
+	// Create a gRPC client
+	grpcConn, err := grpc.NewClient("unix://"+grpcAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(grpcmiddleware.ChainUnaryClient(
+			grpc_prometheus.UnaryClientInterceptor,
+		)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("grpc dial: %w", err)
+	}
+
+	// Create the gRPC Gateway mux using the provided Oracle instance
+	mux, _ := orc.grpcGateway(orc.swaggerHandler)
+
+	// Register the gRPC service handlers with the Gateway
+	if err := grpcConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
+		return nil, fmt.Errorf("register service client: %w", err)
+	}
+
+	return mux, nil
+}
+
 func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfig) error {
 	orc.stateMut.Lock()
-	if orc.state != oracleStateInit {
-		return fmt.Errorf("run: invalid oracle state: %d", orc.state)
+	if orc.state != oracleStateTesting {
+		if orc.state != oracleStateInit {
+			return fmt.Errorf("run: invalid oracle state: %d", orc.state)
+		}
+		orc.state = oracleStateStarted
 	}
-	orc.state = oracleStateStarted
 
 	trySendError := func(c chan<- error, err error) {
-		if err == nil {
+		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, http.ErrServerClosed) {
 			return
 		}
 		select {
@@ -186,29 +231,20 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		panic(err)
 	}
 
-	// Start a grpc server listening on the unix socket at grpcAddr
-	grpcAddr := fmt.Sprintf("/tmp/oracle.grpc.%d.sock", nBig.Int64())
-
-	grpcServer := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			grpclogging.LogrusMethodInterceptor(
-				orc.logBase,
-				grpclogging.UpperBoundTimer(time.Millisecond),
-				grpclogging.RealTime()),
-			txctxInterceptor,
-			svcerr.AppErrorUnaryInterceptor(orc.Log))))
-
+	grpcServer := createGRPCServer(orc)
 	grpcConfig.RegisterServiceServer(grpcServer)
 
 	orc.stateMut.Unlock()
+
+	// Start a grpc server listening on the unix socket at grpcAddr
+	grpcAddr := fmt.Sprintf("/tmp/oracle.grpc.%d.sock", nBig.Int64())
 
 	listener, err := net.Listen("unix", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("grpc listen: %w", err)
 	}
 	defer func() {
-		if err := listener.Close(); err != nil {
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			orc.Log(ctx).WithError(err).Warn("failed to close listener")
 		}
 	}()
@@ -238,28 +274,37 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		orc.phylumHealthCheck(hctx)
 	}()
 
+	oracleServer := &http.Server{
+		Addr:              orc.cfg.ListenAddress,
+		Handler:           httpHandler,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
 	go func() {
 		orc.Log(ctx).Infof("oracle listen")
-		server := &http.Server{
-			Addr:              orc.cfg.ListenAddress,
-			Handler:           httpHandler,
-			ReadHeaderTimeout: 3 * time.Second,
-		}
-		trySendError(errServe, server.ListenAndServe())
+		trySendError(errServe, oracleServer.ListenAndServe())
+	}()
+
+	h := http.NewServeMux()
+	h.Handle(metricsPath, promhttp.Handler())
+	metricsServer := &http.Server{
+		Addr:              metricsAddr,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		Handler:           h,
+	}
+
+	go func() {
+		orc.Log(ctx).Infof("prometheus listen")
+		trySendError(errServe, metricsServer.ListenAndServe())
 	}()
 
 	go func() {
-		// metrics server
-		h := http.NewServeMux()
-		h.Handle(metricsPath, promhttp.Handler())
-		s := &http.Server{
-			Addr:              metricsAddr,
-			WriteTimeout:      10 * time.Second,
-			ReadHeaderTimeout: 2 * time.Second,
-			Handler:           h,
-		}
-		orc.Log(ctx).Infof("prometheus listen")
-		trySendError(errServe, s.ListenAndServe())
+		<-ctx.Done()
+		grpcServer.Stop()
+		oracleServer.Shutdown(context.Background())
+		metricsServer.Shutdown(context.Background())
+		close(errServe)
 	}()
 
 	// Both methods grpcServer.Start and http.ListenAndServe will block

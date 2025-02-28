@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -64,11 +65,25 @@ func WithSnapshot(b []byte) TestOpt {
 	}
 }
 
+func getFreeAddr() (string, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0") // OS assigns an available port
+	if err != nil {
+		return "", fmt.Errorf("failed to get a free port: %w", err)
+	}
+	defer l.Close() // Close immediately so it can be reused
+	return l.Addr().String(), nil
+}
+
 // NewTestOracle is used to create an oracle for testing.
 func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, func()) {
 	cfg.Verbose = testing.Verbose()
 	cfg.EmulateCC = true
 	cfg.Version = "test"
+
+	port, err := getFreeAddr()
+	require.NoError(t, err)
+
+	cfg.ListenAddress = port
 
 	require.NoError(t, cfg.Valid())
 

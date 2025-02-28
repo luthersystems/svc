@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
@@ -15,6 +16,54 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+type testOracleService struct {
+	orc *Oracle
+}
+
+func (s *testOracleService) RegisterServiceServer(grpcServer *grpc.Server) {
+	hellov1.RegisterHelloServiceServer(grpcServer, &serverImpl{}) // Use your existing gRPC server implementation
+}
+
+func (s *testOracleService) RegisterServiceClient(ctx context.Context, grpcConn *grpc.ClientConn, mux *runtime.ServeMux) error {
+	return hellov1.RegisterHelloServiceHandler(ctx, mux, grpcConn)
+}
+
+func makeTestOracleServer(t *testing.T) (*Oracle, func()) {
+	t.Helper()
+
+	cfg := DefaultConfig()
+	cfg.PhylumPath = "./testservice/phylum/"
+	cfg.DependentTxCookie = "dep-tx"
+
+	// NOTE: oracle.close called when StartGateway is canceled.
+	orc, _ := NewTestOracle(t, cfg)
+
+	// Define the gRPC configuration object implementing RegisterServiceServer & RegisterServiceClient
+	grpcConfig := &testOracleService{orc: orc}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the server in a goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- orc.StartGateway(ctx, grpcConfig)
+	}()
+
+	// Wait for the server to start (replace with proper readiness check if needed)
+	time.Sleep(50 * time.Millisecond)
+
+	// Define cleanup function
+	stop := func() {
+		cancel() // Stop the server
+		err := <-errCh
+		if err != nil && err != context.Canceled {
+			t.Fatalf("StartGateway returned an error: %v", err)
+		}
+	}
+
+	return orc, stop
+}
 
 // serverImpl implements HelloServiceServer from hello.proto
 type serverImpl struct {

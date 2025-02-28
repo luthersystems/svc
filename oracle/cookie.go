@@ -51,6 +51,7 @@ func (cf *CookieForwarder) SetValue(ctx context.Context, val string) {
 func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCookie bool) func(context.Context, http.ResponseWriter, proto.Message) error {
 	return func(ctx context.Context, w http.ResponseWriter, resp proto.Message) error {
 		value := getGRPCHeader(ctx, grpcHeader)
+		fmt.Printf("WTF: in cookie handler for: grpcHeader=[%s] cookieName=[%s] val=[%s]\n", grpcHeader, cookieName, value)
 		if value == "" {
 			return nil
 		}
