@@ -16,6 +16,7 @@ import (
 	"time"
 
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
 	"github.com/luthersystems/svc/grpclogging"
@@ -85,6 +86,8 @@ type Config struct {
 	Verbose bool `yaml:"verbose"`
 	// EmulateCC emulates chaincode in memory (for testing).
 	EmulateCC bool `yaml:"emulate-cc"`
+	// gatewayOpts configures the grpc gateway.
+	gatewayOpts []runtime.ServeMuxOption
 }
 
 // SetSwaggerHandler configures an endpoint to serve the swagger API.
@@ -127,6 +130,64 @@ func (c *Config) Valid() error {
 		return fmt.Errorf("missing version")
 	}
 	return nil
+}
+
+// addGRPCGatewayOption is a low-level helper method to accumulate ServeMux
+// options without directly modifying the GatewayOptions slice.
+// *IMPORTANT*: Only use this if you know what you're doing.
+func (c *Config) addGRPCGatewayOptions(opt ...runtime.ServeMuxOption) {
+	c.gatewayOpts = append(c.gatewayOpts, opt...)
+}
+
+// AddCookieForwarder configures a bridge from a gRPC metadata key to an HTTP
+// response cookie. The returned CookieForwarder can be used within your gRPC
+// server methods to set the cookie value by calling its SetValue(ctx, val)
+// method. That value will then appear as an HTTP cookie named cookieName in the
+// final HTTP response.
+//
+// Specifically, this method appends a ForwardResponseOption (created by
+// runtime.WithForwardResponseOption) to the Config's gatewayOpts, ensuring
+// that gRPC metadata with key header gets turned into a Set-Cookie header in
+// the final HTTP response when a response passes through the gRPC-Gateway.
+//
+// Usage:
+//
+//	cf := config.AddCookieForwarder("ui_authorization", "ui_authorization", 3600, true, true)
+//	// Then in your handler method:
+//	cf.SetValue(ctx, "some-jwt-token")
+//	// The HTTP response will include a cookie:
+//	//    Set-Cookie: ui_authorization=some-jwt-token; Max-Age=3600; Secure; HttpOnly
+func (c *Config) AddCookieForwarder(header, cookieName string, maxAge int, secure, httpOnly bool) *CookieForwarder {
+	forwarder := newCookieForwarder(header, cookieName, maxAge, secure, httpOnly)
+	c.addGRPCGatewayOptions(
+		runtime.WithForwardResponseOption(forwarder.forwardResponseOption()),
+	)
+	return forwarder
+}
+
+// AddHeaderForwarder configures a bridge from a gRPC metadata key to an HTTP
+// response header. The returned HeaderForwarder can be used within your gRPC
+// server methods to set the header value by calling its SetValue(ctx, val)
+// method. That value will then appear as an HTTP response header of name
+// httpHeaderName in the final HTTP response.
+//
+// Specifically, this method appends a ForwardResponseOption (created by
+// runtime.WithForwardResponseOption) to the Config's gatewayOpts, ensuring
+// that gRPC metadata with key grpcKey gets turned into an HTTP header named
+// httpHeaderName when a response is returned through the gRPC-Gateway.
+//
+// Usage:
+//
+//	hf := config.AddHeaderForwarder("X-Grpc-Key", "X-Http-Header")
+//	// Then in your handler method:
+//	hf.SetValue(ctx, "some value")
+//	// The HTTP response will include "X-Http-Header: some value".
+func (c *Config) AddHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
+	hf := newHeaderForwarder(grpcKey, httpHeaderName)
+	c.addGRPCGatewayOptions(
+		runtime.WithForwardResponseOption(hf.forwardResponseOption()),
+	)
+	return hf
 }
 
 type oracleState int

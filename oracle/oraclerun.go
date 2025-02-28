@@ -85,6 +85,7 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 			},
 		}),
 	}
+	opts = append(opts, orc.cfg.gatewayOpts...)
 
 	return runtime.NewServeMux(opts...)
 }
