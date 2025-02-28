@@ -47,13 +47,15 @@ func TestOracleDepTx(t *testing.T) {
 	firstResp, err := client.Post(fmt.Sprintf("http://%s/v1/dep_tx", httpAddr),
 		"application/json",
 		bytes.NewBufferString(`{}`))
+
+	bodyBytes, _ := io.ReadAll(firstResp.Body)
+	log.Printf("Raw HTTP Response Body: %s", string(bodyBytes))
+
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, firstResp.StatusCode)
 
 	// 2) Parse response
 	var out1 hellov1.UseDepTxResponse
-	bodyBytes, _ := io.ReadAll(firstResp.Body)
-	log.Printf("Raw HTTP Response Body: %s", string(bodyBytes))
 
 	err = protojson.Unmarshal(bodyBytes, &out1)
 	require.NoError(t, err)

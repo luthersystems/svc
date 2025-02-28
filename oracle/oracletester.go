@@ -24,6 +24,7 @@ func newTestWriter(t *testing.T) *testWriter {
 }
 
 func (tw testWriter) Write(p []byte) (n int, err error) {
+	tw.t.Helper()
 	for _, b := range p {
 		if b == '\n' {
 			tw.t.Log(tw.b.String())

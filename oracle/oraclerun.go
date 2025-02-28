@@ -109,7 +109,7 @@ func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServ
 	fmt.Printf("WTF: txctx interceptor called!\n")
 	newCtx := txctx.Context(ctx)
 	resp, err := handler(newCtx, req)
-	fmt.Printf("WTF: Interceptor Response Type: %T\n", resp)
+	fmt.Printf("WTF: Interceptor Response: %+v, Error: %v\n", resp, err)
 	txID := txctx.GetTransactionDetails(newCtx).TransactionID
 	if txID != "" {
 		grpclogging.AddLogrusField(newCtx, "commit_transaction_id", txID)

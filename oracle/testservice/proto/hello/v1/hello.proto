@@ -6,6 +6,8 @@ package hello.v1;
 // For example, if your module is github.com/example/myrepo:
 option go_package = "github.com/luthersystems/svc/oracle/testservice/gen/go/hello/v1;hellov1";
 
+import "common/v1/exception.proto";
+
 import "google/api/annotations.proto"; 
 import "google/protobuf/empty.proto";
 
@@ -40,10 +42,12 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  string greeting = 1;
+  common.v1.Exception exception = 1;
+  string greeting = 2;
 }
 
 message UseDepTxResponse {
-  string old_tx_id = 1;
-  string new_tx_id = 2;
+  common.v1.Exception exception = 1;
+  string old_tx_id = 2;
+  string new_tx_id = 3;
 }

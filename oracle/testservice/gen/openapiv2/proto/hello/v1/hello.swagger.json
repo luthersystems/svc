@@ -137,6 +137,48 @@
         }
       }
     },
+    "v1Exception": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID for exception."
+        },
+        "type": {
+          "$ref": "#/definitions/v1ExceptionType",
+          "description": "Type of exception."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp for when the exception occurred (RFC3339)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human readable description of exception."
+        },
+        "exceptionMetadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional metadata about the exception."
+        }
+      },
+      "description": "General message for exceptions."
+    },
+    "v1ExceptionType": {
+      "type": "string",
+      "enum": [
+        "INVALID_TYPE",
+        "BUSINESS",
+        "SERVICE_NOT_AVAILABLE",
+        "INFRASTRUCTURE",
+        "UNEXPECTED",
+        "SECURITY_VIOLATION"
+      ],
+      "default": "INVALID_TYPE",
+      "description": "Type of exception.\n\n - INVALID_TYPE: Default for no exception.\n - BUSINESS: Business logic error.\n - SERVICE_NOT_AVAILABLE: A service was unavailable.\n - INFRASTRUCTURE: Infrastructure was down.\n - UNEXPECTED: Catch-all for all other types.\n - SECURITY_VIOLATION: Security related error."
+    },
     "v1HelloRequest": {
       "type": "object",
       "properties": {
@@ -148,6 +190,9 @@
     "v1HelloResponse": {
       "type": "object",
       "properties": {
+        "exception": {
+          "$ref": "#/definitions/v1Exception"
+        },
         "greeting": {
           "type": "string"
         }
@@ -156,6 +201,9 @@
     "v1UseDepTxResponse": {
       "type": "object",
       "properties": {
+        "exception": {
+          "$ref": "#/definitions/v1Exception"
+        },
         "oldTxId": {
           "type": "string"
         },
