@@ -115,7 +115,13 @@ func withMockPhylum(path string) option {
 func withMockPhylumFrom(path string, r io.Reader) option {
 	return func(orc *Oracle) error {
 		orc.logBase.Infof("NewMock")
-		ph, err := phylum.NewMockFrom(path, orc.logBase, r)
+		var ph *phylum.Client
+		var err error
+		if r != nil {
+			ph, err = phylum.NewMockFrom(path, orc.logBase, r)
+		} else {
+			ph, err = phylum.NewMock(path, orc.logBase)
+		}
 		if err != nil {
 			return fmt.Errorf("unable to initialize mock phylum: %w", err)
 		}

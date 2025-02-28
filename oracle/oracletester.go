@@ -5,6 +5,7 @@ package oracle
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -79,7 +80,7 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
 
-	var r *bytes.Reader
+	var r io.Reader
 	if testCfg.snapshot != nil {
 		r = bytes.NewReader(testCfg.snapshot)
 	}
