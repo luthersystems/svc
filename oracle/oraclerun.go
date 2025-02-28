@@ -18,12 +18,14 @@ import (
 	"github.com/luthersystems/svc/logmon"
 	"github.com/luthersystems/svc/midware"
 	"github.com/luthersystems/svc/svcerr"
+	"github.com/luthersystems/svc/txctx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -34,6 +36,8 @@ var versionTotal = prometheus.NewCounterVec(
 	},
 	[]string{"oracle_name", "oracle_version", "phylum_name", "phylum_version"},
 )
+
+const depTxMetadataKey = "commit-transaction-id"
 
 func init() {
 	// Provider per endpoint histograms (at expense of memory/performance).
@@ -51,14 +55,14 @@ func init() {
 // as grpc request metadata and forward to the oracle grpc server.  Forwarded
 // headers may be used for authentication flows, request tracing, etc.
 func (orc *Oracle) gatewayForwardedHeaders() []string {
-	return []string{
+	return append([]string{
 		"Cookie",
 		"X-Forwarded-For",
 		"User-Agent",
 		"X-Forwarded-User-Agent",
 		"Referer",
 		orc.cfg.RequestIDHeader,
-	}
+	}, orc.cfg.ForwardedHeaders...)
 }
 
 func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {
@@ -74,7 +78,7 @@ func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {
 
 func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 	opts := []runtime.ServeMuxOption{
-		runtime.WithErrorHandler(svcerr.ErrIntercept(orc.log)),
+		runtime.WithErrorHandler(svcerr.ErrIntercept(orc.Log)),
 		runtime.WithIncomingHeaderMatcher(orc.incomingHeaderMatcher),
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
 			MarshalOptions: protojson.MarshalOptions{
@@ -88,6 +92,26 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 	opts = append(opts, orc.cfg.gatewayOpts...)
 
 	return runtime.NewServeMux(opts...)
+}
+
+func setGRPCHeader(ctx context.Context, header, value string) {
+	m := make(map[string]string, 1)
+	m[header] = value
+	err := grpc.SetHeader(ctx, metadata.New(m))
+	if err != nil {
+		logrus.WithError(err).Error("failed to set gRPC metadata header for cookie forwarding")
+	}
+}
+
+func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	newCtx := txctx.Context(ctx)
+	resp, err := handler(newCtx, req)
+	txID := txctx.GetTransactionDetails(newCtx).TransactionID
+	if txID != "" {
+		grpclogging.AddLogrusField(newCtx, "commit_transaction_id", txID)
+		setGRPCHeader(newCtx, depTxMetadataKey, txID)
+	}
+	return resp, err
 }
 
 func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, http.Handler) {
@@ -143,11 +167,11 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 
 	defer func() {
 		if err := orc.close(); err != nil {
-			orc.log(ctx).WithError(err).Warn("failed to close oracle")
+			orc.Log(ctx).WithError(err).Warn("failed to close oracle")
 		}
 	}()
 
-	orc.log(ctx).WithFields(logrus.Fields{
+	orc.Log(ctx).WithFields(logrus.Fields{
 		"gateway_endpoint": orc.cfg.GatewayEndpoint,
 		"phylum_path":      orc.cfg.PhylumPath,
 		"emulate_cc":       orc.cfg.EmulateCC,
@@ -172,7 +196,8 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 				orc.logBase,
 				grpclogging.UpperBoundTimer(time.Millisecond),
 				grpclogging.RealTime()),
-			svcerr.AppErrorUnaryInterceptor(orc.log))))
+			txctxInterceptor,
+			svcerr.AppErrorUnaryInterceptor(orc.Log))))
 
 	grpcConfig.RegisterServiceServer(grpcServer)
 
@@ -184,7 +209,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	}
 	defer func() {
 		if err := listener.Close(); err != nil {
-			orc.log(ctx).WithError(err).Warn("failed to close listener")
+			orc.Log(ctx).WithError(err).Warn("failed to close listener")
 		}
 	}()
 
@@ -207,14 +232,14 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	}
 
 	go func() {
-		orc.log(ctx).Infof("init healthcheck")
+		orc.Log(ctx).Infof("init healthcheck")
 		hctx, hcancel := context.WithDeadline(ctx, time.Now().Add(10*time.Second))
 		defer hcancel()
 		orc.phylumHealthCheck(hctx)
 	}()
 
 	go func() {
-		orc.log(ctx).Infof("oracle listen")
+		orc.Log(ctx).Infof("oracle listen")
 		server := &http.Server{
 			Addr:              orc.cfg.ListenAddress,
 			Handler:           httpHandler,
@@ -233,7 +258,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 			ReadHeaderTimeout: 2 * time.Second,
 			Handler:           h,
 		}
-		orc.log(ctx).Infof("prometheus listen")
+		orc.Log(ctx).Infof("prometheus listen")
 		trySendError(errServe, s.ListenAndServe())
 	}()
 
@@ -241,4 +266,17 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	// forever.  An error in either the grpc server or the http server will
 	// appear in the errServe channel and halt the process.
 	return <-errServe
+}
+
+// getGRPCHeader looksup a header on the grpc context.
+func getGRPCHeader(ctx context.Context, grpcHeaderKey string) string {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	values := md.HeaderMD.Get(grpcHeaderKey)
+	if len(values) < 1 {
+		return ""
+	}
+	return values[0]
 }

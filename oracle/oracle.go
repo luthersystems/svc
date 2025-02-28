@@ -16,9 +16,9 @@ import (
 	"time"
 
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
+	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/private"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/sirupsen/logrus"
@@ -44,151 +44,6 @@ const (
 	// metricsAddr is the http addr the prometheus server listens on.
 	metricsAddr = ":9600"
 )
-
-// DefaultConfig returns a default config.
-func DefaultConfig() *Config {
-	return &Config{
-		Verbose:   true,
-		EmulateCC: false,
-		// IMPORTANT: Phylum bootstrap expects ListenAddress on :8080 for
-		// FakeAuth IDP. Only change this if you know what you're doing!
-		ListenAddress:     ":8080",
-		PhylumPath:        "./phylum",
-		PhylumServiceName: "phylum",
-		ServiceName:       "oracle",
-		RequestIDHeader:   "X-Request-ID",
-		Version:           "v0.0.1",
-	}
-}
-
-// Config configures an oracle.
-type Config struct {
-	// swaggerHandler configures an endpoint to serve the
-	// swagger API.
-	swaggerHandler http.Handler
-	// ListenAddress is an address the oracle HTTP listens on.
-	ListenAddress string `yaml:"listen-address"`
-	// PhylumPath is the the path for the business logic.
-	PhylumPath string `yaml:"phylum-path"`
-	// GatewayEndpoint is an address to the shiroclient gateway.
-	GatewayEndpoint string `yaml:"gateway-endpoint"`
-	// PhylumServiceName is the app-specific name of the conneted phylum.
-	PhylumServiceName string `yaml:"phylum-service-name"`
-	// ServiceName is the app-specific name of the Oracle.
-	ServiceName string `yaml:"service-name"`
-	// RequestIDHeader is the HTTP header encoding the request ID.
-	RequestIDHeader string `yaml:"request-id-header"`
-	// Version is the oracle version.
-	Version string `yaml:"version"`
-	// TraceOpts are tracing options.
-	TraceOpts []opttrace.Option
-	// Verbose increases logging.
-	Verbose bool `yaml:"verbose"`
-	// EmulateCC emulates chaincode in memory (for testing).
-	EmulateCC bool `yaml:"emulate-cc"`
-	// gatewayOpts configures the grpc gateway.
-	gatewayOpts []runtime.ServeMuxOption
-}
-
-// SetSwaggerHandler configures an endpoint to serve the swagger API.
-func (c *Config) SetSwaggerHandler(h http.Handler) {
-	if c == nil {
-		return
-	}
-	c.swaggerHandler = h
-}
-
-// SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
-func (c *Config) SetOTLPEndpoint(endpoint string) {
-	if c == nil || endpoint == "" {
-		return
-	}
-	c.TraceOpts = append(c.TraceOpts, opttrace.WithOTLPExporter(endpoint))
-}
-
-// Valid validates an oracle configuration.
-func (c *Config) Valid() error {
-	if c == nil {
-		return fmt.Errorf("missing phylum config")
-	}
-	if c.ListenAddress == "" {
-		return fmt.Errorf("missing listen address")
-	}
-	if c.PhylumPath == "" {
-		return fmt.Errorf("missing phylum path")
-	}
-	if c.PhylumServiceName == "" {
-		return fmt.Errorf("missing phylum service name")
-	}
-	if c.ServiceName == "" {
-		return fmt.Errorf("missing service name")
-	}
-	if c.RequestIDHeader == "" {
-		return fmt.Errorf("missing request ID header")
-	}
-	if c.Version == "" {
-		return fmt.Errorf("missing version")
-	}
-	return nil
-}
-
-// addGRPCGatewayOption is a low-level helper method to accumulate ServeMux
-// options without directly modifying the GatewayOptions slice.
-// *IMPORTANT*: Only use this if you know what you're doing.
-func (c *Config) addGRPCGatewayOptions(opt ...runtime.ServeMuxOption) {
-	c.gatewayOpts = append(c.gatewayOpts, opt...)
-}
-
-// AddCookieForwarder configures a bridge from a gRPC metadata key to an HTTP
-// response cookie. The returned CookieForwarder can be used within your gRPC
-// server methods to set the cookie value by calling its SetValue(ctx, val)
-// method. That value will then appear as an HTTP cookie named cookieName in the
-// final HTTP response.
-//
-// Specifically, this method appends a ForwardResponseOption (created by
-// runtime.WithForwardResponseOption) to the Config's gatewayOpts, ensuring
-// that gRPC metadata with key header gets turned into a Set-Cookie header in
-// the final HTTP response when a response passes through the gRPC-Gateway.
-//
-// Usage:
-//
-//	cf := config.AddCookieForwarder("ui_authorization", "ui_authorization", 3600, true, true)
-//	// Then in your handler method:
-//	cf.SetValue(ctx, "some-jwt-token")
-//	// The HTTP response will include a cookie:
-//	//    Set-Cookie: ui_authorization=some-jwt-token; Max-Age=3600; Secure; HttpOnly
-func (c *Config) AddCookieForwarder(header, cookieName string, maxAge int, secure, httpOnly bool) *CookieForwarder {
-	forwarder := newCookieForwarder(header, cookieName, maxAge, secure, httpOnly)
-	c.addGRPCGatewayOptions(
-		runtime.WithForwardResponseOption(forwarder.forwardResponseOption()),
-	)
-	return forwarder
-}
-
-// AddHeaderForwarder configures a bridge from a gRPC metadata key to an HTTP
-// response header. The returned HeaderForwarder can be used within your gRPC
-// server methods to set the header value by calling its SetValue(ctx, val)
-// method. That value will then appear as an HTTP response header of name
-// httpHeaderName in the final HTTP response.
-//
-// Specifically, this method appends a ForwardResponseOption (created by
-// runtime.WithForwardResponseOption) to the Config's gatewayOpts, ensuring
-// that gRPC metadata with key grpcKey gets turned into an HTTP header named
-// httpHeaderName when a response is returned through the gRPC-Gateway.
-//
-// Usage:
-//
-//	hf := config.AddHeaderForwarder("X-Grpc-Key", "X-Http-Header")
-//	// Then in your handler method:
-//	hf.SetValue(ctx, "some value")
-//	// The HTTP response will include "X-Http-Header: some value".
-func (c *Config) AddHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
-	hf := newHeaderForwarder(grpcKey, httpHeaderName)
-	c.addGRPCGatewayOptions(
-		runtime.WithForwardResponseOption(hf.forwardResponseOption()),
-	)
-	return hf
-}
 
 type oracleState int
 
@@ -326,9 +181,23 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	return oracle, nil
 }
 
-func (orc *Oracle) log(ctx context.Context) *logrus.Entry {
+// Log returns a logger for the oracle.
+func (orc *Oracle) Log(ctx context.Context) *logrus.Entry {
 	return grpclogging.GetLogrusEntry(ctx, orc.logBase)
 }
+
+/*
+func dependentTxConfigs(ctx context.Context) []shiroclient.Config {
+	var configs []shiroclient.Config
+	// TODO: why are we using lutherauth to get the tx dep here?
+	lastCommitTxID, err := claims.NewCookieTokenGetter(transactionDependencyHeader, false)(ctx)
+	if err == nil {
+		configs = append(configs, shiroclient.WithDependentTxID(lastCommitTxID))
+	}
+	configs = append(configs, shiroclient.WithDisableWritePolling(true))
+	return configs
+}
+*/
 
 func txConfigs() func(context.Context, ...shiroclient.Config) []shiroclient.Config {
 	return func(ctx context.Context, extend ...shiroclient.Config) []shiroclient.Config {
@@ -399,7 +268,7 @@ func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealt
 		}
 	}
 	if orc.getLastPhylumVersion() == "" && !orc.cfg.EmulateCC {
-		orc.log(ctx).Warnf("missing phylum version")
+		orc.Log(ctx).Warnf("missing phylum version")
 	}
 
 	reports = append(reports, &healthcheck.HealthCheckReport{
@@ -414,9 +283,9 @@ func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealt
 	if !healthy {
 		reportsJSON, err := json.Marshal(resp)
 		if err != nil {
-			orc.log(ctx).WithError(err).Errorf("Oracle unhealthy")
+			orc.Log(ctx).WithError(err).Errorf("Oracle unhealthy")
 		} else {
-			orc.log(ctx).WithField("reports_json", string(reportsJSON)).Errorf("Oracle unhealthy")
+			orc.Log(ctx).WithField("reports_json", string(reportsJSON)).Errorf("Oracle unhealthy")
 		}
 	}
 
@@ -440,4 +309,12 @@ func Call[K proto.Message, R proto.Message](s *Oracle, ctx context.Context, meth
 	configs := s.txConfigs(ctx)
 	configs = append(configs, config...)
 	return phylum.Call(s.phylum, ctx, methodName, req, resp, configs...)
+}
+
+func (orc *Oracle) DefaultCallConfigs(_ context.Context, requireAuth bool) []shiroclient.Config {
+	cfg, err := private.WithSeed()
+	if err != nil {
+		panic(err)
+	}
+	return []shiroclient.Config{cfg}
 }
