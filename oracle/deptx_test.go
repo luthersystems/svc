@@ -19,7 +19,6 @@ import (
 
 // Example: a "UseDepTx" endpoint (for dependent transaction logic)
 func (s *serverImpl) UseDepTx(ctx context.Context, _ *emptypb.Empty) (*hellov1.UseDepTxResponse, error) {
-	fmt.Printf("WTF: get tx details\n")
 	oldID := txctx.GetTransactionDetails(ctx).TransactionID
 
 	s.nextID++

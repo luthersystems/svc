@@ -21,6 +21,7 @@ import (
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/private"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/opttrace"
+	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
@@ -199,10 +200,8 @@ func (orc *Oracle) txConfigs(ctx context.Context, extend ...shiroclient.Config) 
 	}
 	if orc.cfg.DependentTxCookie != "" {
 		// incoming side of the dep tx
-		if lastCommitTxID, err := GetCookie(ctx, orc.cfg.DependentTxCookie); lastCommitTxID != "" && err != nil {
+		if lastCommitTxID := txctx.GetTransactionDetails(ctx).TransactionID; lastCommitTxID != "" {
 			configs = append(configs, shiroclient.WithDependentTxID(lastCommitTxID))
-		} else if err != nil {
-			logrus.WithError(err).Debugf("get cookie")
 		}
 		configs = append(configs, shiroclient.WithDisableWritePolling(true))
 	}

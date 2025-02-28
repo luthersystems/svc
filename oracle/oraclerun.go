@@ -91,7 +91,6 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 		}),
 	}
 	if orc.cfg.DependentTxCookie != "" {
-		fmt.Printf("WTF: SET forwarder: [%s]\n", orc.cfg.DependentTxCookie)
 		// set outgoing deptx cookie
 		opts = append(opts, runtime.WithForwardResponseOption(cookieHandler(
 			dependentTxMetadataKey,
@@ -105,16 +104,20 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 	return runtime.NewServeMux(opts...)
 }
 
-func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	fmt.Printf("WTF: txctx interceptor called!\n")
-	newCtx := txctx.Context(ctx)
-	resp, err := handler(newCtx, req)
-	fmt.Printf("WTF: Interceptor Response: %+v, Error: %v\n", resp, err)
-	txID := txctx.GetTransactionDetails(newCtx).TransactionID
+func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	ctx = txctx.Context(ctx)
+	if orc.cfg.DependentTxCookie != "" {
+		if lastCommitTxID, err := GetCookie(ctx, orc.cfg.DependentTxCookie); lastCommitTxID != "" {
+			txctx.SetTransactionDetails(ctx, txctx.TransactionDetails{TransactionID: lastCommitTxID})
+		} else if err != nil {
+			logrus.WithError(err).Debugf("txctxInterceptor: get cookie")
+		}
+	}
+	resp, err := handler(ctx, req)
+	txID := txctx.GetTransactionDetails(ctx).TransactionID
 	if txID != "" {
-		grpclogging.AddLogrusField(newCtx, "commit_transaction_id", txID)
-		fmt.Printf("WTF: txinterceptorm grpcKey=[%s] setgrpc value=[%s]\n", dependentTxMetadataKey, txID)
-		setGRPCHeader(newCtx, dependentTxMetadataKey, txID)
+		grpclogging.AddLogrusField(ctx, "commit_transaction_id", txID)
+		setGRPCHeader(ctx, dependentTxMetadataKey, txID)
 	}
 	return resp, err
 }
@@ -158,7 +161,7 @@ func createGRPCServer(orc *Oracle) *grpc.Server {
 				orc.logBase,
 				grpclogging.UpperBoundTimer(time.Millisecond),
 				grpclogging.RealTime()),
-			txctxInterceptor, // Ensures transaction context is set
+			orc.txctxInterceptor, // Ensures transaction context is set
 			svcerr.AppErrorUnaryInterceptor(orc.Log),
 		)),
 	)
