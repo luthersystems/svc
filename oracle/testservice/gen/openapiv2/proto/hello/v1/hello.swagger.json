@@ -16,6 +16,40 @@
     "application/json"
   ],
   "paths": {
+    "/v1/dep_tx": {
+      "post": {
+        "summary": "UseDepTx tests the deptx logic.",
+        "operationId": "HelloService_UseDepTx",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UseDepTxResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "tags": [
+          "HelloService"
+        ]
+      }
+    },
     "/v1/hello": {
       "post": {
         "summary": "SayHello echoes a greeting for the provided name.",
@@ -115,6 +149,17 @@
       "type": "object",
       "properties": {
         "greeting": {
+          "type": "string"
+        }
+      }
+    },
+    "v1UseDepTxResponse": {
+      "type": "object",
+      "properties": {
+        "oldTxId": {
+          "type": "string"
+        },
+        "newTxId": {
           "type": "string"
         }
       }

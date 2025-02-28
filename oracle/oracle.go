@@ -67,9 +67,6 @@ type Oracle struct {
 	// Optional application tracing provider
 	tracer *opttrace.Tracer
 
-	// txConfigs generates default transaction configs
-	txConfigs func(context.Context, ...shiroclient.Config) []shiroclient.Config
-
 	cachedPhylumVersion string
 
 	cfg Config
@@ -170,7 +167,6 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 			return nil, err
 		}
 	}
-	oracle.txConfigs = txConfigs()
 	t, err := opttrace.New(context.Background(), "oracle", oracle.cfg.TraceOpts...)
 	if err != nil {
 		return nil, err
@@ -186,32 +182,26 @@ func (orc *Oracle) Log(ctx context.Context) *logrus.Entry {
 	return grpclogging.GetLogrusEntry(ctx, orc.logBase)
 }
 
-/*
-func dependentTxConfigs(ctx context.Context) []shiroclient.Config {
-	var configs []shiroclient.Config
-	// TODO: why are we using lutherauth to get the tx dep here?
-	lastCommitTxID, err := claims.NewCookieTokenGetter(transactionDependencyHeader, false)(ctx)
-	if err == nil {
-		configs = append(configs, shiroclient.WithDependentTxID(lastCommitTxID))
+func (orc *Oracle) txConfigs(ctx context.Context, extend ...shiroclient.Config) []shiroclient.Config {
+	fields := grpclogging.GetLogrusFields(ctx)
+	configs := []shiroclient.Config{
+		shiroclient.WithLogrusFields(fields),
 	}
-	configs = append(configs, shiroclient.WithDisableWritePolling(true))
+	if fields["req_id"] != nil {
+		logrus.WithField("req_id", fields["req_id"]).Debugf("setting request id")
+		configs = append(configs, shiroclient.WithID(fmt.Sprint(fields["req_id"])))
+	}
+	if orc.cfg.DependentTxCookie != "" {
+		// incoming side of the dep tx
+		if lastCommitTxID, err := GetCookie(ctx, orc.cfg.DependentTxCookie); lastCommitTxID != "" && err != nil {
+			configs = append(configs, shiroclient.WithDependentTxID(lastCommitTxID))
+		} else if err != nil {
+			logrus.WithError(err).Debugf("get cookie")
+		}
+		configs = append(configs, shiroclient.WithDisableWritePolling(true))
+	}
+	configs = append(configs, extend...)
 	return configs
-}
-*/
-
-func txConfigs() func(context.Context, ...shiroclient.Config) []shiroclient.Config {
-	return func(ctx context.Context, extend ...shiroclient.Config) []shiroclient.Config {
-		fields := grpclogging.GetLogrusFields(ctx)
-		configs := []shiroclient.Config{
-			shiroclient.WithLogrusFields(fields),
-		}
-		if fields["req_id"] != nil {
-			logrus.WithField("req_id", fields["req_id"]).Debugf("setting request id")
-			configs = append(configs, shiroclient.WithID(fmt.Sprint(fields["req_id"])))
-		}
-		configs = append(configs, extend...)
-		return configs
-	}
 }
 
 // setPhylumVersion sets the last seen phylum version and is concurrency safe.

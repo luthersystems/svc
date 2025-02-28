@@ -10,17 +10,17 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	"github.com/stretchr/testify/require"
 )
 
 // serverImpl implements HelloServiceServer from hello.proto
 type serverImpl struct {
 	hellov1.UnimplementedHelloServiceServer
 
+	nextID    int
 	cookieFwd *CookieForwarder
 	headerFwd *HeaderForwarder
 }

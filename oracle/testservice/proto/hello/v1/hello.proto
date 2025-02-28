@@ -25,6 +25,14 @@ service HelloService {
       get: "/v1/ping"
     };
   }
+
+// UseDepTx tests the deptx logic.
+  rpc UseDepTx (google.protobuf.Empty) returns (UseDepTxResponse) {
+    option (google.api.http) = {
+      post: "/v1/dep_tx"
+      body: "*"
+    };
+  }
 }
 
 message HelloRequest {
@@ -33,4 +41,9 @@ message HelloRequest {
 
 message HelloResponse {
   string greeting = 1;
+}
+
+message UseDepTxResponse {
+  string old_tx_id = 1;
+  string new_tx_id = 2;
 }

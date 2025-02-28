@@ -56,12 +56,15 @@ type Config struct {
 	ForwardedHeaders []string
 	// DependentTxCookie sets dependent transaction ID on a cookie.
 	DependentTxCookie string `yaml:"dependent-tx-cookie"`
+	// InsecureCookies
+	InsecureCookies bool `yaml:"insecure-cookies"`
 }
 
 const (
-	transactionDependencyCookieMaxAge = 5 * time.Minute
-	grpcMetadataCookiePrefix          = "luther-cookie-"
-	grpcMetadataHeaderPrefix          = "luther-header-"
+	dependentTxCookieMaxAge  = 5 * time.Minute
+	dependentTxSecureCookie  = true
+	grpcMetadataCookiePrefix = "luther-cookie-"
+	grpcMetadataHeaderPrefix = "luther-header-"
 )
 
 // SetSwaggerHandler configures an endpoint to serve the swagger API.

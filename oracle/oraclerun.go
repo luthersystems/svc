@@ -37,7 +37,7 @@ var versionTotal = prometheus.NewCounterVec(
 	[]string{"oracle_name", "oracle_version", "phylum_name", "phylum_version"},
 )
 
-const depTxMetadataKey = "commit-transaction-id"
+const dependentTxMetadataKey = "commit-transaction-id"
 
 func init() {
 	// Provider per endpoint histograms (at expense of memory/performance).
@@ -89,18 +89,18 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 			},
 		}),
 	}
+	if orc.cfg.DependentTxCookie != "" {
+		// set outgoing deptx cookie
+		opts = append(opts, runtime.WithForwardResponseOption(cookieHandler(
+			dependentTxMetadataKey,
+			orc.cfg.DependentTxCookie,
+			int(dependentTxCookieMaxAge.Seconds()),
+			!orc.cfg.InsecureCookies)))
+	}
+	// TODO: set auth cookie here as well
 	opts = append(opts, orc.cfg.gatewayOpts...)
 
 	return runtime.NewServeMux(opts...)
-}
-
-func setGRPCHeader(ctx context.Context, header, value string) {
-	m := make(map[string]string, 1)
-	m[header] = value
-	err := grpc.SetHeader(ctx, metadata.New(m))
-	if err != nil {
-		logrus.WithError(err).Error("failed to set gRPC metadata header for cookie forwarding")
-	}
 }
 
 func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -109,7 +109,7 @@ func txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServ
 	txID := txctx.GetTransactionDetails(newCtx).TransactionID
 	if txID != "" {
 		grpclogging.AddLogrusField(newCtx, "commit_transaction_id", txID)
-		setGRPCHeader(newCtx, depTxMetadataKey, txID)
+		setGRPCHeader(newCtx, dependentTxMetadataKey, txID)
 	}
 	return resp, err
 }
@@ -266,6 +266,15 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	// forever.  An error in either the grpc server or the http server will
 	// appear in the errServe channel and halt the process.
 	return <-errServe
+}
+
+func setGRPCHeader(ctx context.Context, header, value string) {
+	m := make(map[string]string, 1)
+	m[header] = value
+	err := grpc.SetHeader(ctx, metadata.New(m))
+	if err != nil {
+		logrus.WithError(err).Error("failed to set gRPC metadata header for cookie forwarding")
+	}
 }
 
 // getGRPCHeader looksup a header on the grpc context.

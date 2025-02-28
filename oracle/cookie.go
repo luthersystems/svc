@@ -2,8 +2,12 @@ package oracle
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -44,15 +48,15 @@ func (cf *CookieForwarder) SetValue(ctx context.Context, val string) {
 	setGRPCHeader(ctx, cf.header, val)
 }
 
-func cookieHandler(header string, name string, maxAge int, secureCookie bool) func(context.Context, http.ResponseWriter, proto.Message) error {
+func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCookie bool) func(context.Context, http.ResponseWriter, proto.Message) error {
 	return func(ctx context.Context, w http.ResponseWriter, resp proto.Message) error {
-		value := getGRPCHeader(ctx, header)
+		value := getGRPCHeader(ctx, grpcHeader)
 		if value == "" {
 			return nil
 		}
 
 		cookie := &http.Cookie{
-			Name:     name,
+			Name:     cookieName,
 			Value:    value,
 			MaxAge:   maxAge,
 			Secure:   secureCookie,
@@ -73,4 +77,48 @@ func cookieHandler(header string, name string, maxAge int, secureCookie bool) fu
 // the forwarder’s header from metadata and writes it as a Set-Cookie in HTTP.
 func (cf *CookieForwarder) forwardResponseOption() func(ctx context.Context, w http.ResponseWriter, resp proto.Message) error {
 	return cookieHandler(cf.header, cf.cookieName, cf.maxAge, cf.secure)
+}
+
+// getIncomingCookie retrieves the named cookie from the gRPC metadata that
+// the gRPC-Gateway sets after parsing the original HTTP Cookie header.
+func getIncomingCookie(ctx context.Context, cookieName string) (*http.Cookie, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, errors.New("missing metadata")
+	}
+	cookies := md.Get(cookieName)
+	if len(cookies) < 1 {
+		return nil, fmt.Errorf("missing cookie header: %s", cookieName)
+	}
+	// Usually there's exactly one 'cookie' string, e.g. "k1=v1; k2=v2"
+	// but you can handle multiple if needed.
+	rawCookieHeader := cookies[0]
+
+	// We can parse the cookie using net/http logic:
+	header := http.Header{}
+	header.Add("Cookie", rawCookieHeader)
+	request := http.Request{Header: header}
+	allCookies := request.Cookies()
+
+	var found *http.Cookie
+	for _, c := range allCookies {
+		if strings.EqualFold(c.Name, cookieName) {
+			found = c
+			break
+		}
+	}
+	if found == nil {
+		return nil, errors.New("cookie not found in metadata")
+	}
+	return found, nil
+}
+
+// GetCookie is just a small helper that fetches a cookie and returns
+// its value as a string token.
+func GetCookie(ctx context.Context, cookieName string) (string, error) {
+	c, err := getIncomingCookie(ctx, cookieName)
+	if err != nil {
+		return "", err
+	}
+	return c.Value, nil
 }

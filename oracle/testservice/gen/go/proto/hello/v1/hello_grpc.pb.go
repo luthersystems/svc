@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	HelloService_SayHello_FullMethodName = "/hello.v1.HelloService/SayHello"
 	HelloService_Ping_FullMethodName     = "/hello.v1.HelloService/Ping"
+	HelloService_UseDepTx_FullMethodName = "/hello.v1.HelloService/UseDepTx"
 )
 
 // HelloServiceClient is the client API for HelloService service.
@@ -34,6 +35,8 @@ type HelloServiceClient interface {
 	SayHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 	// Ping is just a trivial endpoint returning an empty response.
 	Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// UseDepTx tests the deptx logic.
+	UseDepTx(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*UseDepTxResponse, error)
 }
 
 type helloServiceClient struct {
@@ -64,6 +67,16 @@ func (c *helloServiceClient) Ping(ctx context.Context, in *emptypb.Empty, opts .
 	return out, nil
 }
 
+func (c *helloServiceClient) UseDepTx(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*UseDepTxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UseDepTxResponse)
+	err := c.cc.Invoke(ctx, HelloService_UseDepTx_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HelloServiceServer is the server API for HelloService service.
 // All implementations must embed UnimplementedHelloServiceServer
 // for forward compatibility.
@@ -74,6 +87,8 @@ type HelloServiceServer interface {
 	SayHello(context.Context, *HelloRequest) (*HelloResponse, error)
 	// Ping is just a trivial endpoint returning an empty response.
 	Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// UseDepTx tests the deptx logic.
+	UseDepTx(context.Context, *emptypb.Empty) (*UseDepTxResponse, error)
 	mustEmbedUnimplementedHelloServiceServer()
 }
 
@@ -89,6 +104,9 @@ func (UnimplementedHelloServiceServer) SayHello(context.Context, *HelloRequest) 
 }
 func (UnimplementedHelloServiceServer) Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
+}
+func (UnimplementedHelloServiceServer) UseDepTx(context.Context, *emptypb.Empty) (*UseDepTxResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UseDepTx not implemented")
 }
 func (UnimplementedHelloServiceServer) mustEmbedUnimplementedHelloServiceServer() {}
 func (UnimplementedHelloServiceServer) testEmbeddedByValue()                      {}
@@ -147,6 +165,24 @@ func _HelloService_Ping_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HelloService_UseDepTx_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HelloServiceServer).UseDepTx(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HelloService_UseDepTx_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HelloServiceServer).UseDepTx(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HelloService_ServiceDesc is the grpc.ServiceDesc for HelloService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -161,6 +197,10 @@ var HelloService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Ping",
 			Handler:    _HelloService_Ping_Handler,
+		},
+		{
+			MethodName: "UseDepTx",
+			Handler:    _HelloService_UseDepTx_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
