@@ -11,7 +11,7 @@ func TestNewTestOracle(t *testing.T) {
 	// 1) Create a config for the test oracle.
 	//    Typically you'd set EmulateCC = true and any other fields you need.
 	cfg := &Config{
-		PhylumPath:        "./phylum",
+		PhylumPath:        "./testservice/phylum",
 		ServiceName:       "test_oracle",
 		PhylumServiceName: "phylum",
 		EmulateCC:         true,
