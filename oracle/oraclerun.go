@@ -153,44 +153,6 @@ type GrpcGatewayConfig interface {
 	RegisterServiceClient(ctx context.Context, grpcCon *grpc.ClientConn, mux *runtime.ServeMux) error
 }
 
-func createGRPCServer(orc *Oracle) *grpc.Server {
-	return grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			grpclogging.LogrusMethodInterceptor(
-				orc.logBase,
-				grpclogging.UpperBoundTimer(time.Millisecond),
-				grpclogging.RealTime()),
-			orc.txctxInterceptor, // Ensures transaction context is set
-			svcerr.AppErrorUnaryInterceptor(orc.Log),
-		)),
-	)
-}
-
-// createGRPCGatewayClient initializes the gRPC client connection and registers services to the gRPC gateway mux.
-func createGRPCGatewayClient(ctx context.Context, orc *Oracle, grpcAddr string, grpcConfig GrpcGatewayConfig) (*runtime.ServeMux, error) {
-	// Create a gRPC client
-	grpcConn, err := grpc.NewClient("unix://"+grpcAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(grpcmiddleware.ChainUnaryClient(
-			grpc_prometheus.UnaryClientInterceptor,
-		)),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("grpc dial: %w", err)
-	}
-
-	// Create the gRPC Gateway mux using the provided Oracle instance
-	mux, _ := orc.grpcGateway(orc.swaggerHandler)
-
-	// Register the gRPC service handlers with the Gateway
-	if err := grpcConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
-		return nil, fmt.Errorf("register service client: %w", err)
-	}
-
-	return mux, nil
-}
-
 func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfig) error {
 	orc.stateMut.Lock()
 	if orc.state != oracleStateTesting {
@@ -234,7 +196,18 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		panic(err)
 	}
 
-	grpcServer := createGRPCServer(orc)
+	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			grpclogging.LogrusMethodInterceptor(
+				orc.logBase,
+				grpclogging.UpperBoundTimer(time.Millisecond),
+				grpclogging.RealTime()),
+			orc.txctxInterceptor, // Ensures transaction context is set
+			svcerr.AppErrorUnaryInterceptor(orc.Log),
+		)),
+	)
+
 	grpcConfig.RegisterServiceServer(grpcServer)
 
 	orc.stateMut.Unlock()
@@ -305,8 +278,17 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	go func() {
 		<-ctx.Done()
 		grpcServer.Stop()
-		oracleServer.Shutdown(context.Background())
-		metricsServer.Shutdown(context.Background())
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+		defer cancel()
+		if err := oracleServer.Shutdown(shutdownCtx); err != nil {
+			orc.Log(ctx).WithError(err).Warn("Error shutting down oracle server")
+		}
+
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			orc.Log(ctx).WithError(err).Warn("Error shutting down metrics server")
+		}
 		close(errServe)
 	}()
 

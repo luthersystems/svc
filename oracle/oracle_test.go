@@ -121,7 +121,7 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 
 	// 4) Dial that gRPC server from the gateway
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, grpcLis.Addr().String(),
+	conn, err := grpc.NewClient(grpcLis.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 
@@ -136,7 +136,8 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 	gwLis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	gwSrv := &http.Server{
-		Handler: gwMux,
+		Handler:           gwMux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
 		_ = gwSrv.Serve(gwLis)

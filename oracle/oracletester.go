@@ -84,7 +84,9 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	port, err := getFreeAddr()
 	require.NoError(t, err)
 
-	cfg.ListenAddress = port
+	if cfg.ListenAddress == "" {
+		cfg.ListenAddress = port
+	}
 
 	require.NoError(t, cfg.Valid())
 
