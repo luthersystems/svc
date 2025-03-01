@@ -109,10 +109,11 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	}
 
 	server, err := newOracle(cfg, orcOpts...)
-	server.state = oracleStateTesting
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	server.state = oracleStateTesting
 
 	if cfg.Verbose {
 		logger.SetLevel(logrus.DebugLevel)
