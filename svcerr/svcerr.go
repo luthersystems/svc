@@ -370,7 +370,6 @@ type HTTPErrorHandler = func(context.Context, *runtime.ServeMux, runtime.Marshal
 // chance to process the error before it is presented to the caller!
 func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) HTTPErrorHandler {
 	return func(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-		fmt.Printf("WTF: Gateway Error: %v\n", err)
 		for _, handler := range handlers {
 			handler(ctx, mux, marshaler, w, r, err)
 		}
