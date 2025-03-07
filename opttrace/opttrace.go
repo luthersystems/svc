@@ -147,24 +147,24 @@ func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, er
 
 // Span creates a new trace span and returns the supplied context with span
 // added.  The returned span must be ended to avoid leaking resources.
-func (t Tracer) Span(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	if t.exportTP == nil {
+func (t *Tracer) Span(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if t == nil || t.exportTP == nil {
 		return noopTracerProvider.Tracer(tracerName).Start(ctx, spanName, opts...)
 	}
 	return t.exportTP.Tracer(tracerName).Start(ctx, spanName, opts...)
 }
 
 // Shutdown releases all resources allocated by the tracing provider.
-func (t Tracer) Shutdown(ctx context.Context) error {
-	if t.exportTP != nil {
+func (t *Tracer) Shutdown(ctx context.Context) error {
+	if t != nil && t.exportTP != nil {
 		return t.exportTP.Shutdown(ctx)
 	}
 	return nil
 }
 
 // SetGlobalTracer sets the global tracer provider to this tracer instance
-func (t Tracer) SetGlobalTracer() {
-	if t.exportTP != nil {
+func (t *Tracer) SetGlobalTracer() {
+	if t != nil && t.exportTP != nil {
 		otel.SetTracerProvider(t.exportTP)
 	}
 }

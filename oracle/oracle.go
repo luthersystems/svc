@@ -18,7 +18,6 @@ import (
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
-	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/private"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/luthersystems/svc/txctx"
@@ -184,6 +183,14 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	return oracle, nil
 }
 
+// Tracer traces requests.
+func (orc *Oracle) Tracer() *opttrace.Tracer {
+	if orc == nil {
+		return nil
+	}
+	return orc.tracer
+}
+
 // Log returns a logger for the oracle.
 func (orc *Oracle) Log(ctx context.Context) *logrus.Entry {
 	return grpclogging.GetLogrusEntry(ctx, orc.logBase)
@@ -250,6 +257,8 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 // GetHealthCheck checks this service and all dependent services to construct a
 // health report. Returns a grpc error code if a service is down.
 func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealthCheckRequest) (*healthcheck.GetHealthCheckResponse, error) {
+	ctx, span := orc.tracer.Span(ctx, "HealthCheck")
+	defer span.End()
 	// No ACL: Open to everyone
 	healthy := true
 	var reports []*healthcheck.HealthCheckReport
@@ -301,15 +310,9 @@ func (orc *Oracle) close() error {
 
 // Call calls the phylum.
 func Call[K proto.Message, R proto.Message](s *Oracle, ctx context.Context, methodName string, req K, resp R, config ...shiroclient.Config) (R, error) {
+	ctx, span := s.tracer.Span(ctx, methodName)
+	defer span.End()
 	configs := s.txConfigs(ctx)
 	configs = append(configs, config...)
 	return phylum.Call(s.phylum, ctx, methodName, req, resp, configs...)
-}
-
-func (orc *Oracle) DefaultCallConfigs(_ context.Context, requireAuth bool) []shiroclient.Config {
-	cfg, err := private.WithSeed()
-	if err != nil {
-		panic(err)
-	}
-	return []shiroclient.Config{cfg}
 }
