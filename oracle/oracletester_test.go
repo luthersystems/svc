@@ -3,6 +3,7 @@ package oracle
 import (
 	"testing"
 
+	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,6 +17,8 @@ func TestNewTestOracle(t *testing.T) {
 		RequestIDHeader:   "X-Request-ID",
 	}
 
+	_, err := cfg.AddFakeIDP(t)
+	require.NoError(t, err, "add fake IDP")
 	orc, closeFunc := NewTestOracle(t, cfg)
 	defer closeFunc()
 
@@ -32,4 +35,7 @@ func TestNewTestOracle(t *testing.T) {
 	require.NotNil(t, snap2, "Second snapshot should not be nil")
 	require.NotEmpty(t, snap2, "Second snapshot should not be empty")
 	t.Logf("Second snapshot length: %d bytes", len(snap2))
+
+	fakeCtx := orc.MakeTestAuthContext(t, jwt.NewClaims("sam@luther.systems", "luther:auth:svc-local", "lutherapp:svc"))
+	require.NotNil(t, fakeCtx, "fake context")
 }

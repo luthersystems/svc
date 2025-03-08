@@ -64,6 +64,8 @@ type Config struct {
 	authCookieForwarder *CookieForwarder
 	// depTxForwarder sets dep tx cokoies
 	depTxForwarder *CookieForwarder
+	// fakeIDP is for testing auth.
+	fakeIDP *FakeIDP
 }
 
 const (

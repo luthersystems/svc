@@ -4,13 +4,17 @@ package oracle
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"testing"
 
+	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type testWriter struct {
@@ -125,4 +129,62 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	}
 
 	return server, orcStop
+}
+
+// mockServerTransportStream is a mock implementation of grpc.ServerTransportStream.
+type mockServerTransportStream struct {
+}
+
+// Method satisfies the grpc.ServerTransportStream interface.
+func (m *mockServerTransportStream) Method() string {
+	return ""
+}
+
+// SetHeader satisfies the grpc.ServerTransportStream interface.
+func (m *mockServerTransportStream) SetHeader(md metadata.MD) error {
+	return nil
+}
+
+// SendHeader satisfies the grpc.ServerTransportStream interface.
+func (m *mockServerTransportStream) SendHeader(md metadata.MD) error {
+	return nil
+}
+
+// SetTrailer satisfies the grpc.ServerTransportStream interface.
+func (m *mockServerTransportStream) SetTrailer(md metadata.MD) error {
+	return nil
+}
+
+func makeTestContext(t *testing.T) context.Context {
+	return grpc.NewContextWithServerTransportStream(context.Background(), &mockServerTransportStream{})
+}
+
+func (orc *Oracle) makeCookieIDToken(t *testing.T, tok string) string {
+	if orc == nil || orc.cfg.authCookieForwarder == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s=%s", orc.cfg.authCookieForwarder.cookieName, tok)
+}
+
+func (orc *Oracle) makeContextWithToken(t *testing.T, token string) context.Context {
+	if orc == nil {
+		return nil
+	}
+	headers := map[string]string{}
+	headers["x-forwarded-user-agent"] = "test-ua"
+	headers["cookie"] = orc.makeCookieIDToken(t, token)
+	return metadata.NewIncomingContext(makeTestContext(t), metadata.New(headers))
+}
+
+func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context.Context {
+	if orc == nil || orc.cfg.fakeIDP == nil {
+		return nil
+	}
+
+	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(claims)
+	if err != nil {
+		panic(err)
+	}
+
+	return orc.makeContextWithToken(t, token)
 }
