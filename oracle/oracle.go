@@ -16,6 +16,9 @@ import (
 	"time"
 
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
+	"github.com/luthersystems/lutherauth-sdk-go/claims"
+	"github.com/luthersystems/lutherauth-sdk-go/jwk"
+	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient"
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
 	"github.com/luthersystems/svc/grpclogging"
@@ -78,6 +81,9 @@ type Oracle struct {
 
 	// phylumVersionMut guards cachedPhylumVersion.
 	phylumVersionMut sync.RWMutex
+
+	// claims gets app claims from grpc contexts.
+	claims *claims.GRPCClaims
 }
 
 // option provides additional configuration to the oracle. Primarily for
@@ -180,6 +186,16 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	t.SetGlobalTracer()
 	oracle.tracer = t
 
+	if oracle.cfg.authCookieForwarder != nil {
+		jwkOptions := append(oracle.cfg.extraJWKOptions, jwk.WithCache())
+		claimsGetter := claims.NewJWKClaims(
+			oracle.cfg.authCookieForwarder.GetValue,
+			nil,
+			oracle.Log,
+			jwkOptions...)
+		oracle.claims = claims.NewGRPCClaims(claimsGetter, oracle.Log)
+	}
+
 	return oracle, nil
 }
 
@@ -205,7 +221,7 @@ func (orc *Oracle) txConfigs(ctx context.Context, extend ...shiroclient.Config) 
 		logrus.WithField("req_id", fields["req_id"]).Debugf("setting request id")
 		configs = append(configs, shiroclient.WithID(fmt.Sprint(fields["req_id"])))
 	}
-	if orc.cfg.DependentTxCookie != "" {
+	if orc.cfg.depTxForwarder != nil {
 		// incoming side of the dep tx
 		if lastCommitTxID := txctx.GetTransactionDetails(ctx).TransactionID; lastCommitTxID != "" {
 			configs = append(configs, shiroclient.WithDependentTxID(lastCommitTxID))
@@ -303,16 +319,39 @@ func (orc *Oracle) close() error {
 	if orc.state != oracleStateStarted && orc.state != oracleStateTesting {
 		return fmt.Errorf("close: invalid oracle state: %d", orc.state)
 	}
+	for _, fn := range orc.cfg.stopFns {
+		fn()
+	}
 	orc.state = oracleStateStopped
 
 	return orc.phylum.Close()
+}
+
+// GetClaims returns authenticated claims from the context.
+func (orc *Oracle) GetClaims(ctx context.Context) (*jwt.Claims, error) {
+	if orc == nil || orc.claims == nil {
+		return nil, errors.New("missing claims validator")
+	}
+	return orc.claims.Claims(ctx)
 }
 
 // Call calls the phylum.
 func Call[K proto.Message, R proto.Message](s *Oracle, ctx context.Context, methodName string, req K, resp R, config ...shiroclient.Config) (R, error) {
 	ctx, span := s.tracer.Span(ctx, methodName)
 	defer span.End()
-	configs := s.txConfigs(ctx)
-	configs = append(configs, config...)
+	configs := append(s.txConfigs(ctx), config...)
+	return phylum.Call(s.phylum, ctx, methodName, req, resp, configs...)
+}
+
+// AuthCall authenticates the request and calls the phylum.
+func AuthCall[K proto.Message, R proto.Message](s *Oracle, ctx context.Context, methodName string, req K, resp R, config ...shiroclient.Config) (R, error) {
+	ctx, span := s.tracer.Span(ctx, methodName)
+	defer span.End()
+	var empty R
+	claims, err := s.GetClaims(ctx)
+	if err != nil {
+		return empty, err
+	}
+	configs := append(s.txConfigs(ctx), shiroclient.WithAuthToken(claims.Token()))
 	return phylum.Call(s.phylum, ctx, methodName, req, resp, configs...)
 }

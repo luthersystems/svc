@@ -3,9 +3,9 @@ package oracle
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/luthersystems/lutherauth-sdk-go/jwk"
 	"github.com/luthersystems/svc/opttrace"
 )
 
@@ -54,15 +54,19 @@ type Config struct {
 	gatewayOpts []runtime.ServeMuxOption
 	// ForwardedHeaders are user-defined HTTP headers that the gateway passes to the app.
 	ForwardedHeaders []string
-	// DependentTxCookie sets dependent transaction ID on a cookie.
-	DependentTxCookie string `yaml:"dependent-tx-cookie"`
 	// InsecureCookies
 	InsecureCookies bool `yaml:"insecure-cookies"`
+	// extraJWKOptions has additional configuration for JWK claims.
+	extraJWKOptions []jwk.Option
+	// stopFns are functions that are called when the service stops.
+	stopFns []func()
+	// authCookieForwarder sets auth cokoies
+	authCookieForwarder *CookieForwarder
+	// depTxForwarder sets dep tx cokoies
+	depTxForwarder *CookieForwarder
 }
 
 const (
-	dependentTxCookieMaxAge  = 5 * time.Minute
-	dependentTxSecureCookie  = true
 	grpcMetadataCookiePrefix = "luther-cookie-"
 	grpcMetadataHeaderPrefix = "luther-header-"
 )
@@ -113,6 +117,9 @@ func (c *Config) Valid() error {
 // options without directly modifying the GatewayOptions slice.
 // *IMPORTANT*: Only use this if you know what you're doing.
 func (c *Config) addGRPCGatewayOptions(opt ...runtime.ServeMuxOption) {
+	if c == nil {
+		return
+	}
 	c.gatewayOpts = append(c.gatewayOpts, opt...)
 }
 
@@ -122,6 +129,9 @@ func (c *Config) addGRPCGatewayOptions(opt ...runtime.ServeMuxOption) {
 // method. That value will then appear as an HTTP cookie named cookieName in the
 // final HTTP response.
 func (c *Config) AddCookieForwarder(cookieName string, maxAge int, secure, httpOnly bool) *CookieForwarder {
+	if c == nil {
+		return nil
+	}
 	grpcKey := grpcMetadataCookiePrefix + cookieName
 	cf := newCookieForwarder(grpcKey, cookieName, maxAge, secure, httpOnly)
 	c.addGRPCGatewayOptions(
@@ -136,6 +146,9 @@ func (c *Config) AddCookieForwarder(cookieName string, maxAge int, secure, httpO
 // method. That value will then appear as an HTTP response header of name
 // httpHeaderName in the final HTTP response.
 func (c *Config) AddHeaderForwarder(httpHeaderName string) *HeaderForwarder {
+	if c == nil {
+		return nil
+	}
 	grpcKey := grpcMetadataHeaderPrefix + httpHeaderName
 	hf := newHeaderForwarder(grpcKey, httpHeaderName)
 	c.ForwardedHeaders = append(c.ForwardedHeaders, httpHeaderName)
@@ -143,4 +156,32 @@ func (c *Config) AddHeaderForwarder(httpHeaderName string) *HeaderForwarder {
 		runtime.WithForwardResponseOption(hf.forwardResponseOption()),
 	)
 	return hf
+}
+
+// WithJWKOption adds auth options.
+func (c *Config) AddJWKOptions(opt ...jwk.Option) {
+	if c == nil {
+		return
+	}
+	c.extraJWKOptions = append(c.extraJWKOptions, opt...)
+}
+
+// AddAuthCookieForwarder adds cookie authentication.
+func (c *Config) AddAuthCookieForwarder(cookieName string, maxAge int, secure, httpOnly bool) *CookieForwarder {
+	if c == nil {
+		return nil
+	}
+	authForwarder := c.AddCookieForwarder(cookieName, maxAge, secure, httpOnly)
+	c.authCookieForwarder = authForwarder
+	return authForwarder
+}
+
+// AddDepTxCookieForwarder adds dependent transaction cookie..
+func (c *Config) AddDepTxCookieForwarder(cookieName string, maxAge int, secure, httpOnly bool) *CookieForwarder {
+	if c == nil {
+		return nil
+	}
+	depTxForwarder := c.AddCookieForwarder(cookieName, maxAge, secure, httpOnly)
+	c.depTxForwarder = depTxForwarder
+	return depTxForwarder
 }

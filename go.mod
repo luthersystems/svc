@@ -17,6 +17,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
 	github.com/luthersystems/elps v1.16.1
+	github.com/luthersystems/lutherauth-sdk-go v0.0.6
 	github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d
 	github.com/luthersystems/shiroclient-sdk-go v0.11.0
 	github.com/nyaruka/phonenumbers v1.1.7
@@ -75,6 +76,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.12 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/mendsley/gojwk v0.0.0-20141217222730-4d5ec6e58103 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/oklog/run v1.1.0 // indirect
@@ -88,5 +90,5 @@ require (
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240723171418-e6d459c13d2a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 )

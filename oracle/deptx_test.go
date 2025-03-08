@@ -67,7 +67,7 @@ func TestOracleDepTx(t *testing.T) {
 	require.NotEmpty(t, firstResp.Cookies(), "no cookies")
 	var depCookie *http.Cookie
 	for _, c := range firstResp.Cookies() {
-		if c.Name == "dep-tx" {
+		if c.Name == depTxCookie {
 			depCookie = c
 			break
 		}

@@ -38,8 +38,6 @@ var versionTotal = prometheus.NewCounterVec(
 	[]string{"oracle_name", "oracle_version", "phylum_name", "phylum_version"},
 )
 
-const dependentTxMetadataKey = "commit-transaction-id"
-
 func init() {
 	// Provider per endpoint histograms (at expense of memory/performance).
 	grpc_prometheus.EnableClientHandlingTimeHistogram(
@@ -90,15 +88,6 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 			},
 		}),
 	}
-	if orc.cfg.DependentTxCookie != "" {
-		// set outgoing deptx cookie
-		opts = append(opts, runtime.WithForwardResponseOption(cookieHandler(
-			dependentTxMetadataKey,
-			orc.cfg.DependentTxCookie,
-			int(dependentTxCookieMaxAge.Seconds()),
-			!orc.cfg.InsecureCookies)))
-	}
-	// TODO: set auth cookie here as well
 	opts = append(opts, orc.cfg.gatewayOpts...)
 
 	return runtime.NewServeMux(opts...)
@@ -106,8 +95,8 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 
 func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	ctx = txctx.Context(ctx)
-	if orc.cfg.DependentTxCookie != "" {
-		if lastCommitTxID, err := GetCookie(ctx, orc.cfg.DependentTxCookie); lastCommitTxID != "" {
+	if orc.cfg.depTxForwarder != nil {
+		if lastCommitTxID, err := orc.cfg.depTxForwarder.GetValue(ctx); lastCommitTxID != "" {
 			txctx.SetTransactionDetails(ctx, txctx.TransactionDetails{TransactionID: lastCommitTxID})
 		} else if err != nil {
 			logrus.WithError(err).Debugf("txctxInterceptor: get cookie")
@@ -117,7 +106,9 @@ func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *
 	txID := txctx.GetTransactionDetails(ctx).TransactionID
 	if txID != "" {
 		grpclogging.AddLogrusField(ctx, "commit_transaction_id", txID)
-		setGRPCHeader(ctx, dependentTxMetadataKey, txID)
+		if orc.cfg.depTxForwarder != nil {
+			orc.cfg.depTxForwarder.SetValue(ctx, txID)
+		}
 	}
 	return resp, err
 }

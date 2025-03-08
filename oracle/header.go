@@ -29,6 +29,11 @@ func (hf *HeaderForwarder) SetValue(ctx context.Context, val string) {
 	setGRPCHeader(ctx, hf.grpcHeaderKey, val)
 }
 
+// GetValue retrieves the header.
+func (hf *HeaderForwarder) GetValue(ctx context.Context) (string, error) {
+	return GetIncomingHeader(ctx, hf.httpHeaderName), nil
+}
+
 // forwardResponseOption returns a gRPC-Gateway ForwardResponseOption that reads
 // the hf.grpcHeaderKey in metadata and writes the hf.httpHeaderName header in
 // the HTTP response.

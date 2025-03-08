@@ -29,12 +29,16 @@ func (s *testOracleService) RegisterServiceClient(ctx context.Context, grpcConn 
 	return hellov1.RegisterHelloServiceHandler(ctx, mux, grpcConn)
 }
 
+const (
+	depTxCookie = "dep-tx"
+)
+
 func makeTestOracleServer(t *testing.T) (*Oracle, func()) {
 	t.Helper()
 
 	cfg := DefaultConfig()
 	cfg.PhylumPath = "./testservice/phylum/"
-	cfg.DependentTxCookie = "dep-tx"
+	cfg.AddDepTxCookieForwarder(depTxCookie, int((5 * time.Minute).Seconds()), false, true)
 
 	// NOTE: oracle.close called when StartGateway is canceled.
 	orc, _ := NewTestOracle(t, cfg)

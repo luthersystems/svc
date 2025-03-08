@@ -42,10 +42,16 @@ func newCookieForwarder(header, cookieName string, maxAge int, secure, httpOnly 
 	}
 }
 
-// SetCookie sets the given value into gRPC metadata with the
+// SetValue sets the given value into gRPC metadata with the
 // forwarder's configured header. The gRPC-Gateway can then turn it into a cookie.
 func (cf *CookieForwarder) SetValue(ctx context.Context, val string) {
 	setGRPCHeader(ctx, cf.header, val)
+}
+
+// GetValue retrieves the given value from the gRPC metadata for the
+// forwarder's configured header.
+func (cf *CookieForwarder) GetValue(ctx context.Context) (string, error) {
+	return getCookie(ctx, cf.cookieName)
 }
 
 func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCookie bool) func(context.Context, http.ResponseWriter, proto.Message) error {
@@ -114,9 +120,9 @@ func getIncomingCookie(ctx context.Context, cookieName string) (*http.Cookie, er
 	return found, nil
 }
 
-// GetCookie is just a small helper that fetches a cookie and returns
+// getCookie is just a small helper that fetches a cookie and returns
 // its value as a string token.
-func GetCookie(ctx context.Context, cookieName string) (string, error) {
+func getCookie(ctx context.Context, cookieName string) (string, error) {
 	c, err := getIncomingCookie(ctx, cookieName)
 	if err != nil {
 		return "", err
