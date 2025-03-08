@@ -155,36 +155,29 @@ func (m *mockServerTransportStream) SetTrailer(md metadata.MD) error {
 	return nil
 }
 
-func makeTestContext(t *testing.T) context.Context {
+func makeTestContext(_ *testing.T) context.Context {
+	// Create a context with a mock server transport stream.
 	return grpc.NewContextWithServerTransportStream(context.Background(), &mockServerTransportStream{})
 }
 
-func (orc *Oracle) makeCookieIDToken(t *testing.T, tok string) string {
-	if orc == nil || orc.cfg.authCookieForwarder == nil {
-		return ""
-	}
-	return fmt.Sprintf("%s=%s", orc.cfg.authCookieForwarder.cookieName, tok)
-}
-
-func (orc *Oracle) makeContextWithToken(t *testing.T, token string) context.Context {
-	if orc == nil {
-		return nil
-	}
-	headers := map[string]string{}
-	headers["x-forwarded-user-agent"] = "test-ua"
-	headers["cookie"] = orc.makeCookieIDToken(t, token)
-	return metadata.NewIncomingContext(makeTestContext(t), metadata.New(headers))
-}
-
 func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context.Context {
-	if orc == nil || orc.cfg.fakeIDP == nil {
-		return nil
+	if orc == nil || orc.cfg.fakeIDP == nil || orc.cfg.authCookieForwarder == nil {
+		t.Fatal("oracle not configured for auth")
 	}
 
+	// Create a fake token using the fake IDP.
 	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(claims)
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to create fake auth token: %v", err)
 	}
 
-	return orc.makeContextWithToken(t, token)
+	// Create a new test context.
+	ctx := makeTestContext(t)
+
+	// Use the auth cookie forwarder to set the token.
+	// GetValue will return the cached (last written) token if available,
+	// and if not, it will fall back to the incoming metadata.
+	orc.cfg.authCookieForwarder.SetValue(ctx, token)
+
+	return ctx
 }

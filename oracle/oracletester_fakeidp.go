@@ -86,7 +86,7 @@ func (f *FakeIDP) fakeIDPAuthToken(next http.Handler) http.Handler {
 	})
 }
 
-func (f *FakeIDP) fakeIDPAuthHTTPClient(t *testing.T) (*http.Client, func()) {
+func (f *FakeIDP) fakeIDPAuthHTTPClient(t *testing.T) (*http.Client, *httptest.Server) {
 	if f == nil {
 		panic("nil fake IDP")
 	}
@@ -97,12 +97,13 @@ func (f *FakeIDP) fakeIDPAuthHTTPClient(t *testing.T) (*http.Client, func()) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
+				fmt.Printf("WTF DIALING TO: %s\n", server.Listener.Addr().String())
 				return net.Dial(network, server.Listener.Addr().String())
 			},
 		},
 	}
 
-	return client, server.Close
+	return client, server
 }
 
 // MakeFakeIDPAuthToken generates a token given a set of claims.
@@ -119,7 +120,7 @@ func (f *FakeIDP) MakeFakeIDPAuthToken(claims *jwt.Claims) (string, error) {
 	return token, nil
 }
 
-// WithFakeIDP lets you fake an IDP for testing.
+// AddFakeIDP lets you fake an IDP for testing.
 func (c *Config) AddFakeIDP(t *testing.T) (*FakeIDP, error) {
 	if c == nil {
 		return nil, errors.New("nil config")
@@ -131,9 +132,13 @@ func (c *Config) AddFakeIDP(t *testing.T) (*FakeIDP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fake idp: %w", err)
 	}
-	client, stopAuthClient := f.fakeIDPAuthHTTPClient(t)
+	client, server := f.fakeIDPAuthHTTPClient(t)
 	c.AddJWKOptions(jwk.WithHTTPClient(client))
-	c.stopFns = append(c.stopFns, stopAuthClient)
+	c.AddJWKOptions(jwk.WithIssuerToWebKeyURL(func(issuer string) (string, error) {
+		// TODO: client?
+		return "http://nohost" + f.fakeIDPAuthJWKSPath, nil
+	}))
+	c.stopFns = append(c.stopFns, server.Close)
 	c.fakeIDP = f
 
 	return f, nil

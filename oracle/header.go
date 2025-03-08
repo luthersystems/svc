@@ -3,6 +3,7 @@ package oracle
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -13,9 +14,15 @@ import (
 type HeaderForwarder struct {
 	grpcHeaderKey  string
 	httpHeaderName string
+
+	// Protects access to lastValue.
+	mu sync.Mutex
+
+	// lastValue holds the most recent value set.
+	lastValue string
 }
 
-// newHeaderForwarder is a private constructor function, to ensure uniform usage
+// newHeaderForwarder is a private constructor function, to ensure uniform usage.
 func newHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
 	return &HeaderForwarder{
 		grpcHeaderKey:  grpcKey,
@@ -23,14 +30,25 @@ func newHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
 	}
 }
 
-// SetValue places the given value in the gRPC metadata under the grpcHeaderKey.
-// The forwardResponseOption method will later turn it into an HTTP header.
+// SetValue places the given value in the gRPC metadata under the grpcHeaderKey,
+// and caches it so that subsequent GetValue calls "read your own write."
 func (hf *HeaderForwarder) SetValue(ctx context.Context, val string) {
 	setGRPCHeader(ctx, hf.grpcHeaderKey, val)
+	hf.mu.Lock()
+	hf.lastValue = val
+	hf.mu.Unlock()
 }
 
 // GetValue retrieves the header.
+// It first returns the cached value (if set) to "read your own writes"
+// and falls back to reading the incoming header otherwise.
 func (hf *HeaderForwarder) GetValue(ctx context.Context) (string, error) {
+	hf.mu.Lock()
+	value := hf.lastValue
+	hf.mu.Unlock()
+	if value != "" {
+		return value, nil
+	}
 	return GetIncomingHeader(ctx, hf.httpHeaderName), nil
 }
 
