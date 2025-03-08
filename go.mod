@@ -17,7 +17,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
 	github.com/luthersystems/elps v1.16.1
-	github.com/luthersystems/lutherauth-sdk-go v0.0.6
+	github.com/luthersystems/lutherauth-sdk-go v0.0.7-0.20250308224336-21d1563811b6
 	github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d
 	github.com/luthersystems/shiroclient-sdk-go v0.11.0
 	github.com/nyaruka/phonenumbers v1.1.7

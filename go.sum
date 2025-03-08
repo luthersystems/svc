@@ -148,6 +148,8 @@ github.com/luthersystems/elps v1.16.1 h1:jh9rh2aGQpfoypvlNQnvCB6rNLHWwut5W/ptKyN
 github.com/luthersystems/elps v1.16.1/go.mod h1:EoXUrydN9n2cEc7dzkPyEYlTYBGv3ncv5tShYGdQ/dc=
 github.com/luthersystems/lutherauth-sdk-go v0.0.6 h1:9NedwlsgFHHJmt/WFhktCv+GMOy8Gzh1AAeQSynjDE4=
 github.com/luthersystems/lutherauth-sdk-go v0.0.6/go.mod h1:KDLckGEVLldjjbdFkNeBMfiKktwd7QVPlP1+Rny3knc=
+github.com/luthersystems/lutherauth-sdk-go v0.0.7-0.20250308224336-21d1563811b6 h1:RjB1CQ8u8EnZW8vV5ULnQMuRucjdAhU9v3eRLXaBo/s=
+github.com/luthersystems/lutherauth-sdk-go v0.0.7-0.20250308224336-21d1563811b6/go.mod h1:KDLckGEVLldjjbdFkNeBMfiKktwd7QVPlP1+Rny3knc=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d h1:luzD59ecCtffdjonvQHZXnAbxSG2BtUPXoZaBBUVJp8=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d/go.mod h1:maDY7J3mlP6v6PpI/btDa9r3/gvbYbVKm+tz2DZaTZU=
 github.com/luthersystems/shiroclient-sdk-go v0.11.0 h1:cpK/6ig1dEdCGFH0NqRb4n/tjYDj+mkTvfiJVPjv5jc=
