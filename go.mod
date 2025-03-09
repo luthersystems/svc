@@ -19,7 +19,7 @@ require (
 	github.com/luthersystems/elps v1.16.1
 	github.com/luthersystems/lutherauth-sdk-go v0.0.7-0.20250308224336-21d1563811b6
 	github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d
-	github.com/luthersystems/shiroclient-sdk-go v0.11.0
+	github.com/luthersystems/shiroclient-sdk-go v0.12.1-0.20250309020906-134e28ccea09
 	github.com/nyaruka/phonenumbers v1.1.7
 	github.com/prometheus/client_golang v1.16.0
 	github.com/sirupsen/logrus v1.9.3
@@ -30,7 +30,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.22.0
 	go.opentelemetry.io/otel/sdk v1.22.0
 	go.opentelemetry.io/otel/trace v1.24.0
-	golang.org/x/crypto v0.35.0
+	golang.org/x/crypto v0.36.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.36.5
@@ -87,8 +87,8 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	go.opentelemetry.io/otel/metric v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 )

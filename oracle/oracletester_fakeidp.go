@@ -134,7 +134,6 @@ func (c *Config) AddFakeIDP(t *testing.T) (*FakeIDP, error) {
 	client, server := f.fakeIDPAuthHTTPClient(t)
 	c.AddJWKOptions(jwk.WithHTTPClient(client))
 	c.AddJWKOptions(jwk.WithIssuerToWebKeyURL(func(issuer string) (string, error) {
-		// TODO: client?
 		return "http://nohost" + f.fakeIDPAuthJWKSPath, nil
 	}))
 	c.stopFns = append(c.stopFns, server.Close)

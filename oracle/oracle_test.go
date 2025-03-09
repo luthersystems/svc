@@ -38,6 +38,7 @@ func makeTestOracleServer(t *testing.T) (*Oracle, func()) {
 
 	cfg := DefaultConfig()
 	cfg.PhylumPath = "./testservice/phylum/"
+	cfg.PhylumConfigPath = "./testservice/phylum/example_config.yaml"
 	cfg.AddDepTxCookieForwarder(depTxCookie, int((5 * time.Minute).Seconds()), false, true)
 
 	// NOTE: oracle.close called when StartGateway is canceled.
