@@ -177,7 +177,5 @@ func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context
 	// Use the auth cookie forwarder to set the token.
 	// GetValue will return the cached (last written) token if available,
 	// and if not, it will fall back to the incoming metadata.
-	orc.cfg.authCookieForwarder.SetValue(ctx, token)
-
-	return ctx
+	return orc.cfg.authCookieForwarder.SetValue(ctx, token)
 }

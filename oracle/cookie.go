@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
+
+// cookieContextKey is used as a private type to avoid key collisions.
+type cookieContextKey struct{}
 
 // CookieForwarder holds all the parameters for bridging a gRPC header
 // into an HTTP cookie via the gRPC-Gateway.
@@ -30,12 +32,6 @@ type CookieForwarder struct {
 	// Whether to mark the cookie as “httpOnly”.
 	// Typically “true” if you don’t want JS to read it.
 	httpOnly bool
-
-	// Protects access to lastValue.
-	mu sync.Mutex
-
-	// lastValue holds the most recent value set.
-	lastValue string
 }
 
 // newCookieForwarder constructs a forwarder for a particular cookie name/header.
@@ -52,14 +48,12 @@ func newCookieForwarder(header, cookieName string, maxAge int, secure, httpOnly 
 // SetValue sets the given value into gRPC metadata with the
 // forwarder's configured header. The gRPC-Gateway can then turn it into a cookie
 // on the response.
-func (cf *CookieForwarder) SetValue(ctx context.Context, val string) {
+func (cf *CookieForwarder) SetValue(ctx context.Context, val string) context.Context {
 	if cf == nil {
-		return
+		return ctx
 	}
 	setGRPCHeader(ctx, cf.header, val)
-	cf.mu.Lock()
-	cf.lastValue = val
-	cf.mu.Unlock()
+	return context.WithValue(ctx, cookieContextKey{}, val)
 }
 
 // GetValue retrieves the given value from the gRPC metadata for the
@@ -69,12 +63,10 @@ func (cf *CookieForwarder) GetValue(ctx context.Context) (string, error) {
 		return "", errors.New("nil cookie forwarder")
 	}
 
-	cf.mu.Lock()
-	value := cf.lastValue
-	cf.mu.Unlock()
-	if value != "" {
-		return value, nil
+	if val, ok := ctx.Value(cookieContextKey{}).(string); ok && val != "" {
+		return val, nil
 	}
+
 	return getCookie(ctx, cf.cookieName)
 }
 

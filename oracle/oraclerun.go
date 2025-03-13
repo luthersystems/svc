@@ -296,6 +296,7 @@ func setGRPCHeader(ctx context.Context, header, value string) {
 	if err != nil {
 		logrus.WithError(err).Error("failed to set gRPC metadata header for cookie forwarding")
 	}
+
 }
 
 // getGRPCHeader looksup a header on the grpc context.

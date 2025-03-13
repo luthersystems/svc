@@ -2,24 +2,21 @@ package oracle
 
 import (
 	"context"
+	"errors"
 	"net/http"
-	"sync"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
+
+// headerContextKey is used as a private type to avoid key collisions.
+type headerContextKey struct{}
 
 // HeaderForwarder holds parameters for bridging
 // a single gRPC metadata key → one HTTP response header.
 type HeaderForwarder struct {
 	grpcHeaderKey  string
 	httpHeaderName string
-
-	// Protects access to lastValue.
-	mu sync.Mutex
-
-	// lastValue holds the most recent value set.
-	lastValue string
 }
 
 // newHeaderForwarder is a private constructor function, to ensure uniform usage.
@@ -30,25 +27,28 @@ func newHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
 	}
 }
 
-// SetValue places the given value in the gRPC metadata under the grpcHeaderKey,
-// and caches it so that subsequent GetValue calls "read your own write."
-func (hf *HeaderForwarder) SetValue(ctx context.Context, val string) {
+// SetValue places the given value in the gRPC metadata under the grpcHeaderKey
+// and also caches it in the context for "read your own write" behavior.
+func (hf *HeaderForwarder) SetValue(ctx context.Context, val string) context.Context {
+	if hf == nil {
+		return ctx
+	}
 	setGRPCHeader(ctx, hf.grpcHeaderKey, val)
-	hf.mu.Lock()
-	hf.lastValue = val
-	hf.mu.Unlock()
+	return context.WithValue(ctx, headerContextKey{}, val)
 }
 
 // GetValue retrieves the header.
-// It first returns the cached value (if set) to "read your own writes"
+// It first returns the cached value (if set) to support "read your own writes",
 // and falls back to reading the incoming header otherwise.
 func (hf *HeaderForwarder) GetValue(ctx context.Context) (string, error) {
-	hf.mu.Lock()
-	value := hf.lastValue
-	hf.mu.Unlock()
-	if value != "" {
-		return value, nil
+	if hf == nil {
+		return "", errors.New("nil header forwarder")
 	}
+
+	if val, ok := ctx.Value(headerContextKey{}).(string); ok && val != "" {
+		return val, nil
+	}
+
 	return GetIncomingHeader(ctx, hf.httpHeaderName), nil
 }
 
