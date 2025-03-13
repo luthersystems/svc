@@ -24,7 +24,6 @@ import (
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/opttrace"
-	"github.com/luthersystems/svc/oracle/yaml2json"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -128,27 +127,13 @@ func withMockPhylumFrom(path string, r io.Reader) option {
 		if r != nil {
 			ph, err = phylum.NewMockFrom(path, orc.logBase, r)
 		} else {
-			ph, err = phylum.NewMock(path, orc.logBase)
+			ph, err = phylum.NewMockWithConfig(path, orc.logBase, orc.cfg.PhylumConfigPath)
 		}
 		if err != nil {
 			return fmt.Errorf("unable to initialize mock phylum: %w", err)
 		}
 		ph.GetLogMetadata = grpclogging.GetLogrusFields
 		orc.phylum = ph
-
-		if orc.cfg.PhylumConfigPath != "" {
-			jsonCfgBytes, err := yaml2json.JSONFromYAMLFile(orc.cfg.PhylumConfigPath)
-			if err != nil {
-				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
-			}
-
-			ctx := context.Background()
-
-			// Call the phylum method to apply the bootstrap configuration.
-			if err := orc.phylum.SetAppControlProperty(ctx, phylum.BootstrapProperty, string(jsonCfgBytes), orc.txConfigs(ctx)...); err != nil {
-				return fmt.Errorf("failed to apply bootstrap config: %w", err)
-			}
-		}
 
 		return nil
 	}
