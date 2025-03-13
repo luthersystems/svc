@@ -5,12 +5,15 @@ import (
 	"time"
 
 	"github.com/luthersystems/lutherauth-sdk-go/jwt"
+	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func newTestConfig(t *testing.T) *Config {
 	cfg := &Config{
 		PhylumPath:        "./testservice/phylum",
+		PhylumConfigPath:  "./testservice/phylum/example_config.yaml",
 		ServiceName:       "test_oracle",
 		PhylumServiceName: "phylum",
 		EmulateCC:         true,
@@ -51,4 +54,16 @@ func TestNewTestOracle(t *testing.T) {
 		require.NoError(t, err, "get claims")
 		require.Equal(t, "sam@luther.systems", claims.Subject)
 	})
+
+	t.Run("get phylum config", func(t *testing.T) {
+		ctx := makeTestContext(t)
+		cfg, err := Call(orc, ctx, "get_config", &emptypb.Empty{}, &hellov1.ConfigResponse{}, orc.txConfigs(ctx)...)
+		require.NoError(t, err, "get phylum config")
+		require.Equal(t, "local", cfg.GetEnvironment())
+
+		cfgStr, err := orc.GetPhylumConfigJSON(ctx)
+		require.NoError(t, err, "get phylum config")
+		require.NotEmpty(t, cfgStr)
+	})
+
 }

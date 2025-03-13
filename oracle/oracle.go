@@ -6,12 +6,12 @@ package oracle
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -137,25 +137,15 @@ func withMockPhylumFrom(path string, r io.Reader) option {
 		orc.phylum = ph
 
 		if orc.cfg.PhylumConfigPath != "" {
-			yamlCfg, err := os.ReadFile(orc.cfg.PhylumConfigPath)
-			if err != nil {
-				return fmt.Errorf("unable to read phylum config file: %w", err)
-			}
-			jsonCfg, err := yaml2json.YAML2JSON(yamlCfg)
+			jsonCfgBytes, err := yaml2json.JSONFromYAMLFile(orc.cfg.PhylumConfigPath)
 			if err != nil {
 				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
 			}
 
-			jsonCfgBytes, err := json.Marshal(jsonCfg)
-			if err != nil {
-				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
-			}
-
-			encodedCfg := shiroclient.EncodePhylumBytes(jsonCfgBytes)
 			ctx := context.Background()
 
 			// Call the phylum method to apply the bootstrap configuration.
-			if err := orc.phylum.SetAppControlProperty(ctx, phylum.BootstrapProperty, encodedCfg, orc.txConfigs(ctx)...); err != nil {
+			if err := orc.phylum.SetAppControlProperty(ctx, phylum.BootstrapProperty, string(jsonCfgBytes), orc.txConfigs(ctx)...); err != nil {
 				return fmt.Errorf("failed to apply bootstrap config: %w", err)
 			}
 		}
@@ -360,6 +350,28 @@ func (orc *Oracle) GetClaims(ctx context.Context) (*jwt.Claims, error) {
 		return nil, errors.New("missing claims validator")
 	}
 	return orc.claims.Claims(ctx)
+}
+
+// GetPhylumConfigJSON retrieves the current phylum configuration.
+func (orc *Oracle) GetPhylumConfigJSON(ctx context.Context) (string, error) {
+	cfgStr, err := orc.phylum.GetAppControlProperty(ctx, phylum.BootstrapProperty, orc.txConfigs(ctx)...)
+	if err != nil {
+		return "", fmt.Errorf("failed to apply bootstrap config: %w", err)
+	}
+
+	// Decode base64
+	decoded, err := base64.StdEncoding.DecodeString(cfgStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64 config: %w", err)
+	}
+
+	// Validate that it's proper JSON
+	var jsonCheck map[string]interface{}
+	if err := json.Unmarshal(decoded, &jsonCheck); err != nil {
+		return "", fmt.Errorf("decoded data is not valid JSON: %w", err)
+	}
+
+	return string(decoded), nil
 }
 
 // Call calls the phylum.

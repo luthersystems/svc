@@ -51,3 +51,7 @@ message UseDepTxResponse {
   string old_tx_id = 2;
   string new_tx_id = 3;
 }
+
+message ConfigResponse {
+  string environment = 1;
+}

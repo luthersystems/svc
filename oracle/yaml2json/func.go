@@ -1,7 +1,12 @@
 package yaml2json
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 func yaml2json(y interface{}) (interface{}, error) {
@@ -42,4 +47,28 @@ func yaml2json(y interface{}) (interface{}, error) {
 // map[interface{}]interface{}, string, bool, etc.  No custom types allowed.
 func YAML2JSON(y interface{}) (interface{}, error) {
 	return yaml2json(y)
+}
+
+// JSONFromYAMLFile reads a supplied YAML file, converts it to JSON with
+// YAML2JSON, then returns the JSON encoded byte interpretation
+func JSONFromYAMLFile(path string) ([]byte, error) {
+	path = filepath.Clean(path)
+	yamlCfg, err := os.ReadFile(path) //#nosec G304
+	if err != nil {
+		return nil, err
+	}
+	cfg := interface{}(nil)
+	err = yaml.Unmarshal(yamlCfg, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err = YAML2JSON(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfgBytes, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cfgBytes, nil
 }
