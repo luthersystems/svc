@@ -155,11 +155,15 @@ func (m *mockServerTransportStream) SetTrailer(md metadata.MD) error {
 	return nil
 }
 
-func makeTestContext(_ *testing.T) context.Context {
+// MakeTestContext creates a context used for testing the oracle.
+// There is no autentication injected.
+func MakeTestContext(_ *testing.T) context.Context {
 	// Create a context with a mock server transport stream.
 	return grpc.NewContextWithServerTransportStream(context.Background(), &mockServerTransportStream{})
 }
 
+// MakeTestAuthContext creates a context for testing the oracle,
+// where you can inject an authenticated user context.
 func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context.Context {
 	if orc == nil || orc.cfg.fakeIDP == nil || orc.cfg.authCookieForwarder == nil {
 		t.Fatal("oracle not configured for auth")
@@ -172,7 +176,7 @@ func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context
 	}
 
 	// Create a new test context.
-	ctx := makeTestContext(t)
+	ctx := MakeTestContext(t)
 
 	// Use the auth cookie forwarder to set the token.
 	// GetValue will return the cached (last written) token if available,
