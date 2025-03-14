@@ -56,7 +56,7 @@ func TestNewTestOracle(t *testing.T) {
 	})
 
 	t.Run("get phylum config", func(t *testing.T) {
-		ctx := makeTestContext(t)
+		ctx := MakeTestContext(t)
 		cfg, err := Call(orc, ctx, "get_config", &emptypb.Empty{}, &hellov1.ConfigResponse{}, orc.txConfigs(ctx)...)
 		require.NoError(t, err, "get phylum config")
 		require.Equal(t, "local", cfg.GetEnvironment())

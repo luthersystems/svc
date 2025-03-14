@@ -34,14 +34,12 @@ func (s *serverImpl) UseDepTx(ctx context.Context, _ *emptypb.Empty) (*hellov1.U
 }
 
 func TestOracleDepTx(t *testing.T) {
-	// Start the test server using StartGateway
 	orc, stop := makeTestOracleServer(t)
 	defer stop()
 
 	httpAddr := orc.cfg.ListenAddress
 	require.NotEmpty(t, httpAddr)
 
-	// 1) Make a request to UseDepTx endpoint
 	client := &http.Client{}
 	firstResp, err := client.Post(fmt.Sprintf("http://%s/v1/dep_tx", httpAddr),
 		"application/json",
@@ -53,7 +51,6 @@ func TestOracleDepTx(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, firstResp.StatusCode)
 
-	// 2) Parse response
 	var out1 hellov1.UseDepTxResponse
 
 	err = protojson.Unmarshal(bodyBytes, &out1)
@@ -63,7 +60,6 @@ func TestOracleDepTx(t *testing.T) {
 	require.Empty(t, out1.GetOldTxId())
 	require.NotEmpty(t, out1.GetNewTxId())
 
-	// 3) Check the response cookies
 	require.NotEmpty(t, firstResp.Cookies(), "no cookies")
 	var depCookie *http.Cookie
 	for _, c := range firstResp.Cookies() {
@@ -75,7 +71,6 @@ func TestOracleDepTx(t *testing.T) {
 	require.NotNil(t, depCookie, "should have a dep-tx cookie")
 	require.Equal(t, out1.GetNewTxId(), depCookie.Value)
 
-	// 4) Second request using the dep-tx cookie
 	req2, err := http.NewRequest("POST", fmt.Sprintf("http://%s/v1/dep_tx", httpAddr), bytes.NewBufferString(`{}`))
 	require.NoError(t, err)
 	req2.AddCookie(depCookie)

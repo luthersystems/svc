@@ -173,13 +173,14 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	}()
 
 	orc.Log(ctx).WithFields(logrus.Fields{
-		"gateway_endpoint": orc.cfg.GatewayEndpoint,
-		"phylum_path":      orc.cfg.PhylumPath,
-		"emulate_cc":       orc.cfg.EmulateCC,
-		"version":          orc.cfg.Version,
-		"service":          orc.cfg.ServiceName,
-		"phylum_name":      orc.cfg.PhylumServiceName,
-		"listen_address":   orc.cfg.ListenAddress,
+		"gateway_endpoint":   orc.cfg.GatewayEndpoint,
+		"phylum_path":        orc.cfg.PhylumPath,
+		"phylum_config_path": orc.cfg.PhylumConfigPath,
+		"emulate_cc":         orc.cfg.EmulateCC,
+		"version":            orc.cfg.Version,
+		"service":            orc.cfg.ServiceName,
+		"phylum_name":        orc.cfg.PhylumServiceName,
+		"listen_address":     orc.cfg.ListenAddress,
 	}).Infof("starting oracle")
 
 	nBig, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
