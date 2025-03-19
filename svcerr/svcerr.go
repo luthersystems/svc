@@ -286,8 +286,8 @@ func AppErrorUnaryInterceptor(log grpclogging.ServiceLogger) func(ctx context.Co
 		// crack open response and see if it had an exception
 		r, ok := resp.(raiser)
 		if !ok {
-			// We expect all response to have an optional "exception" field.
-			log(ctx).WithError(err).Errorf("message response has wrong type -- missing exception field")
+			// We expect all responses to have an optional "exception" field.
+			log(ctx).WithError(err).Error("message response has wrong type -- missing exception field")
 			return nil, internalError(ctx)
 		}
 

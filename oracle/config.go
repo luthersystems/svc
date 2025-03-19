@@ -1,7 +1,7 @@
 package oracle
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -94,25 +94,25 @@ func (c *Config) SetOTLPEndpoint(endpoint string) {
 // Valid validates an oracle configuration.
 func (c *Config) Valid() error {
 	if c == nil {
-		return fmt.Errorf("missing phylum config")
+		return errors.New("missing oracle config")
 	}
 	if c.ListenAddress == "" {
-		return fmt.Errorf("missing listen address")
+		return errors.New("missing listen address")
 	}
 	if c.PhylumPath == "" {
-		return fmt.Errorf("missing phylum path")
+		return errors.New("missing phylum path")
 	}
 	if c.PhylumServiceName == "" {
-		return fmt.Errorf("missing phylum service name")
+		return errors.New("missing phylum service name")
 	}
 	if c.ServiceName == "" {
-		return fmt.Errorf("missing service name")
+		return errors.New("missing service name")
 	}
 	if c.RequestIDHeader == "" {
-		return fmt.Errorf("missing request ID header")
+		return errors.New("missing request ID header")
 	}
 	if c.Version == "" {
-		return fmt.Errorf("missing version")
+		return errors.New("missing version")
 	}
 	return nil
 }

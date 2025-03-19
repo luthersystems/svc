@@ -9,14 +9,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// headerContextKey is used as a private type to avoid key collisions.
-type headerContextKey struct{}
-
 // HeaderForwarder holds parameters for bridging
 // a single gRPC metadata key → one HTTP response header.
 type HeaderForwarder struct {
 	grpcHeaderKey  string
 	httpHeaderName string
+
+	// Unique key for storing this forwarder's header value in the context.
+	key interface{}
 }
 
 // newHeaderForwarder is a private constructor function, to ensure uniform usage.
@@ -24,6 +24,7 @@ func newHeaderForwarder(grpcKey, httpHeaderName string) *HeaderForwarder {
 	return &HeaderForwarder{
 		grpcHeaderKey:  grpcKey,
 		httpHeaderName: httpHeaderName,
+		key:            new(struct{}), // each forwarder gets its own unique key
 	}
 }
 
@@ -34,7 +35,7 @@ func (hf *HeaderForwarder) SetValue(ctx context.Context, val string) context.Con
 		return ctx
 	}
 	setGRPCHeader(ctx, hf.grpcHeaderKey, val)
-	return context.WithValue(ctx, headerContextKey{}, val)
+	return context.WithValue(ctx, hf.key, val)
 }
 
 // GetValue retrieves the header.
@@ -45,7 +46,7 @@ func (hf *HeaderForwarder) GetValue(ctx context.Context) (string, error) {
 		return "", errors.New("nil header forwarder")
 	}
 
-	if val, ok := ctx.Value(headerContextKey{}).(string); ok && val != "" {
+	if val, ok := ctx.Value(hf.key).(string); ok && val != "" {
 		return val, nil
 	}
 

@@ -11,9 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// cookieContextKey is used as a private type to avoid key collisions.
-type cookieContextKey struct{}
-
 // CookieForwarder holds all the parameters for bridging a gRPC header
 // into an HTTP cookie via the gRPC-Gateway.
 type CookieForwarder struct {
@@ -32,6 +29,9 @@ type CookieForwarder struct {
 	// Whether to mark the cookie as “httpOnly”.
 	// Typically “true” if you don’t want JS to read it.
 	httpOnly bool
+
+	// Unique key for storing this forwarder's cookie value in the context.
+	key interface{}
 }
 
 // newCookieForwarder constructs a forwarder for a particular cookie name/header.
@@ -42,6 +42,7 @@ func newCookieForwarder(header, cookieName string, maxAge int, secure, httpOnly 
 		maxAge:     maxAge,
 		secure:     secure,
 		httpOnly:   httpOnly,
+		key:        new(struct{}), // each forwarder gets its own unique key
 	}
 }
 
@@ -53,7 +54,7 @@ func (cf *CookieForwarder) SetValue(ctx context.Context, val string) context.Con
 		return ctx
 	}
 	setGRPCHeader(ctx, cf.header, val)
-	return context.WithValue(ctx, cookieContextKey{}, val)
+	return context.WithValue(ctx, cf.key, val)
 }
 
 // GetValue retrieves the given value from the gRPC metadata for the
@@ -63,7 +64,7 @@ func (cf *CookieForwarder) GetValue(ctx context.Context) (string, error) {
 		return "", errors.New("nil cookie forwarder")
 	}
 
-	if val, ok := ctx.Value(cookieContextKey{}).(string); ok && val != "" {
+	if val, ok := ctx.Value(cf.key).(string); ok && val != "" {
 		return val, nil
 	}
 

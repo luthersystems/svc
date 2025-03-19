@@ -119,6 +119,8 @@ func withMockPhylum(path string) option {
 }
 
 // withMockPhylumFrom runs the phylum in memory from a snapshot.
+// Passing a reader means restoring from the snapshot data in the reader,
+// and not passing it means starting fresh from a phylum config.
 func withMockPhylumFrom(path string, r io.Reader) option {
 	return func(orc *Oracle) error {
 		orc.logBase.Infof("NewMock")
