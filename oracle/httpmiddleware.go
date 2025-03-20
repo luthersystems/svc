@@ -51,7 +51,7 @@ func (orc *Oracle) healthCheckHandler() http.Handler {
 		sendResponse := func(resp *healthcheck.GetHealthCheckResponse, responseCode int) {
 			err := writeProtoHTTP(w, responseCode, resp)
 			if err != nil {
-				orc.log(ctx).WithError(err).Errorf("health handler response error")
+				orc.Log(ctx).WithError(err).Errorf("health handler response error")
 			}
 		}
 		exceptionf := func(format string, v ...interface{}) *healthcheck.GetHealthCheckResponse {
@@ -74,13 +74,13 @@ func (orc *Oracle) healthCheckHandler() http.Handler {
 		if err != nil || len(resp.GetReports()) == 0 {
 			switch ctx.Err() {
 			case context.Canceled:
-				orc.log(ctx).Infof("healthcheck: context canceled")
+				orc.Log(ctx).Infof("healthcheck: context canceled")
 				// nothing more to do
 				return
 			case context.DeadlineExceeded:
-				orc.log(ctx).WithError(err).Errorf("context deadline")
+				orc.Log(ctx).WithError(err).Errorf("context deadline")
 			default:
-				orc.log(ctx).WithError(err).Errorf("missing processor client healthcheck response")
+				orc.Log(ctx).WithError(err).Errorf("missing processor client healthcheck response")
 			}
 			resp = &healthcheck.GetHealthCheckResponse{
 				Reports: []*healthcheck.HealthCheckReport{

@@ -1,0 +1,216 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "proto/hello/v1/hello.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "HelloService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/dep_tx": {
+      "post": {
+        "summary": "UseDepTx tests the deptx logic.",
+        "operationId": "HelloService_UseDepTx",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UseDepTxResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "tags": [
+          "HelloService"
+        ]
+      }
+    },
+    "/v1/hello": {
+      "post": {
+        "summary": "SayHello echoes a greeting for the provided name.",
+        "operationId": "HelloService_SayHello",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1HelloResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1HelloRequest"
+            }
+          }
+        ],
+        "tags": [
+          "HelloService"
+        ]
+      }
+    },
+    "/v1/ping": {
+      "get": {
+        "summary": "Ping is just a trivial endpoint returning an empty response.",
+        "operationId": "HelloService_Ping",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HelloService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Exception": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID for exception."
+        },
+        "type": {
+          "$ref": "#/definitions/v1ExceptionType",
+          "description": "Type of exception."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp for when the exception occurred (RFC3339)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human readable description of exception."
+        },
+        "exceptionMetadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional metadata about the exception."
+        }
+      },
+      "description": "General message for exceptions."
+    },
+    "v1ExceptionType": {
+      "type": "string",
+      "enum": [
+        "INVALID_TYPE",
+        "BUSINESS",
+        "SERVICE_NOT_AVAILABLE",
+        "INFRASTRUCTURE",
+        "UNEXPECTED",
+        "SECURITY_VIOLATION"
+      ],
+      "default": "INVALID_TYPE",
+      "description": "Type of exception.\n\n - INVALID_TYPE: Default for no exception.\n - BUSINESS: Business logic error.\n - SERVICE_NOT_AVAILABLE: A service was unavailable.\n - INFRASTRUCTURE: Infrastructure was down.\n - UNEXPECTED: Catch-all for all other types.\n - SECURITY_VIOLATION: Security related error."
+    },
+    "v1HelloRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "v1HelloResponse": {
+      "type": "object",
+      "properties": {
+        "exception": {
+          "$ref": "#/definitions/v1Exception"
+        },
+        "greeting": {
+          "type": "string"
+        }
+      }
+    },
+    "v1UseDepTxResponse": {
+      "type": "object",
+      "properties": {
+        "exception": {
+          "$ref": "#/definitions/v1Exception"
+        },
+        "oldTxId": {
+          "type": "string"
+        },
+        "newTxId": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

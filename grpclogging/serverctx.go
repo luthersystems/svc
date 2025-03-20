@@ -48,6 +48,9 @@ func GetLogrusFields(ctx context.Context) logrus.Fields {
 
 // GetLogrusEntry returns stored logging metadata as a logrus Entry.
 func GetLogrusEntry(ctx context.Context, base *logrus.Entry) *logrus.Entry {
+	if base == nil {
+		base = logrus.StandardLogger().WithFields(nil)
+	}
 	fields := GetLogrusFields(ctx)
 	if fields != nil {
 		return base.WithFields(fields)
