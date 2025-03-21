@@ -35,7 +35,7 @@ func (s *serverImpl) UseDepTx(ctx context.Context, _ *emptypb.Empty) (*hellov1.U
 
 func TestOracleDepTx(t *testing.T) {
 	orc, stop := makeTestOracleServer(t)
-	defer stop()
+	t.Cleanup(stop)
 
 	httpAddr := orc.cfg.ListenAddress
 	require.NotEmpty(t, httpAddr)
