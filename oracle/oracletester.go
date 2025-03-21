@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"testing"
 
@@ -83,7 +82,9 @@ func getFreeAddr() (string, error) {
 func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, func()) {
 	cfg.Verbose = testing.Verbose()
 	cfg.EmulateCC = true
-	cfg.Version = "test"
+	if cfg.Version == "" {
+		cfg.Version = "latest"
+	}
 
 	port, err := getFreeAddr()
 	require.NoError(t, err)
@@ -102,14 +103,14 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 	logger := logrus.New()
 	logger.SetOutput(newTestWriter(t))
 
-	var r io.Reader
-	if testCfg.snapshot != nil {
-		r = bytes.NewReader(testCfg.snapshot)
-	}
-
 	orcOpts := []option{
 		withLogBase(logger.WithFields(nil)),
-		withMockPhylumFrom(cfg.PhylumPath, r),
+	}
+
+	if len(testCfg.snapshot) > 0 {
+		orcOpts = append(orcOpts, withMockPhylumFrom(cfg.PhylumPath, bytes.NewReader(testCfg.snapshot)))
+	} else {
+		orcOpts = append(orcOpts, withMockPhylum(cfg.PhylumPath))
 	}
 
 	server, err := newOracle(cfg, orcOpts...)
