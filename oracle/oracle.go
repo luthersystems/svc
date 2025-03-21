@@ -123,6 +123,12 @@ func withMockPhylum(path string) option {
 // and not passing it means starting fresh from a phylum config.
 func withMockPhylumFrom(path string, r io.Reader) option {
 	return func(orc *Oracle) error {
+		if orc.phylum != nil {
+			// NOTE: if we override orc.phylum we need to close()! if we
+			// do not close, then we have a substratehcp process leak!
+			orc.logBase.Infof("phylum already configured, skipping")
+			return nil
+		}
 		orc.logBase.Infof("NewMock")
 		var ph *phylum.Client
 		var err error
