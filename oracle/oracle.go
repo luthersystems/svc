@@ -384,6 +384,7 @@ func AuthCall[K proto.Message, R proto.Message](s *Oracle, ctx context.Context, 
 	if err != nil {
 		return empty, err
 	}
-	configs := append(s.txConfigs(ctx), shiroclient.WithAuthToken(claims.Token()))
+	configs := append(s.txConfigs(ctx), config...)
+	configs = append(configs, shiroclient.WithAuthToken(claims.Token()))
 	return phylum.Call(s.phylum, ctx, methodName, req, resp, configs...)
 }
