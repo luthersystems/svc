@@ -26,6 +26,7 @@ import (
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -365,6 +366,17 @@ func (orc *Oracle) GetPhylumConfigJSON(ctx context.Context) (string, error) {
 	}
 
 	return string(decoded), nil
+}
+
+// TraceContextDefer is a fuction that must be called to stop the span.
+type TraceContextDefer func()
+
+// TraceContext adds tracing to a request context.
+func (orc *Oracle) TraceContext(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, TraceContextDefer) {
+	ctx, span := orc.tracer.Span(ctx, spanName, opts...)
+	return ctx, func() {
+		span.End()
+	}
 }
 
 // Call calls the phylum.
