@@ -150,8 +150,8 @@ github.com/luthersystems/lutherauth-sdk-go v0.0.7 h1:gzBdfjI8yCTTVyXbaxaq+HbwOj3
 github.com/luthersystems/lutherauth-sdk-go v0.0.7/go.mod h1:KDLckGEVLldjjbdFkNeBMfiKktwd7QVPlP1+Rny3knc=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d h1:luzD59ecCtffdjonvQHZXnAbxSG2BtUPXoZaBBUVJp8=
 github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d/go.mod h1:maDY7J3mlP6v6PpI/btDa9r3/gvbYbVKm+tz2DZaTZU=
-github.com/luthersystems/shiroclient-sdk-go v0.13.1-0.20250328153328-8236ce529718 h1:MWeIsxfkGLt4xm4s2AHxel4plRb780YA/YfkHBwT8qk=
-github.com/luthersystems/shiroclient-sdk-go v0.13.1-0.20250328153328-8236ce529718/go.mod h1:G+0/LUm1VZgwoFe2c2OluzDuhqOemZ24QXcp5pVFjac=
+github.com/luthersystems/shiroclient-sdk-go v0.13.1 h1:kICyZb53DG4o3GebJcCQqlw94KyGiMosmrcbYl3sXb4=
+github.com/luthersystems/shiroclient-sdk-go v0.13.1/go.mod h1:G+0/LUm1VZgwoFe2c2OluzDuhqOemZ24QXcp5pVFjac=
 github.com/mattn/go-colorable v0.1.9/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
 github.com/mattn/go-colorable v0.1.12/go.mod h1:u5H1YNBxpqRaxsYJYSkiCWKzEfiAb1Gb520KVy5xxl4=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
