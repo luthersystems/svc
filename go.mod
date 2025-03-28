@@ -19,7 +19,7 @@ require (
 	github.com/luthersystems/elps v1.16.1
 	github.com/luthersystems/lutherauth-sdk-go v0.0.7
 	github.com/luthersystems/raymond v1.1.1-0.20200710185833-e77462cef10d
-	github.com/luthersystems/shiroclient-sdk-go v0.13.0
+	github.com/luthersystems/shiroclient-sdk-go v0.13.1-0.20250328153328-8236ce529718
 	github.com/nyaruka/phonenumbers v1.1.7
 	github.com/prometheus/client_golang v1.16.0
 	github.com/sirupsen/logrus v1.9.3
