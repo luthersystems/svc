@@ -2,6 +2,7 @@ package opttrace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -169,7 +170,7 @@ func IsTraceContextWithoutELPSFilter(ctx context.Context) bool {
 func TraceContextWithoutELPSFilter(ctx context.Context) (context.Context, error) {
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if !spanCtx.IsValid() {
-		return ctx, fmt.Errorf("not trace context")
+		return ctx, errors.New("not trace context")
 	}
 
 	traceState := spanCtx.TraceState()
