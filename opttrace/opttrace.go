@@ -148,6 +148,21 @@ func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, er
 	return otlptracegrpc.New(ctx, otlpOpts...)
 }
 
+// IsTraceContextWithoutELPSFilter determines if the context has elps filtering disabled.
+func IsTraceContextWithoutELPSFilter(ctx context.Context) bool {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if !spanCtx.IsValid() {
+		return false
+	}
+
+	traceState := spanCtx.TraceState()
+	if value := traceState.Get(disableElpsFilteringTraceState); value == "true" {
+		return true
+	}
+
+	return false
+}
+
 // TraceContextWithoutELPSFilter takes adds trace state into the propagated
 // context to signify that elps filtering should be disabled for the request.
 // NOTE: this results in very large traces.
