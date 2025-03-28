@@ -97,7 +97,10 @@ func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *
 	ctx = txctx.Context(ctx)
 	if orc.cfg.depTxForwarder != nil {
 		if lastCommitTxID, err := orc.cfg.depTxForwarder.GetValue(ctx); lastCommitTxID != "" {
-			txctx.SetTransactionDetails(ctx, txctx.TransactionDetails{TransactionID: lastCommitTxID})
+			if txctx.GetTransactionDetails(ctx).TransactionID == "" {
+				// newer versions of shiroclient-sdk-go automatically set the details
+				txctx.SetTransactionDetails(ctx, txctx.TransactionDetails{TransactionID: lastCommitTxID})
+			}
 		} else if err != nil {
 			logrus.WithError(err).Debugf("txctxInterceptor: get cookie")
 		}
