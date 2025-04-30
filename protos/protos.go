@@ -7,29 +7,10 @@ import (
 	"strings"
 
 	annotationspb "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/annotations/v1"
-	cnpb "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/connectors/v1"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"gopkg.in/yaml.v3"
 )
-
-// ParseConnectorsConfig converts YAML input into a ConnectorConfig protobuf struct.
-func ParseConnectorsConfig(yamlContent string) (*cnpb.ConnectorConfig, error) {
-	// Convert YAML → JSON
-	jsonBytes, err := yamlToJSON([]byte(yamlContent))
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert YAML to JSON: %w", err)
-	}
-
-	// Directly Unmarshal into Protobuf!
-	config := &cnpb.ConnectorConfig{}
-	if err := protojson.Unmarshal(jsonBytes, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal ConnectorConfig: %w", err)
-	}
-
-	return config, nil
-}
 
 // yamlToJSON converts YAML bytes to JSON bytes.
 func yamlToJSON(yamlBytes []byte) ([]byte, error) {
