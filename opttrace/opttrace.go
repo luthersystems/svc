@@ -166,7 +166,12 @@ func IsTraceContextWithoutELPSFilter(ctx context.Context) bool {
 
 // TraceContextWithoutELPSFilter takes adds trace state into the propagated
 // context to signify that elps filtering should be disabled for the request.
-// NOTE: this results in very large traces.
+//
+// Only set this on a context that already has tracing enabled, created via
+// opttrace.Tracer Span().
+// NOTE: this results in very large traces as every elps function call will
+// create a separate span that is included in the trace. Use this sparingly
+// only to troubleshoot low-level issues.
 func TraceContextWithoutELPSFilter(ctx context.Context) (context.Context, error) {
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if !spanCtx.IsValid() {
