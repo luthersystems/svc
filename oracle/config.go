@@ -2,10 +2,7 @@ package oracle
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
@@ -89,6 +86,11 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 	}
 	c.swaggerHandler = h
 }
+
+/*
+before this, ui_oracle calls StaticContentHandlerOrPanic() to get an http.Handler
+Passes that handler to AddStaticHandler() (below) to register it under /static/
+*/
 func (c *Config) AddStaticHandler(route string, h http.Handler) {
 	if c == nil {
 		logrus.Warn("AddStaticHandler called on nil Config")
@@ -109,40 +111,40 @@ func (c *Config) AddStaticHandler(route string, h http.Handler) {
 	c.staticHandlers.Handle(route, h)
 }
 
-func (c *Config) setStaticHandler(h http.Handler) {
-	if c == nil || h == nil {
-		return
-	}
-	if c.staticHandlers == nil {
-		c.staticHandlers = http.NewServeMux()
-	}
-	c.staticHandlers.Handle("/static/", h)
-}
+// func (c *Config) setStaticHandler(h http.Handler) {
+// 	if c == nil || h == nil {
+// 		return
+// 	}
+// 	if c.staticHandlers == nil {
+// 		c.staticHandlers = http.NewServeMux()
+// 	}
+// 	c.staticHandlers.Handle("/static/", h)
+// }
 
-// WithServeStaticContentPath sets up a static file server under /static/
-// Returns an error if the path doesn't exist or is empty.
-func (c *Config) WithServeStaticContentPath(dir string) error {
-	if c == nil || dir == "" {
-		return fmt.Errorf("invalid config or path")
-	}
+// // WithServeStaticContentPath sets up a static file server under /static/
+// // Returns an error if the path doesn't exist or is empty.
+// func (c *Config) WithServeStaticContentPath(dir string) error {
+// 	if c == nil || dir == "" {
+// 		return fmt.Errorf("invalid config or path")
+// 	}
 
-	absPath, err := filepath.Abs(dir)
-	if err != nil {
-		return fmt.Errorf("could not resolve absolute path for %q: %w", dir, err)
-	}
+// 	absPath, err := filepath.Abs(dir)
+// 	if err != nil {
+// 		return fmt.Errorf("could not resolve absolute path for %q: %w", dir, err)
+// 	}
 
-	entries, err := os.ReadDir(absPath)
-	if err != nil {
-		return fmt.Errorf("static content directory %q does not exist or cannot be read: %w", absPath, err)
-	}
-	if len(entries) == 0 {
-		return fmt.Errorf("static content directory %q is empty", absPath)
-	}
+// 	entries, err := os.ReadDir(absPath)
+// 	if err != nil {
+// 		return fmt.Errorf("static content directory %q does not exist or cannot be read: %w", absPath, err)
+// 	}
+// 	if len(entries) == 0 {
+// 		return fmt.Errorf("static content directory %q is empty", absPath)
+// 	}
 
-	fs := http.StripPrefix("/static/", http.FileServer(http.Dir(absPath)))
-	c.setStaticHandler(fs)
-	return nil
-}
+// 	fs := http.StripPrefix("/static/", http.FileServer(http.Dir(absPath)))
+// 	c.setStaticHandler(fs)
+// 	return nil
+// }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
 func (c *Config) SetOTLPEndpoint(endpoint string) {

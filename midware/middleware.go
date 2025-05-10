@@ -44,10 +44,21 @@ type pathOverridesHandler struct {
 }
 
 func (h *pathOverridesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if route, ok := h.m[r.URL.Path]; ok {
-		route.ServeHTTP(w, r)
+	// Exact match
+	if handler, ok := h.m[r.URL.Path]; ok {
+		handler.ServeHTTP(w, r)
 		return
 	}
+
+	// Prefix match
+	for prefix, handler := range h.m {
+		if strings.HasSuffix(prefix, "/") && strings.HasPrefix(r.URL.Path, prefix) {
+			handler.ServeHTTP(w, r)
+			return
+		}
+	}
+
+	// Default to next handler
 	h.next.ServeHTTP(w, r)
 }
 

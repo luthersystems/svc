@@ -258,7 +258,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 
 	oracleServer := &http.Server{
 		Addr:              orc.cfg.ListenAddress,
-		Handler:           httpHandler,
+		Handler:           logRequests(httpHandler),
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -312,6 +312,16 @@ func setGRPCHeader(ctx context.Context, header, value string) {
 		logrus.WithError(err).Error("failed to set gRPC metadata header for cookie forwarding")
 	}
 
+}
+
+func logRequests(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logrus.WithFields(logrus.Fields{
+			"method": r.Method,
+			"url":    r.URL.Path,
+		}).Info("Incoming HTTP request")
+		h.ServeHTTP(w, r)
+	})
 }
 
 // getGRPCHeader looksup a header on the grpc context.
