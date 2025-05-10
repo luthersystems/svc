@@ -1,30 +1,31 @@
 package static
 
 import (
-	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 )
 
-// RegisterSwagger mounts a single Swagger JSON file at /swagger.json
-func RegisterSwagger(fsys fs.FS, path string, register func(route string, handler http.Handler)) error {
-	data, err := fs.ReadFile(fsys, path)
-	if err != nil {
-		return fmt.Errorf("read swagger file %q: %w", path, err)
-	}
-	if !json.Valid(data) {
-		return fmt.Errorf("swagger file %q is invalid JSON", path)
-	}
-	register("/swagger.json", swaggerHandler(data))
-	return nil
-}
-
 type swaggerHandler []byte
 
-func (b swaggerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = io.Copy(w, bytes.NewReader(b))
+// call with // srvpb/v1/oracle.swagger.json
+func SwaggerHandlerOrPanic(filePath string, file embed.FS) http.Handler {
+	if h, err := httpHandler(filePath, file); err != nil {
+		panic(err)
+	} else {
+		return h
+	}
+}
+
+func httpHandler(filePath string, files embed.FS) (http.Handler, error) {
+	b, err := fs.ReadFile(files, filePath) // srvpb/v1/oracle.swagger.json
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(b) {
+		return nil, fmt.Errorf("document does not contain a valid json object")
+	}
+	return svcHandler(b), nil
 }
