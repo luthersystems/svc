@@ -86,6 +86,8 @@ type Oracle struct {
 
 	// claims gets app claims from grpc contexts.
 	claims *claims.GRPCClaims
+
+	staticHandlers *http.ServeMux
 }
 
 // option provides additional configuration to the oracle. Primarily for
@@ -173,6 +175,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	oracle := &Oracle{
 		cfg:            *config,
 		swaggerHandler: config.swaggerHandler,
+		staticHandlers: config.staticHandlers,
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {
