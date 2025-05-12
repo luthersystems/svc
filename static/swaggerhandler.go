@@ -10,6 +10,8 @@ import (
 
 type swaggerHandler []byte
 
+// NOTE WIP
+
 // call with // srvpb/v1/oracle.swagger.json
 func SwaggerHandlerOrPanic(filePath string, file embed.FS) http.Handler {
 	if h, err := httpHandler(filePath, file); err != nil {

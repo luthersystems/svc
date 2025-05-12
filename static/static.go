@@ -6,34 +6,27 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
 )
 
-// RegisterStaticDirectory mounts a file server at /static/ for anything under the given dir.
-func RegisterStaticDirectory(fsys fs.FS, dir string, register func(route string, handler http.Handler)) {
-	handler := http.StripPrefix("/static/", http.FileServer(http.FS(fsys)))
-	register("/static/", handler)
-}
+// NOTE WIP
 
-// call with "static"
-func StaticContentHandlerOrPanic(files embed.FS, dirPath string) http.Handler {
-	entries, err := fs.ReadDir(files, dirPath)
-	if err != nil {
-		log.Fatalf("cannot list embedded %s/: %v", dirPath, err)
-	}
-	for _, e := range entries {
-		fmt.Println("Embedded static file:", e.Name())
-	}
-	subFS, err := fs.Sub(files, dirPath)
+// StaticContentHandlerOrPanic returns an http.Handler that serves files embedded under the given
+// staticDirPath. It strips the /<staticDirPath>/ prefix from the incoming request URL so that
+// files can be looked up correctly in the embedded file system.
+//
+// For example, if you embed files under "static/**", and mount the handler at "/static/",
+// a request for /static/index.html will be rewritten to "index.html" and served from the
+// embedded "static/" subdirectory. Without stripping the prefix, the lookup would incorrectly
+// try to find "static/static/index.html".
+func StaticContentHandlerOrPanic(staticFS embed.FS, staticDirPath string) http.Handler {
+	subFS, err := fs.Sub(staticFS, staticDirPath)
 	if err != nil {
 		panic(fmt.Errorf("cannot create sub FS: %w", err))
 	}
-	// removes the /<dirPath>/ prefix from incoming request URLs, then passes the
-	// modified URL to the handler.
-	return http.StripPrefix(fmt.Sprintf("/%s/", dirPath), http.FileServer(http.FS(subFS)))
+	return http.StripPrefix(fmt.Sprintf("/%s/", staticDirPath), http.FileServer(http.FS(subFS)))
 }
 
 type svcHandler []byte
@@ -44,4 +37,11 @@ func (b svcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logrus.Error(err)
 	}
+}
+
+// StaticHandlerOrPanic returns an http.Handler that serves embedded files from the "static" directory.
+// It expects files to be embedded with a go:embed directive like: `//go:embed static/**`
+// The handler is mounted at /static/, and strips the /static/ prefix before file lookup.
+func StaticHandlerOrPanic(staticFS embed.FS) http.Handler {
+	return StaticContentHandlerOrPanic(staticFS, "static")
 }
