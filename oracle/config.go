@@ -1,15 +1,12 @@
 package oracle
 
 import (
-	"embed"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
 	"github.com/luthersystems/svc/opttrace"
-	"github.com/luthersystems/svc/static"
 )
 
 // DefaultConfig returns a default config.
@@ -88,28 +85,15 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 	c.swaggerHandler = h
 }
 
-// SetPublicContentHandler configures an endpoint to serve embedded static content
-// under the /public/ URL path. It assumes the files are embedded using:
-//
-//	//go:embed public/**
-//
-// Only files under the "public/" subdirectory will be served. For example:
-//
-//	/public/index.html → serves embedded file "public/index.html".
-func (c *Config) SetPublicContentHandler(embeddedFS embed.FS) error {
+// SetPublicContentHandler sets the handler for /public/ routes.
+func (c *Config) SetPublicContentHandler(handler http.Handler) {
 	if c == nil {
-		return errors.New("cannot set public content handler on nil config")
+		return
 	}
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
-
-	handler, err := static.PublicHandler(embeddedFS)
-	if err != nil {
-		return fmt.Errorf("SetPublicContentHandler failed: %w", err)
-	}
 	c.publicContentHandlers.Handle("/public/", handler)
-	return nil
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

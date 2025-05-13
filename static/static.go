@@ -1,3 +1,17 @@
+// Package static provides HTTP handlers for serving embedded static content.
+//
+// It supports serving files from a subdirectory within an embed.FS at a specified
+// URL prefix, such as mounting embedded "public/**" content at the "/public/" path.
+//
+// This package is typically used to expose browser-accessible static files like
+// JavaScript bundles, CSS, or HTML generated at build time.
+//
+// Example usage:
+//
+//	//go:embed public/**
+//	var PublicFS embed.FS
+//
+//	http.Handle("/public/", static.PublicHandler(PublicFS))
 package static
 
 import (
@@ -7,6 +21,12 @@ import (
 	"net/http"
 	"strings"
 )
+
+// PublicHandler returns an http.Handler that serves embedded files under
+// the "public/" subdirectory of the provided embed.FS.
+func PublicHandler(staticFS embed.FS) (http.Handler, error) {
+	return publicContentHandler(staticFS, "public", "public")
+}
 
 // staticContentHandlerreturns an http.Handler that serves embedded files from a
 // subdirectory within the embed.FS (e.g., "static") and maps them to a given URL prefix.
@@ -31,21 +51,4 @@ func publicContentHandler(embeddedFS embed.FS, subdir, urlPrefix string) (http.H
 
 	prefix := fmt.Sprintf("/%s/", cleanURLPrefix)
 	return http.StripPrefix(prefix, http.FileServer(http.FS(subFS))), nil
-}
-
-// PublicHandler returns an http.Handler that serves embedded files under
-// the "public/" subdirectory of the provided embed.FS.
-//
-// The handler will serve files at the /public/ URL path,
-// using a prefix-stripped view rooted at "public".
-//
-// Example embed directive:
-//
-//	//go:embed public/**
-//
-// Example result:
-//	/public/index.html → serves embedded file public/index.html
-
-func PublicHandler(staticFS embed.FS) (http.Handler, error) {
-	return publicContentHandler(staticFS, "public", "public")
 }
