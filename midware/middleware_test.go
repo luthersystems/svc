@@ -13,11 +13,11 @@ import (
 var basicHandler = staticBytes([]byte("applicationdata"))
 
 func TestPathOverrides(t *testing.T) {
-	// Basic override (exact match)
 	basicOverride := &PathOverrides{
-		"/override": staticBytes([]byte("overridden")),
-		"/api/":     staticBytes([]byte("api handler")),
-		"/public/":  staticBytes([]byte("public handler")),
+		"/override":        staticBytes([]byte("overridden")),
+		"/api/":            staticBytes([]byte("api handler")),
+		"/api/nested-api/": staticBytes([]byte("nested api handler")),
+		"/public/":         staticBytes([]byte("public handler")),
 	}
 
 	h := basicOverride.Wrap(staticBytes([]byte("applicationdata")))
@@ -43,9 +43,14 @@ func TestPathOverrides(t *testing.T) {
 			assert.Equal(t, []byte("api handler"), testRequest(t, server, "GET", "/api/user/42", nil, nil))
 		})
 
+		t.Run("prefix match with /api/nested-api/ chooses longest path (/api/nested-api/)", func(t *testing.T) {
+			assert.Equal(t, []byte("nested api handler"), testRequest(t, server, "GET", "/api/nested-api/user/42", nil, nil))
+		})
+
 		t.Run("prefix match with /public/ works", func(t *testing.T) {
 			assert.Equal(t, []byte("public handler"), testRequest(t, server, "GET", "/public/assets/logo.png", nil, nil))
 		})
+
 	})
 
 	t.Run("panic on disallowed nested /public route", func(t *testing.T) {
