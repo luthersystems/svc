@@ -1,11 +1,15 @@
 package static
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
+
+	"github.com/sirupsen/logrus"
 )
 
 type swaggerHandler []byte
@@ -21,6 +25,15 @@ func SwaggerHandlerOrPanic(filePath string, file embed.FS) http.Handler {
 	}
 }
 
+type svcHandler []byte
+
+func (b svcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, err := io.Copy(w, bytes.NewReader([]byte(b)))
+	if err != nil {
+		logrus.Error(err)
+	}
+}
 func httpHandler(filePath string, files embed.FS) (http.Handler, error) {
 	b, err := fs.ReadFile(files, filePath) // srvpb/v1/oracle.swagger.json
 	if err != nil {

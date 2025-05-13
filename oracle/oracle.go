@@ -42,6 +42,10 @@ const (
 	// IMPORTANT: this must be kept in sync with api/swagger/*json
 	swaggerPath = "/swagger.json"
 
+	// publicContentPath is used to serve public static files as dropped in a "public" directory.
+	// IMPORTANT: this must be kept in sync with */public/*
+	publicContentPath = "/public/"
+
 	// metricsPath is used to serve prometheus metrics.
 	// IMPORTANT: this should not be accessible externally
 	metricsPath = "/metrics"
@@ -87,7 +91,9 @@ type Oracle struct {
 	// claims gets app claims from grpc contexts.
 	claims *claims.GRPCClaims
 
-	staticHandlers *http.ServeMux
+	// publicContentHandlers configures endpoints to serve public  static
+	// content.
+	publicContentHandlers *http.ServeMux
 }
 
 // option provides additional configuration to the oracle. Primarily for
@@ -173,9 +179,9 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	oracle := &Oracle{
-		cfg:            *config,
-		swaggerHandler: config.swaggerHandler,
-		staticHandlers: config.staticHandlers,
+		cfg:                   *config,
+		swaggerHandler:        config.swaggerHandler,
+		publicContentHandlers: config.publicContentHandlers,
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {

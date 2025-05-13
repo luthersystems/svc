@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 	"net"
@@ -117,7 +116,7 @@ func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *
 	return resp, err
 }
 
-func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, staticHandler *http.ServeMux) (*runtime.ServeMux, http.Handler) {
+func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler *http.ServeMux) (*runtime.ServeMux, http.Handler) {
 	jsonapi := orc.grpcGatewayMux()
 	pathOverides := midware.PathOverrides{
 		healthCheckPath: orc.healthCheckHandler(),
@@ -125,14 +124,9 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, staticHandler *http.
 	if swaggerHandler != nil {
 		pathOverides[swaggerPath] = swaggerHandler
 	}
-	if staticHandler == nil {
-		log.Fatal("static handler is nil")
+	if publicContentHandler != nil {
+		pathOverides[publicContentPath] = publicContentHandler
 	}
-	if staticHandler != nil {
-		fmt.Println("Adding static handler config!")
-		pathOverides["/static/"] = staticHandler
-	}
-	fmt.Printf("Path Overides = %+v\n", pathOverides)
 
 	middleware := midware.Chain{
 		// The trace header middleware appears early in the chain
@@ -243,8 +237,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		return fmt.Errorf("grpc dial: %w", err)
 	}
 
-	// start here tomorrow
-	mux, httpHandler := orc.grpcGateway(orc.swaggerHandler, orc.staticHandlers)
+	mux, httpHandler := orc.grpcGateway(orc.swaggerHandler, orc.publicContentHandlers)
 	if err := grpcConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
 		return fmt.Errorf("register service client: %w", err)
 	}

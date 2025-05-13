@@ -1,13 +1,14 @@
 package oracle
 
 import (
+	"embed"
 	"errors"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
 	"github.com/luthersystems/svc/opttrace"
-	"github.com/sirupsen/logrus"
+	"github.com/luthersystems/svc/static"
 )
 
 // DefaultConfig returns a default config.
@@ -69,9 +70,8 @@ type Config struct {
 	depTxForwarder *CookieForwarder
 	// fakeIDP is for testing auth.
 	fakeIDP *FakeIDP
-	// swaggerHandler configures an endpoint to serve the
-	// swagger API.
-	staticHandlers *http.ServeMux
+	// publicContentHandlers configures endpoints to serve public content.
+	publicContentHandlers *http.ServeMux
 }
 
 const (
@@ -87,64 +87,25 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 	c.swaggerHandler = h
 }
 
-/*
-before this, ui_oracle calls StaticContentHandlerOrPanic() to get an http.Handler
-Passes that handler to AddStaticHandler() (below) to register it under /static/
-*/
-func (c *Config) AddStaticHandler(route string, h http.Handler) {
+// SetPublicContentHandler configures an endpoint to serve embedded static content
+// under the /public/ URL path. It assumes the files are embedded using:
+//
+//	//go:embed public/**
+//
+// Only files under the "public/" subdirectory will be served. For example:
+//
+//	/public/index.html → serves embedded file "public/index.html".
+func (c *Config) SetPublicContentHandler(staticFS embed.FS) {
 	if c == nil {
-		logrus.Warn("AddStaticHandler called on nil Config")
 		return
 	}
-	if route == "" || h == nil {
-		logrus.WithFields(logrus.Fields{
-			"route":      route,
-			"nilHandler": h == nil,
-		}).Warn("AddStaticHandler called with missing route or handler")
-		return
+	if c.publicContentHandlers == nil {
+		c.publicContentHandlers = http.NewServeMux()
 	}
-	if c.staticHandlers == nil {
-		c.staticHandlers = http.NewServeMux()
-		logrus.Debug("Initialized staticHandlers mux")
-	}
-	logrus.WithField("route", route).Info("Registering static handler")
-	c.staticHandlers.Handle(route, h)
+
+	handler := static.PublicHandlerOrPanic(staticFS)
+	c.publicContentHandlers.Handle("/public/", handler)
 }
-
-// func (c *Config) setStaticHandler(h http.Handler) {
-// 	if c == nil || h == nil {
-// 		return
-// 	}
-// 	if c.staticHandlers == nil {
-// 		c.staticHandlers = http.NewServeMux()
-// 	}
-// 	c.staticHandlers.Handle("/static/", h)
-// }
-
-// // WithServeStaticContentPath sets up a static file server under /static/
-// // Returns an error if the path doesn't exist or is empty.
-// func (c *Config) WithServeStaticContentPath(dir string) error {
-// 	if c == nil || dir == "" {
-// 		return fmt.Errorf("invalid config or path")
-// 	}
-
-// 	absPath, err := filepath.Abs(dir)
-// 	if err != nil {
-// 		return fmt.Errorf("could not resolve absolute path for %q: %w", dir, err)
-// 	}
-
-// 	entries, err := os.ReadDir(absPath)
-// 	if err != nil {
-// 		return fmt.Errorf("static content directory %q does not exist or cannot be read: %w", absPath, err)
-// 	}
-// 	if len(entries) == 0 {
-// 		return fmt.Errorf("static content directory %q is empty", absPath)
-// 	}
-
-// 	fs := http.StripPrefix("/static/", http.FileServer(http.Dir(absPath)))
-// 	c.setStaticHandler(fs)
-// 	return nil
-// }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
 func (c *Config) SetOTLPEndpoint(endpoint string) {
