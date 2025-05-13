@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/luthersystems/svc/static"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,10 +15,10 @@ var basicHandler = staticBytes([]byte("applicationdata"))
 
 func TestPathOverrides(t *testing.T) {
 	basicOverride := &PathOverrides{
-		"/override":        staticBytes([]byte("overridden")),
-		"/api/":            staticBytes([]byte("api handler")),
-		"/api/nested-api/": staticBytes([]byte("nested api handler")),
-		"/public/":         staticBytes([]byte("public handler")),
+		"/override":             staticBytes([]byte("overridden")),
+		"/api/":                 staticBytes([]byte("api handler")),
+		"/api/nested-api/":      staticBytes([]byte("nested api handler")),
+		static.PublicPathPrefix: staticBytes([]byte("public handler")),
 	}
 
 	h := basicOverride.Wrap(staticBytes([]byte("applicationdata")))
@@ -58,8 +59,8 @@ func TestPathOverrides(t *testing.T) {
 			"PathOverride conflict: disallowed registration of nested public route: /public/nested/",
 			func() {
 				_ = PathOverrides{
-					"/public/":        staticBytes([]byte("good")),
-					"/public/nested/": staticBytes([]byte("bad")),
+					static.PublicPathPrefix: staticBytes([]byte("good")),
+					"/public/nested/":       staticBytes([]byte("bad")),
 				}.Wrap(staticBytes([]byte("fallback")))
 			})
 	})

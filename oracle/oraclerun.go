@@ -18,6 +18,7 @@ import (
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/logmon"
 	"github.com/luthersystems/svc/midware"
+	"github.com/luthersystems/svc/static"
 	"github.com/luthersystems/svc/svcerr"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -125,7 +126,7 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler
 		pathOverides[swaggerPath] = swaggerHandler
 	}
 	if publicContentHandler != nil {
-		pathOverides[publicContentPath] = publicContentHandler
+		pathOverides[static.PublicPathPrefix] = publicContentHandler
 	}
 
 	middleware := midware.Chain{

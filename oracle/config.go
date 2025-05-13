@@ -7,6 +7,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
 	"github.com/luthersystems/svc/opttrace"
+	"github.com/luthersystems/svc/static"
 )
 
 // DefaultConfig returns a default config.
@@ -94,7 +95,7 @@ func (c *Config) SetPublicContentHandler(handler http.Handler) {
 		c.publicContentHandlers = http.NewServeMux()
 	}
 	// pattern MUST be kept in line with static.PublicHandler method
-	c.publicContentHandlers.Handle("/public/", handler)
+	c.publicContentHandlers.Handle(static.PublicPathPrefix, handler)
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

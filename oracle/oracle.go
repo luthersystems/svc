@@ -42,10 +42,6 @@ const (
 	// IMPORTANT: this must be kept in sync with api/swagger/*json
 	swaggerPath = "/swagger.json"
 
-	// publicContentPath is used to serve public static files as dropped in a "public" directory.
-	// IMPORTANT: this must be kept in sync with */public/*
-	publicContentPath = "/public/"
-
 	// metricsPath is used to serve prometheus metrics.
 	// IMPORTANT: this should not be accessible externally
 	metricsPath = "/metrics"

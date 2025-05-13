@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/luthersystems/svc/static"
 )
 
 // DefaultTraceHeader is the default header when TraceHeaders is given an empty
@@ -41,7 +42,7 @@ func (m PathOverrides) Wrap(next http.Handler) http.Handler {
 	// public file system may have nested directories we want to access but we
 	// want to ensure that the /public/ handler handles the request
 	for path := range m {
-		if path != "/public/" && strings.HasPrefix(path, "/public/") {
+		if path != static.PublicPathPrefix && strings.HasPrefix(path, static.PublicPathPrefix) {
 			panic(fmt.Sprintf("PathOverride conflict: disallowed registration of nested public route: %s", path))
 		}
 		if strings.HasSuffix(path, "/") {
