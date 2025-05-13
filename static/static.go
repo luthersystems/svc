@@ -22,8 +22,9 @@ import (
 	"strings"
 )
 
-// PublicHandler returns an http.Handler that serves embedded files under
-// the "public/" subdirectory of the provided embed.FS.
+// PublicHandler returns an http.Handler that serves embedded files under the
+// "public/" subdirectory of the provided embed.FS. This content MUST be served
+// under the /public pattern
 func PublicHandler(staticFS embed.FS) (http.Handler, error) {
 	return publicContentHandler(staticFS, "public", "public")
 }

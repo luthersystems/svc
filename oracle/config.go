@@ -93,6 +93,7 @@ func (c *Config) SetPublicContentHandler(handler http.Handler) {
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
+	// pattern MUST be kept in line with static.PublicHandler method
 	c.publicContentHandlers.Handle("/public/", handler)
 }
 
