@@ -3,6 +3,7 @@ package oracle
 import (
 	"embed"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -95,16 +96,20 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 // Only files under the "public/" subdirectory will be served. For example:
 //
 //	/public/index.html → serves embedded file "public/index.html".
-func (c *Config) SetPublicContentHandler(staticFS embed.FS) {
+func (c *Config) SetPublicContentHandler(embeddedFS embed.FS) error {
 	if c == nil {
-		return
+		return errors.New("cannot set public content handler on nil config")
 	}
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
 
-	handler := static.PublicHandlerOrPanic(staticFS)
+	handler, err := static.PublicHandler(embeddedFS)
+	if err != nil {
+		return fmt.Errorf("SetPublicContentHandler failed: %w", err)
+	}
 	c.publicContentHandlers.Handle("/public/", handler)
+	return nil
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.
