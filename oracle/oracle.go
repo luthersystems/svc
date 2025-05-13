@@ -91,7 +91,7 @@ type Oracle struct {
 	// claims gets app claims from grpc contexts.
 	claims *claims.GRPCClaims
 
-	// publicContentHandlers configures endpoints to serve public  static
+	// publicContentHandlers configures endpoints to serve public static
 	// content.
 	publicContentHandlers *http.ServeMux
 }
