@@ -7,6 +7,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
 	"github.com/luthersystems/svc/opttrace"
+	"github.com/luthersystems/svc/static"
 )
 
 // DefaultConfig returns a default config.
@@ -68,6 +69,8 @@ type Config struct {
 	depTxForwarder *CookieForwarder
 	// fakeIDP is for testing auth.
 	fakeIDP *FakeIDP
+	// publicContentHandlers configures endpoints to serve public content.
+	publicContentHandlers *http.ServeMux
 }
 
 const (
@@ -81,6 +84,18 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 		return
 	}
 	c.swaggerHandler = h
+}
+
+// SetPublicContentHandler sets the handler for /public/ routes.
+func (c *Config) SetPublicContentHandler(handler http.Handler) {
+	if c == nil {
+		return
+	}
+	if c.publicContentHandlers == nil {
+		c.publicContentHandlers = http.NewServeMux()
+	}
+	// pattern MUST be kept in line with static.PublicHandler method
+	c.publicContentHandlers.Handle(static.PublicPathPrefix, handler)
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

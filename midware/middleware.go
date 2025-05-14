@@ -4,10 +4,13 @@ package midware
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/luthersystems/svc/static"
 )
 
 // DefaultTraceHeader is the default header when TraceHeaders is given an empty
@@ -35,19 +38,52 @@ type PathOverrides map[string]http.Handler
 
 // Wrap implements the Middleware interface.
 func (m PathOverrides) Wrap(next http.Handler) http.Handler {
-	return &pathOverridesHandler{m, next}
+	var prefixes []string
+	// public file system may have nested directories we want to access but we
+	// want to ensure that the /public/ handler handles the request
+	for path := range m {
+		if path != static.PublicPathPrefix && strings.HasPrefix(path, static.PublicPathPrefix) {
+			panic(fmt.Sprintf("PathOverride conflict: disallowed registration of nested public route: %s", path))
+		}
+		if strings.HasSuffix(path, "/") {
+			prefixes = append(prefixes, path)
+		}
+	}
+	sort.Slice(prefixes, func(i, j int) bool {
+		return len(prefixes[i]) > len(prefixes[j])
+	})
+
+	return &pathOverridesHandler{
+		m:        m,
+		prefixes: prefixes,
+		next:     next,
+	}
 }
 
 type pathOverridesHandler struct {
-	m    PathOverrides
-	next http.Handler
+	m        PathOverrides
+	prefixes []string
+	next     http.Handler
 }
 
 func (h *pathOverridesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if route, ok := h.m[r.URL.Path]; ok {
-		route.ServeHTTP(w, r)
+	path := r.URL.Path
+
+	// Exact match
+	if handler, ok := h.m[path]; ok {
+		handler.ServeHTTP(w, r)
 		return
 	}
+
+	// do longest match first
+	for _, prefix := range h.prefixes {
+		if strings.HasPrefix(path, prefix) {
+			h.m[prefix].ServeHTTP(w, r)
+			return
+		}
+	}
+
+	// Default to next handler
 	h.next.ServeHTTP(w, r)
 }
 

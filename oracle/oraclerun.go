@@ -18,6 +18,7 @@ import (
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/logmon"
 	"github.com/luthersystems/svc/midware"
+	"github.com/luthersystems/svc/static"
 	"github.com/luthersystems/svc/svcerr"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -116,7 +117,7 @@ func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *
 	return resp, err
 }
 
-func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, http.Handler) {
+func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler *http.ServeMux) (*runtime.ServeMux, http.Handler) {
 	jsonapi := orc.grpcGatewayMux()
 	pathOverides := midware.PathOverrides{
 		healthCheckPath: orc.healthCheckHandler(),
@@ -124,6 +125,10 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler) (*runtime.ServeMux, 
 	if swaggerHandler != nil {
 		pathOverides[swaggerPath] = swaggerHandler
 	}
+	if publicContentHandler != nil {
+		pathOverides[static.PublicPathPrefix] = publicContentHandler
+	}
+
 	middleware := midware.Chain{
 		// The trace header middleware appears early in the chain
 		// because of how important it is that they happen for essentially all
@@ -233,7 +238,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		return fmt.Errorf("grpc dial: %w", err)
 	}
 
-	mux, httpHandler := orc.grpcGateway(orc.swaggerHandler)
+	mux, httpHandler := orc.grpcGateway(orc.swaggerHandler, orc.publicContentHandlers)
 	if err := grpcConfig.RegisterServiceClient(ctx, grpcConn, mux); err != nil {
 		return fmt.Errorf("register service client: %w", err)
 	}

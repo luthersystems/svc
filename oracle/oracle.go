@@ -86,6 +86,10 @@ type Oracle struct {
 
 	// claims gets app claims from grpc contexts.
 	claims *claims.GRPCClaims
+
+	// publicContentHandlers configures endpoints to serve public static
+	// content.
+	publicContentHandlers *http.ServeMux
 }
 
 // option provides additional configuration to the oracle. Primarily for
@@ -171,8 +175,9 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	oracle := &Oracle{
-		cfg:            *config,
-		swaggerHandler: config.swaggerHandler,
+		cfg:                   *config,
+		swaggerHandler:        config.swaggerHandler,
+		publicContentHandlers: config.publicContentHandlers,
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {
