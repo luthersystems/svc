@@ -1,77 +1,33 @@
-# static
+# Serving Embedded Static Files
 
-Serve embedded static files from the Oracle using a simple convention.
-Designed for use in conjunction with the `oracle` package.
+This package provides a simple way to serve embedded static content (like HTML, CSS, JS) using the Go `embed` package, integrated with your Oracle service.
 
-## Usage
+---
 
-### 1. Embed your public directory
+## 🚀 Quick Start
 
-Create a folder named `public` inside the package from which you configure your Oracle.
-Add any public files you wish to serve.
+### 1. Embed the `public/` directory
 
-Use the `embed` package to include them in your Go binary:
+Add a `public/` folder to your package and include static files.
+
+Embed it in your Go code:
 
 ```go
 //go:embed public/**
 var PublicFS embed.FS
 ```
 
-### 2. Mount it using the provided handler
-
-Use `PublicHandler` to create an `http.Handler` for your embedded files:
-
-```go
-handler, err := static.PublicHandler(PublicFS, "/v1/public/")
-```
-
-This will serve files under the `/v1/public/` URL path.
-
 ---
 
-### Optional: Panic wrapper
+### 2. Register with Oracle
 
-For convenience, create a panic-on-failure helper in your app:
-
-```go
-func PublicContentHandlerOrPanic(prefix string) http.Handler {
-	if h, err := static.PublicHandler(publicFS, prefix); err != nil {
-		panic(err)
-	} else {
-		return h
-	}
-}
-```
-
----
-
-### 3. Register the handler with Oracle
-
-Pass the handler to `SetPublicContentHandler` method of the Oracle:
-
-```go
-cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic("/v1/public/"),"/v1/public/")
-```
-
-### 4. Access the files in the browser to verify successful setup
-
-Visit:  
-```
-<oracle_base_url>/v1//public/<path_to_file>
-```
-
----
-
-## Example Usage
+Register the handler in your `startCmd.Run()` using a single call:
 
 ```go
 func (r *startCmd) Run() error {
-	const publicPathPrefix = "/v1/public/"
-
 	cfg := svc.DefaultConfig()
-	// ...
-	cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic(publicPathPrefix), publicPathPrefix)
-	// ...
+	cfg.SetPublicContentHandlerOrPanic(PublicFS, "/v1/public/")
+
 	return oracle.Run(r.ctx, &oracle.Config{
 		Config:       *cfg,
 		PortalConfig: r.PortalConfig,
@@ -79,17 +35,28 @@ func (r *startCmd) Run() error {
 }
 ```
 
-With:
+---
 
-```go
-//go:embed public/**
-var publicFS embed.FS
+### 🔗 Access Embedded Files
 
-func PublicContentHandlerOrPanic(prefix string) http.Handler {
-	if h, err := static.PublicHandler(publicFS, prefix); err != nil {
-		panic(err)
-	} else {
-		return h
-	}
-}
+Once running, static files are served under the mount prefix. For example:
+
 ```
+http://localhost:8080/v1/public/index.html
+```
+
+Make sure your file exists under the embedded `public/` folder, like:
+
+```
+public/index.html
+```
+
+---
+
+## 🧠 Notes
+
+- The mount prefix must **start and end with `/`**, e.g. `"/v1/public/"`
+- Files are served relative to the `public/` directory
+- No additional setup is required — just embed and mount
+
+---

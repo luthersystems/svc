@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"embed"
 	"errors"
 	"net/http"
 
@@ -90,16 +91,21 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 
 // SetPublicContentHandler sets the handler for /public/ routes.
 // URL prefix should begin and end with "/" e.g. /v1/public/
-func (c *Config) SetPublicContentHandler(handler http.Handler, prefix string) {
+func (c *Config) SetPublicContentHandlerOrPanic(publicFS embed.FS, prefix string) {
 	if c == nil {
 		return
 	}
+	h, err := static.PublicHandler(publicFS, prefix)
+	if err != nil {
+		panic(err)
+	}
+
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
 
 	cleanPrefix := static.CleanPathPrefix(prefix)
-	c.publicContentHandlers.Handle(cleanPrefix, handler)
+	c.publicContentHandlers.Handle(cleanPrefix, h)
 	c.publicContentPathPrefix = cleanPrefix
 }
 
