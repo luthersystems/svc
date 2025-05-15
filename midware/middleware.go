@@ -31,29 +31,29 @@ var DefaultAWSHeader = "X-Amzn-Trace-Id"
 // allowing the middleware's "natural" inner handler to serve the request.
 type PathOverrides map[string]http.Handler
 
-// ProtectedPathOverrides behaves like PathOverrides, but also disallows overrides
+// protectedPathOverrides behaves like PathOverrides, but also disallows overrides
 // that would conflict with specific reserved subtrees (e.g., static mounts).
 // The protectedSubtrees map defines path prefixes under which no additional
 // overrides may be registered — for example, to protect paths like "/v1/public/"
 // from nested handlers like "/v1/public/foo".
-type ProtectedPathOverrides struct {
+type protectedPathOverrides struct {
 	overrides         PathOverrides
 	protectedSubtrees map[string]bool
 }
 
-func NewProtectedPathOverrides(overrides map[string]http.Handler, protectedSubtrees []string) ProtectedPathOverrides {
+func NewProtectedPathOverrides(overrides map[string]http.Handler, protectedSubtrees []string) protectedPathOverrides {
 	ps := make(map[string]bool, len(protectedSubtrees))
 	for _, path := range protectedSubtrees {
 		ps[path] = true
 	}
-	return ProtectedPathOverrides{
+	return protectedPathOverrides{
 		overrides:         overrides,
 		protectedSubtrees: ps,
 	}
 }
 
 // Wrap implements the Middleware interface.
-func (m ProtectedPathOverrides) Wrap(next http.Handler) http.Handler {
+func (m protectedPathOverrides) Wrap(next http.Handler) http.Handler {
 	var prefixes []string
 
 	for path := range m.overrides {
