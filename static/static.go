@@ -23,13 +23,23 @@ import (
 )
 
 const PublicFSDirSegment = "public"
-const PublicPathPrefix = "/" + PublicFSDirSegment + "/"
 
 // PublicHandler returns an http.Handler that serves embedded files under the
-// "public/" subdirectory of the provided embed.FS. This content MUST be served
-// under the /public pattern
-func PublicHandler(staticFS embed.FS) (http.Handler, error) {
-	return publicContentHandler(staticFS, PublicFSDirSegment, PublicFSDirSegment)
+// "public/" subdirectory of the provided embed.FS.  URL prefix should begin and
+// end with "/" e.g. /v1/public/
+func PublicHandler(staticFS embed.FS, mountPrefix string) (http.Handler, error) {
+	return publicContentHandler(staticFS, PublicFSDirSegment, CleanPathPrefix(mountPrefix))
+}
+
+// CleanPathPrefix normalizes a URL path prefix, ensuring it starts
+// and ends with a single "/" character. This is especially useful
+// for mounting static directories or registering path-based handlers.
+func CleanPathPrefix(prefix string) string {
+	p := "/" + strings.Trim(prefix, "/")
+	if !strings.HasSuffix(p, "/") {
+		p += "/"
+	}
+	return p
 }
 
 // staticContentHandlerreturns an http.Handler that serves embedded files from a

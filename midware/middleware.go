@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/luthersystems/svc/static"
 )
 
 // DefaultTraceHeader is the default header when TraceHeaders is given an empty
@@ -30,34 +29,57 @@ var DefaultAWSHeader = "X-Amzn-Trace-Id"
 // http request paths.  Each entry in a PathOverrides map is an http request
 // path and the associated handler will be used to serve that path instead of
 // allowing the middleware's "natural" inner handler to serve the request.
-//
-// PathOverrides does not support overriding subtrees (paths ending with '/')
-// in the way that http.ServeMux supports path patterns.  Keys in PathOverrides
-// are expected to be complete, rooted paths.
 type PathOverrides map[string]http.Handler
 
+// ProtectedPathOverrides behaves like PathOverrides, but also disallows overrides
+// that would conflict with specific reserved subtrees (e.g., static mounts).
+// The protectedSubtrees map defines path prefixes under which no additional
+// overrides may be registered — for example, to protect paths like "/v1/public/"
+// from nested handlers like "/v1/public/foo".
+type ProtectedPathOverrides struct {
+	overrides         PathOverrides
+	protectedSubtrees map[string]bool
+}
+
+func NewProtectedPathOverrides(overrides map[string]http.Handler, protectedSubtrees []string) ProtectedPathOverrides {
+	ps := make(map[string]bool, len(protectedSubtrees))
+	for _, path := range protectedSubtrees {
+		ps[path] = true
+	}
+	return ProtectedPathOverrides{
+		overrides:         overrides,
+		protectedSubtrees: ps,
+	}
+}
+
 // Wrap implements the Middleware interface.
-func (m PathOverrides) Wrap(next http.Handler) http.Handler {
+func (m ProtectedPathOverrides) Wrap(next http.Handler) http.Handler {
 	var prefixes []string
-	// public file system may have nested directories we want to access but we
-	// want to ensure that the /public/ handler handles the request
-	for path := range m {
-		if path != static.PublicPathPrefix && strings.HasPrefix(path, static.PublicPathPrefix) {
-			panic(fmt.Sprintf("PathOverride conflict: disallowed registration of nested public route: %s", path))
+
+	for path := range m.overrides {
+		for root := range m.protectedSubtrees {
+			if path != root && strings.HasPrefix(path, root) {
+				panic(fmt.Sprintf("PathOverride conflict: attempted to register route %q under protected subtree %q", path, root))
+			}
 		}
 		if strings.HasSuffix(path, "/") {
 			prefixes = append(prefixes, path)
 		}
 	}
+
 	sort.Slice(prefixes, func(i, j int) bool {
 		return len(prefixes[i]) > len(prefixes[j])
 	})
 
 	return &pathOverridesHandler{
-		m:        m,
+		m:        m.overrides,
 		prefixes: prefixes,
 		next:     next,
 	}
+}
+
+func (m PathOverrides) Wrap(next http.Handler) http.Handler {
+	return NewProtectedPathOverrides(m, []string{}).Wrap(next)
 }
 
 type pathOverridesHandler struct {

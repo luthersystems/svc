@@ -22,10 +22,10 @@ var PublicFS embed.FS
 Use `PublicHandler` to create an `http.Handler` for your embedded files:
 
 ```go
-handler, err := static.PublicHandler(PublicFS)
+handler, err := static.PublicHandler(PublicFS, "/v1/public/")
 ```
 
-This will serve files under the `/public/` URL path.
+This will serve files under the `/v1/public/` URL path.
 
 ---
 
@@ -34,12 +34,12 @@ This will serve files under the `/public/` URL path.
 For convenience, create a panic-on-failure helper in your app:
 
 ```go
-func PublicHandlerOrPanic(fs embed.FS) http.Handler {
-    h, err := static.PublicHandler(fs)
-    if err != nil {
-        panic(err)
-    }
-    return h
+func PublicContentHandlerOrPanic(prefix string) http.Handler {
+	if h, err := static.PublicHandler(publicFS, prefix); err != nil {
+		panic(err)
+	} else {
+		return h
+	}
 }
 ```
 
@@ -50,14 +50,14 @@ func PublicHandlerOrPanic(fs embed.FS) http.Handler {
 Pass the handler to `SetPublicContentHandler` method of the Oracle:
 
 ```go
-cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic())
+cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic("/v1/public/"),"/v1/public/")
 ```
 
 ### 4. Access the files in the browser to verify successful setup
 
 Visit:  
 ```
-<oracle_base_url>/public/<path_to_file>
+<oracle_base_url>/v1//public/<path_to_file>
 ```
 
 ---
@@ -66,15 +66,11 @@ Visit:
 
 ```go
 func (r *startCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("could not get working directory: %v", err)
-	}
-	log.Printf("Process running from: %s", dir)
+	const publicPathPrefix = "/v1/public/"
 
 	cfg := svc.DefaultConfig()
 	// ...
-	cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic())
+	cfg.SetPublicContentHandler(api.PublicContentHandlerOrPanic(publicPathPrefix), publicPathPrefix)
 	// ...
 	return oracle.Run(r.ctx, &oracle.Config{
 		Config:       *cfg,
@@ -89,11 +85,11 @@ With:
 //go:embed public/**
 var publicFS embed.FS
 
-func PublicContentHandlerOrPanic() http.Handler {
-	h, err := static.PublicHandler(publicFS)
-	if err != nil {
+func PublicContentHandlerOrPanic(prefix string) http.Handler {
+	if h, err := static.PublicHandler(publicFS, prefix); err != nil {
 		panic(err)
+	} else {
+		return h
 	}
-	return h
 }
 ```

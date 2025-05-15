@@ -71,6 +71,8 @@ type Config struct {
 	fakeIDP *FakeIDP
 	// publicContentHandlers configures endpoints to serve public content.
 	publicContentHandlers *http.ServeMux
+	// publicContentPathPrefix configures endpoint to serve public content.
+	publicContentPathPrefix string
 }
 
 const (
@@ -87,15 +89,18 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 }
 
 // SetPublicContentHandler sets the handler for /public/ routes.
-func (c *Config) SetPublicContentHandler(handler http.Handler) {
+// URL prefix should begin and end with "/" e.g. /v1/public/
+func (c *Config) SetPublicContentHandler(handler http.Handler, prefix string) {
 	if c == nil {
 		return
 	}
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
-	// pattern MUST be kept in line with static.PublicHandler method
-	c.publicContentHandlers.Handle(static.PublicPathPrefix, handler)
+
+	cleanPrefix := static.CleanPathPrefix(prefix)
+	c.publicContentHandlers.Handle(cleanPrefix, handler)
+	c.publicContentPathPrefix = cleanPrefix
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

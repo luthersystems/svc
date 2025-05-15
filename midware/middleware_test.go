@@ -7,61 +7,64 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/luthersystems/svc/static"
 	"github.com/stretchr/testify/assert"
 )
 
 var basicHandler = staticBytes([]byte("applicationdata"))
 
 func TestPathOverrides(t *testing.T) {
-	basicOverride := &PathOverrides{
-		"/override":             staticBytes([]byte("overridden")),
-		"/api/":                 staticBytes([]byte("api handler")),
-		"/api/nested-api/":      staticBytes([]byte("nested api handler")),
-		static.PublicPathPrefix: staticBytes([]byte("public handler")),
-	}
+	t.Run("PathOverrides.Wrap() handles matching without subtree validation", func(t *testing.T) {
+		basicOverride := PathOverrides{
+			"/override":        staticBytes([]byte("overridden")),
+			"/api/":            staticBytes([]byte("api handler")),
+			"/api/nested-api/": staticBytes([]byte("nested api handler")),
+			"/v1/public/":      staticBytes([]byte("public handler")),
+		}
 
-	h := basicOverride.Wrap(staticBytes([]byte("applicationdata")))
+		h := basicOverride.Wrap(staticBytes([]byte("applicationdata")))
 
-	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		t.Run("falls back to next handler on root", func(t *testing.T) {
-			assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/", nil, nil))
+		testServer(t, h, func(t *testing.T, server *httptest.Server) {
+			t.Run("falls back to next handler on root", func(t *testing.T) {
+				assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/", nil, nil))
+			})
+
+			t.Run("falls back to next handler on unmatched path", func(t *testing.T) {
+				assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/hello/world", nil, nil))
+			})
+
+			t.Run("exact match override works", func(t *testing.T) {
+				assert.Equal(t, []byte("overridden"), testRequest(t, server, "GET", "/override", nil, nil))
+			})
+
+			t.Run("non-exact override should fall back", func(t *testing.T) {
+				assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/override/2", nil, nil))
+			})
+
+			t.Run("prefix match with /api/ works", func(t *testing.T) {
+				assert.Equal(t, []byte("api handler"), testRequest(t, server, "GET", "/api/user/42", nil, nil))
+			})
+
+			t.Run("prefix match with /api/nested-api/ chooses longest path (/api/nested-api/)", func(t *testing.T) {
+				assert.Equal(t, []byte("nested api handler"), testRequest(t, server, "GET", "/api/nested-api/user/42", nil, nil))
+			})
+
+			t.Run("prefix match with v1/public/ works", func(t *testing.T) {
+				assert.Equal(t, []byte("public handler"), testRequest(t, server, "GET", "/v1/public/assets/logo.png", nil, nil))
+			})
 		})
-
-		t.Run("falls back to next handler on unmatched path", func(t *testing.T) {
-			assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/hello/world", nil, nil))
-		})
-
-		t.Run("exact match override works", func(t *testing.T) {
-			assert.Equal(t, []byte("overridden"), testRequest(t, server, "GET", "/override", nil, nil))
-		})
-
-		t.Run("non-exact override should fall back", func(t *testing.T) {
-			assert.Equal(t, []byte("applicationdata"), testRequest(t, server, "GET", "/override/2", nil, nil))
-		})
-
-		t.Run("prefix match with /api/ works", func(t *testing.T) {
-			assert.Equal(t, []byte("api handler"), testRequest(t, server, "GET", "/api/user/42", nil, nil))
-		})
-
-		t.Run("prefix match with /api/nested-api/ chooses longest path (/api/nested-api/)", func(t *testing.T) {
-			assert.Equal(t, []byte("nested api handler"), testRequest(t, server, "GET", "/api/nested-api/user/42", nil, nil))
-		})
-
-		t.Run("prefix match with /public/ works", func(t *testing.T) {
-			assert.Equal(t, []byte("public handler"), testRequest(t, server, "GET", "/public/assets/logo.png", nil, nil))
-		})
-
 	})
 
-	t.Run("panic on disallowed nested /public route", func(t *testing.T) {
+	t.Run("ProtectedPathOverrides.Wrap() panics on nested override under blocked subtree", func(t *testing.T) {
 		assert.PanicsWithValue(t,
-			"PathOverride conflict: disallowed registration of nested public route: /public/nested/",
+			`PathOverride conflict: attempted to register route "/v1/public/nested/" under protected subtree "/v1/public/"`,
 			func() {
-				_ = PathOverrides{
-					static.PublicPathPrefix: staticBytes([]byte("good")),
-					"/public/nested/":       staticBytes([]byte("bad")),
-				}.Wrap(staticBytes([]byte("fallback")))
+				_ = NewProtectedPathOverrides(
+					map[string]http.Handler{
+						"/v1/public/":        staticBytes([]byte("good")),
+						"/v1/public/nested/": staticBytes([]byte("bad")),
+					},
+					[]string{"/v1/public/"},
+				).Wrap(staticBytes([]byte("fallback")))
 			})
 	})
 }
