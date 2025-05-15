@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"embed"
 	"errors"
 	"net/http"
 
@@ -71,6 +72,8 @@ type Config struct {
 	fakeIDP *FakeIDP
 	// publicContentHandlers configures endpoints to serve public content.
 	publicContentHandlers *http.ServeMux
+	// publicContentPathPrefix configures endpoint to serve public content.
+	publicContentPathPrefix string
 }
 
 const (
@@ -87,15 +90,23 @@ func (c *Config) SetSwaggerHandler(h http.Handler) {
 }
 
 // SetPublicContentHandler sets the handler for /public/ routes.
-func (c *Config) SetPublicContentHandler(handler http.Handler) {
+// URL prefix should begin and end with "/" e.g. /v1/public/
+func (c *Config) SetPublicContentHandlerOrPanic(publicFS embed.FS, prefix string) {
 	if c == nil {
 		return
 	}
+	h, err := static.PublicHandler(publicFS, prefix)
+	if err != nil {
+		panic(err)
+	}
+
 	if c.publicContentHandlers == nil {
 		c.publicContentHandlers = http.NewServeMux()
 	}
-	// pattern MUST be kept in line with static.PublicHandler method
-	c.publicContentHandlers.Handle(static.PublicPathPrefix, handler)
+
+	cleanPrefix := static.CleanPathPrefix(prefix)
+	c.publicContentHandlers.Handle(cleanPrefix, h)
+	c.publicContentPathPrefix = cleanPrefix
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

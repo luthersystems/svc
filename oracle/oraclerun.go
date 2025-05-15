@@ -18,7 +18,6 @@ import (
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/logmon"
 	"github.com/luthersystems/svc/midware"
-	"github.com/luthersystems/svc/static"
 	"github.com/luthersystems/svc/svcerr"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -119,15 +118,22 @@ func (orc *Oracle) txctxInterceptor(ctx context.Context, req interface{}, info *
 
 func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler *http.ServeMux) (*runtime.ServeMux, http.Handler) {
 	jsonapi := orc.grpcGatewayMux()
-	pathOverides := midware.PathOverrides{
+	protectedPaths := []string{}
+
+	overrides := map[string]http.Handler{
 		healthCheckPath: orc.healthCheckHandler(),
 	}
+
 	if swaggerHandler != nil {
-		pathOverides[swaggerPath] = swaggerHandler
+		overrides[swaggerPath] = swaggerHandler
 	}
+
 	if publicContentHandler != nil {
-		pathOverides[static.PublicPathPrefix] = publicContentHandler
+		overrides[orc.cfg.publicContentPathPrefix] = publicContentHandler
+		protectedPaths = append(protectedPaths, orc.cfg.publicContentPathPrefix)
 	}
+
+	pathOverrides := midware.NewProtectedPathOverrides(overrides, protectedPaths)
 
 	middleware := midware.Chain{
 		// The trace header middleware appears early in the chain
@@ -138,7 +144,7 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler
 		// PathOverrides and other middleware that may serve requests or have
 		// potential failure states should appear below here so they may rely
 		// on the presence of the generic utility middleware above.
-		pathOverides,
+		pathOverrides,
 	}
 
 	return jsonapi, middleware.Wrap(jsonapi)
