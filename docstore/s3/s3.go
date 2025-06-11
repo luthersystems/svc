@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/luthersystems/svc/docstore"
+	"github.com/sirupsen/logrus"
 )
 
 type missingRetryer struct {
@@ -133,7 +134,11 @@ func (a *Store) GetStreaming(key string, w http.ResponseWriter) error {
 	w.Header().Set("Connection", "close")
 	w.Header().Set("Content-Type", *(result.ContentType))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", *(result.ContentLength)))
-	defer result.Body.Close()
+	defer func() {
+		if err := result.Body.Close(); err != nil {
+			logrus.WithError(err).Warn("get streaming: close")
+		}
+	}()
 	_, err := io.Copy(w, result.Body)
 	if err != nil {
 		return fmt.Errorf("s3 get: %w", err)
