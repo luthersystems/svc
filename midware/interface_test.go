@@ -95,7 +95,11 @@ func testRequest(t *testing.T, server *httptest.Server, method string, rpath str
 	}
 	resp, err := (&http.Client{}).Do(r)
 	require.NoError(t, err, "request failure")
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			require.NoError(t, err, "close")
+		}
+	}()
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err, "unable to read response")
 	return b
@@ -112,7 +116,11 @@ func testResponseHeaders(t *testing.T, server *httptest.Server, method string, r
 	}
 	resp, err := (&http.Client{}).Do(r)
 	require.NoError(t, err, "request failure")
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			require.NoError(t, err, "close")
+		}
+	}()
 	return resp
 }
 

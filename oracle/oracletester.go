@@ -74,7 +74,11 @@ func getFreeAddr() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get a free port: %w", err)
 	}
-	defer l.Close() // Close immediately so it can be reused
+	defer func() {
+		if err := l.Close(); err != nil { // Close immediately so it can be reused
+			logrus.WithError(err).Warn("getFreeAddr: close")
+		}
+	}()
 	return l.Addr().String(), nil
 }
 

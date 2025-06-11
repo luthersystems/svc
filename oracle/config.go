@@ -74,6 +74,8 @@ type Config struct {
 	publicContentHandlers *http.ServeMux
 	// publicContentPathPrefix configures endpoint to serve public content.
 	publicContentPathPrefix string
+	// DiscardUnknown will ignore unknown fields (not throw an error).
+	DiscardUnknown bool `yaml:"discard-unknown"`
 }
 
 const (

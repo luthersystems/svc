@@ -152,7 +152,11 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 	reqBody := bytes.NewBufferString(`{"name": "Bob"}`)
 	resp, err := http.Post("http://"+gwLis.Addr().String()+"/v1/hello", "application/json", reqBody)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			require.NoError(t, err)
+		}
+	}()
 
 	// Should be 200 OK
 	require.Equal(t, http.StatusOK, resp.StatusCode)

@@ -83,7 +83,9 @@ func TestOracleDepTx(t *testing.T) {
 	var out2 hellov1.UseDepTxResponse
 	err = json.NewDecoder(secondResp.Body).Decode(&out2)
 	require.NoError(t, err)
-	secondResp.Body.Close()
+	if err := secondResp.Body.Close(); err != nil {
+		require.NoError(t, err)
+	}
 
 	t.Logf("Second call: old=%s new=%s", out2.GetOldTxId(), out2.GetNewTxId())
 	require.Equal(t, out1.GetNewTxId(), out2.GetOldTxId(), "the oldTx should match the first call's newTx")

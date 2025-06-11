@@ -84,7 +84,7 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 				UseProtoNames: true,
 			},
 			UnmarshalOptions: protojson.UnmarshalOptions{
-				DiscardUnknown: false,
+				DiscardUnknown: orc.cfg.DiscardUnknown,
 			},
 		}),
 	}
