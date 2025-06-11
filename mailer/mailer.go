@@ -102,7 +102,9 @@ func (m *SES) SendWithAttachment(ctx context.Context, body, to, subject string, 
 	bodyWriter, _ := writer.CreatePart(textproto.MIMEHeader{
 		"Content-Type": {"text/html; charset=utf-8"},
 	})
-	bodyWriter.Write([]byte(body))
+	if _, err := bodyWriter.Write([]byte(body)); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
 
 	// Attach files
 	for _, att := range attachments {
@@ -110,11 +112,18 @@ func (m *SES) SendWithAttachment(ctx context.Context, body, to, subject string, 
 		partHeader.Set("Content-Type", "application/zip")
 		partHeader.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, att.Filename))
 		part, _ := writer.CreatePart(partHeader)
-		part.Write(att.Data)
+		if _, err := part.Write(att.Data); err != nil {
+			return fmt.Errorf("write: %w", err)
+		}
 	}
 
-	writer.Close()
-	msg.Write(buf.Bytes())
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	if _, err := msg.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
 
 	input := &ses.SendRawEmailInput{
 		RawMessage: &ses.RawMessage{
