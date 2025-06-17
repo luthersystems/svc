@@ -276,12 +276,17 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 			Status:         "DOWN",
 		}}
 	}
+	found := false
 	reports := ccHealth.GetReports()
 	for _, report := range reports {
 		if strings.EqualFold(report.GetServiceName(), orc.cfg.PhylumServiceName) {
 			orc.setPhylumVersion(report.GetServiceVersion())
+			found = true
 			break
 		}
+	}
+	if !found {
+		orc.Log(ctx).WithField("service_name", orc.cfg.PhylumServiceName).Debug("no phylum version found")
 	}
 	return reports
 }
