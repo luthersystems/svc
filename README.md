@@ -98,7 +98,7 @@ go run svc.go
 
 ## Usage
 
-Each component can be used independently or as part of a complete backend service.
+Each component can be used independently or as part of a complete middleware service.
 See the example configs and submodule READMEs (e.g., `libhandlebars/README.md`, `reqarchive/README.md`, `static/README.md`) for more details.
 
 ---
@@ -108,14 +108,6 @@ See the example configs and submodule READMEs (e.g., `libhandlebars/README.md`, 
 1. Fork this repo
 2. Create a feature branch
 3. Submit a pull request
-
----
-
-## Acknowledgements
-
-- Inspired by common Go microservice patterns
-- Includes components for cloud-native operations, observability, and API design
-- Special thanks to the Luther Systems engineering team
 
 ---
 
