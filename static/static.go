@@ -15,7 +15,6 @@
 package static
 
 import (
-	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -24,10 +23,10 @@ import (
 
 const PublicFSDirSegment = "public"
 
-// PublicHandler returns an http.Handler that serves embedded files under the
-// "public/" subdirectory of the provided embed.FS.  URL prefix should begin and
+// PublicHandler returns an http.Handler that serves files under the
+// "public/" subdirectory of the provided fs.FS.  URL prefix should begin and
 // end with "/" e.g. /v1/public/
-func PublicHandler(staticFS embed.FS, mountPrefix string) (http.Handler, error) {
+func PublicHandler(staticFS fs.FS, mountPrefix string) (http.Handler, error) {
 	return publicContentHandler(staticFS, PublicFSDirSegment, CleanPathPrefix(mountPrefix))
 }
 
@@ -54,8 +53,7 @@ func CleanPathPrefix(prefix string) string {
 //	staticContentHandler(staticFS, "static", "assets")
 //
 // Then a request to /assets/index.html will serve embedded file "static/index.html".
-func publicContentHandler(embeddedFS embed.FS, subdir, urlPrefix string) (http.Handler, error) {
-
+func publicContentHandler(embeddedFS fs.FS, subdir, urlPrefix string) (http.Handler, error) {
 	cleanStaticDir := strings.Trim(subdir, "/")
 	cleanURLPrefix := strings.Trim(urlPrefix, "/")
 	subFS, err := fs.Sub(embeddedFS, cleanStaticDir)
