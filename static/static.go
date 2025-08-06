@@ -15,7 +15,6 @@
 package static
 
 import (
-	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -24,11 +23,11 @@ import (
 
 const PublicFSDirSegment = "public"
 
-// PublicHandler returns an http.Handler that serves embedded files under the
-// "public/" subdirectory of the provided embed.FS.  URL prefix should begin and
+// PublicHandler returns an http.Handler that serves files under the
+// "public/" subdirectory of the provided fs.FS.  URL prefix should begin and
 // end with "/" e.g. /v1/public/
-func PublicHandler(staticFS embed.FS, mountPrefix string) (http.Handler, error) {
-	return publicContentHandler(staticFS, PublicFSDirSegment, CleanPathPrefix(mountPrefix))
+func PublicHandler(staticFS fs.FS, mountPrefix string) (http.Handler, error) {
+	return MountEmbeddedFS(staticFS, PublicFSDirSegment, CleanPathPrefix(mountPrefix))
 }
 
 // CleanPathPrefix normalizes a URL path prefix, ensuring it starts
@@ -42,7 +41,7 @@ func CleanPathPrefix(prefix string) string {
 	return p
 }
 
-// staticContentHandlerreturns an http.Handler that serves embedded files from a
+// MountEmbeddedFS an http.Handler that serves embedded files from a
 // subdirectory within the embed.FS (e.g., "static") and maps them to a given URL prefix.
 //
 // For example:
@@ -54,15 +53,22 @@ func CleanPathPrefix(prefix string) string {
 //	staticContentHandler(staticFS, "static", "assets")
 //
 // Then a request to /assets/index.html will serve embedded file "static/index.html".
-func publicContentHandler(embeddedFS embed.FS, subdir, urlPrefix string) (http.Handler, error) {
-
+func MountEmbeddedFS(embeddedFS fs.FS, subdir, urlPrefix string) (http.Handler, error) {
 	cleanStaticDir := strings.Trim(subdir, "/")
 	cleanURLPrefix := strings.Trim(urlPrefix, "/")
-	subFS, err := fs.Sub(embeddedFS, cleanStaticDir)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create sub FS: %w", err)
+
+	// if no subdir was specified, use the root FS directly
+	var serveFS fs.FS
+	if cleanStaticDir == "" {
+		serveFS = embeddedFS
+	} else {
+		var err error
+		serveFS, err = fs.Sub(embeddedFS, cleanStaticDir)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create sub FS: %w", err)
+		}
 	}
 
 	prefix := fmt.Sprintf("/%s/", cleanURLPrefix)
-	return http.StripPrefix(prefix, http.FileServer(http.FS(subFS))), nil
+	return http.StripPrefix(prefix, http.FileServer(http.FS(serveFS))), nil
 }
