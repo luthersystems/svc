@@ -2,29 +2,29 @@
 // two civil dates with DoS-safe, O(1) algorithms and explicit control over
 // month-rollover semantics.
 //
-// Overview
+// # Overview
 //
 // This package computes a canonical (years, months, days) difference between
 // two civil dates using the rule:
 //
-//   1) Choose the maximum whole-months M such that addMonths(start, M) <= end
-//      (where addMonths encodes your month-rollover policy, e.g., cc:add-months).
-//   2) The leftover days is the civil-day count between that anchor date and end.
+//  1. Choose the maximum whole-months M such that addMonths(start, M) <= end
+//     (where addMonths encodes your month-rollover policy, e.g., cc:add-months).
+//  2. The leftover days is the civil-day count between that anchor date and end.
 //
 // This matches specs like "max whole months, then days" (no ad-hoc EOM special-
 // casing). Leap-day and end-of-month behavior is entirely defined by the provided
 // addMonths policy (defaults to time.AddDate(0, m, 0) clamping).
 //
-// Civil dates
+// # Civil dates
 //
 // A "civil date" is a calendar date expressed as Year–Month–Day *without* any
 // clock time, time zone, or daylight-saving-time effects. We treat civil dates
 // in the proleptic Gregorian calendar (the same model used by Go's time package
 // for Year 1..9999). In this model:
 //
-//   • Each successive calendar day increases the civil day count by exactly 1.
-//   • There are no DST gaps or repeats (we operate at UTC midnight).
-//   • Historical calendar cutovers (e.g., Julian→Gregorian) are ignored.
+//   - Each successive calendar day increases the civil day count by exactly 1.
+//   - There are no DST gaps or repeats (we operate at UTC midnight).
+//   - Historical calendar cutovers (e.g., Julian→Gregorian) are ignored.
 //
 // The implementation uses a civil serial-day function to compute day deltas,
 // avoiding time.Duration arithmetic (which can overflow for large spans) and
@@ -46,16 +46,16 @@ import (
 // YMDiff is the canonical (years, months, days) such that applying it to start
 // (using your month-rollover semantics) yields end:
 //
-//    M      = years*12 + months
-//    anchor = addMonths(start, M)
-//    anchor <= end
-//    days   = civilDays(end) - civilDays(anchor)
+//	M      = years*12 + months
+//	anchor = addMonths(start, M)
+//	anchor <= end
+//	days   = civilDays(end) - civilDays(anchor)
 //
 // Invariants:
-// - Years >= 0, Months in [0, 11], Days >= 0.
-// - If start == end, YMDiff{0,0,0}.
-// - If addMonths == time.AddDate(0,m,0), leap/EOM behavior will follow Go's
-//   clamping rules (e.g., Jan 31 + 1 month = Feb 29 in leap years, else Feb 28).
+//   - Years >= 0, Months in [0, 11], Days >= 0.
+//   - If start == end, YMDiff{0,0,0}.
+//   - If addMonths == time.AddDate(0,m,0), leap/EOM behavior will follow Go's
+//     clamping rules (e.g., Jan 31 + 1 month = Feb 29 in leap years, else Feb 28).
 type YMDiff struct {
 	Years  int
 	Months int
@@ -108,9 +108,10 @@ var (
 // Safety: Guards against start > end, year range, and mega spans.
 //
 // Example:
-//   diff, err := DiffYMD(time.Date(2024,2,29,0,0,0,0,time.UTC),
-//                        time.Date(2025,2,28,0,0,0,0,time.UTC), nil)
-//   // Using Go clamping, diff == {Years:0, Months:11, Days:30}
+//
+//	diff, err := DiffYMD(time.Date(2024,2,29,0,0,0,0,time.UTC),
+//	                     time.Date(2025,2,28,0,0,0,0,time.UTC), nil)
+//	// Using Go clamping, diff == {Years:0, Months:11, Days:30}
 //
 // To precisely match another runtime (e.g., cc:add-months), inject it via DiffYMDOpts.
 func DiffYMD(start, end time.Time, addMonths AddMonthsFn) (YMDiff, error) {
@@ -249,4 +250,3 @@ func floorDiv(a, b int64) int64 {
 	}
 	return q
 }
-
