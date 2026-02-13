@@ -1,11 +1,11 @@
 ---
 name: release
-description: "Create a new release tag. Determines the next version, tags main, and pushes. Examples: 'create a release', 'tag a new version', 'release v0.14.17'."
+description: "Create a new GitHub release with version tag and release notes. Determines the next version, verifies main, tags, and creates a GitHub release. Examples: 'create a release', 'release v0.15.0', 'cut a new version'."
 ---
 
 # Release
 
-Tag a new semver release on main. This repo uses lightweight tags with no release automation — tagging is the release.
+Create a versioned GitHub release on main with auto-generated release notes.
 
 ## Workflow
 
@@ -29,33 +29,68 @@ Run the `verify` skill on main. Do not release if any checks fail.
 ### 4. Determine Next Version
 
 This repo follows semver `v0.MINOR.PATCH`:
-- **Patch bump** (v0.14.14 → v0.14.15): Bug fixes, dependency bumps, small improvements
+- **Patch bump** (v0.14.16 → v0.14.17): Bug fixes, dependency bumps, small improvements
 - **Minor bump** (v0.14.x → v0.15.0): New packages, breaking API changes, significant features
 
-Most releases are patch bumps.
+Most releases are patch bumps. Ask the user if unclear.
 
-### 5. Create and Push Tag
+### 5. Generate Release Notes
+
+Review commits since the last release to build release notes:
 
 ```bash
-git tag v0.14.<next>
-git push origin v0.14.<next>
+git log --oneline <previous-tag>..HEAD
 ```
 
-### 6. Verify on pkg.go.dev
+Organize into categories based on commit prefixes:
+- **Features** — `Add` commits (new packages, capabilities)
+- **Fixes** — `Fix` commits (bug fixes)
+- **Dependencies** — `Bump` commits (dependency updates)
+- **Improvements** — `Improve`, `Use`, `Remove` commits (refactors, enhancements)
 
-The Go module proxy will pick up the new tag automatically. Verify at:
-`https://pkg.go.dev/github.com/luthersystems/svc@v0.14.<next>`
+### 6. Create Tag and GitHub Release
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
+## What's Changed
+
+### Features
+- Description of feature (#PR)
+
+### Fixes
+- Description of fix (#PR)
+
+### Dependencies
+- Bump package from vA to vB (#PR)
+
+**Full Changelog**: https://github.com/luthersystems/svc/compare/<previous-tag>...vX.Y.Z
+EOF
+)"
+```
+
+Use `gh release create --generate-notes` as a starting point if there are many changes, then edit for clarity.
+
+### 7. Verify
+
+- Check the release appears at https://github.com/luthersystems/svc/releases
+- The Go module proxy picks up the tag automatically. Verify at:
+  `https://pkg.go.dev/github.com/luthersystems/svc@vX.Y.Z`
 
 ## Key Reminders
 
 - Tags are on main only — never tag a feature branch
-- No changelog file — release notes are optional
+- Always ask the user to confirm the version number before tagging
 - Downstream consumers update by bumping the version in their `go.mod`
 - SNAPSHOT tags (e.g., `v0.14.4-SNAPSHOT.1`) are used for pre-release testing
+- NEVER auto-merge pending PRs as part of a release
 
 ## Checklist
 
 - [ ] On main branch, up to date
-- [ ] All tests pass
-- [ ] Tag created with correct version
-- [ ] Tag pushed to origin
+- [ ] `verify` skill passed
+- [ ] Version number confirmed with user
+- [ ] Tag created and pushed
+- [ ] GitHub release created with release notes
