@@ -1,6 +1,6 @@
 // Copyright © 2021 Luther Systems, Ltd. All right reserved.
 
-// +build integration
+//go:build integration
 
 package reqarchive
 
