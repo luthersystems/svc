@@ -31,21 +31,34 @@ const (
 	layoutDMYLong       = "02-01-2006"
 )
 
+// handlebarsPackage implements the elpsutil Package interfaces for the
+// handlebars ELPS package.
+type handlebarsPackage struct{}
+
+func (handlebarsPackage) PackageName() string { return DefaultPackageName }
+
+func (handlebarsPackage) PackageDoc() string {
+	return `Handlebars template rendering engine.
+
+Provides functions for parsing and rendering Handlebars templates with
+JSON context data, powered by the raymond library.`
+}
+
+func (handlebarsPackage) Builtins() []lisp.LBuiltinDef {
+	return builtins
+}
+
+// documentedBuiltin wraps an LBuiltinDef with a docstring.
+type documentedBuiltin struct {
+	lisp.LBuiltinDef
+	docs string
+}
+
+func (b *documentedBuiltin) Docstring() string { return b.docs }
+
 // LoadPackage loads the package.
 func LoadPackage(env *lisp.LEnv) *lisp.LVal {
-	name := lisp.Symbol(DefaultPackageName)
-	e := env.DefinePackage(name)
-	if !e.IsNil() {
-		return e
-	}
-	e = env.InPackage(name)
-	if !e.IsNil() {
-		return e
-	}
-	for _, fn := range builtins {
-		env.AddBuiltins(true, fn)
-	}
-	return lisp.Nil()
+	return elpsutil.PackageLoader(&handlebarsPackage{})(env)
 }
 
 // Render renders a raymond.Template given a ctx
@@ -69,10 +82,31 @@ func Parse(template string) (*raymond.Template, error) {
 }
 
 var builtins = []lisp.LBuiltinDef{
-	elpsutil.Function("libname", lisp.Formals(), builtInLibname),
-	elpsutil.Function("version", lisp.Formals(), builtInVersion),
-	elpsutil.Function("render", lisp.Formals("tpl", "ctx"), builtInRender),
-	elpsutil.Function("must-parse", lisp.Formals("tpl"), builtInMustParse),
+	&documentedBuiltin{
+		elpsutil.Function("libname", lisp.Formals(), builtInLibname),
+		`Returns the name of the underlying template library ("raymond").`,
+	},
+	&documentedBuiltin{
+		elpsutil.Function("version", lisp.Formals(), builtInVersion),
+		`Returns the version string of the raymond template library.`,
+	},
+	&documentedBuiltin{
+		elpsutil.Function("render", lisp.Formals("tpl", "ctx"), builtInRender),
+		`Renders a Handlebars template string with the given context.
+
+tpl is a Handlebars template string and ctx is a JSON-serializable
+value used as the template context. Returns the rendered string.
+Signals handlebars-parse on template syntax errors and
+handlebars-render on rendering errors.`,
+	},
+	&documentedBuiltin{
+		elpsutil.Function("must-parse", lisp.Formals("tpl"), builtInMustParse),
+		`Validates that tpl is a syntactically correct Handlebars template.
+
+Returns nil on success. Signals handlebars-parse if the template
+contains syntax errors. Use this to validate templates at load time
+without rendering them.`,
+	},
 }
 
 func builtInLibname(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {

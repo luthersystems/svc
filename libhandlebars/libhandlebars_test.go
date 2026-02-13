@@ -15,7 +15,7 @@ import (
 // TestPackage runs libhandlebars lisp tests.
 func TestPackage(t *testing.T) {
 	runner := &elpstest.Runner{
-		Loader: elpsutil.LoadAll(libtesting.LoadPackage, libjson.LoadPackage, libhandlebars.LoadPackage),
+		LoaderFn: elpsutil.LoadAll(libtesting.LoadPackage, libjson.LoadPackage, libhandlebars.LoadPackage),
 	}
 	runner.RunTestFile(t, "libhandlebars_test.lisp")
 }
