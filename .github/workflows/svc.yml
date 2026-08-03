@@ -17,7 +17,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: v2.11
       - name: Run CI tests
         run: script -q -e -c "make citest"
   # Known-vulnerability gate: call-graph-aware, fails only on vulns whose
