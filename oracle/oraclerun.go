@@ -281,11 +281,11 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		trySendError(errServe, metricsServer.ListenAndServe())
 	}()
 
-	go func() {
+	go func() { // #nosec G118 -- graceful-shutdown goroutine runs after ctx is Done; deriving its timeout from the dead ctx would cancel immediately
 		<-ctx.Done()
 		grpcServer.Stop()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // #nosec G118 -- graceful-shutdown path runs after ctx is Done; deriving from it would cancel immediately
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 		defer cancel()
 		if err := oracleServer.Shutdown(shutdownCtx); err != nil {

@@ -63,7 +63,7 @@ func (orc *Oracle) healthCheckHandler() http.Handler {
 		// Bound the body before ParseForm so an oversized request cannot
 		// exhaust memory (gosec G120); health checks carry no meaningful body.
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		if err := r.ParseForm(); err != nil {
+		if err := r.ParseForm(); err != nil { // #nosec G120 -- body is bounded by the MaxBytesReader on the line above; gosec's taint analysis misses the reassignment
 			sendResponse(exceptionf("invalid request: %s", err), http.StatusBadRequest)
 			return
 		}
