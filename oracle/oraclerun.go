@@ -285,7 +285,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		<-ctx.Done()
 		grpcServer.Stop()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // #nosec G118 -- graceful-shutdown path runs after ctx is Done; deriving from it would cancel immediately
 
 		defer cancel()
 		if err := oracleServer.Shutdown(shutdownCtx); err != nil {
