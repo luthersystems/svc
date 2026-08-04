@@ -4,3 +4,14 @@ run:
 linters:
   enable:
     - gosec
+  exclusions:
+    rules:
+      # aws-sdk-go v1 deprecation (SA1019): docstore/s3 is the last v1
+      # consumer — its exported NewWithSession takes a v1 *session.Session,
+      # so migrating to aws-sdk-go-v2 is a breaking API change that needs
+      # its own coordinated PR (mailer/reqarchive migrated in #82). Without
+      # this exclusion any Dependabot bump of aws-sdk-go >= 1.55 reds CI on
+      # the deprecation markers alone.
+      - path: docstore/s3/s3\.go
+        linters: [staticcheck]
+        text: "SA1019"
