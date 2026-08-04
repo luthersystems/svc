@@ -94,7 +94,7 @@ func (m *SES) SendWithAttachment(ctx context.Context, body, to, subject string, 
 	// Write email headers
 	var msg bytes.Buffer
 	for k, v := range mimeHeaders {
-		msg.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		fmt.Fprintf(&msg, "%s: %s\r\n", k, v)
 	}
 	msg.WriteString("\r\n")
 

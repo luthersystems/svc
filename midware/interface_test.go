@@ -67,7 +67,7 @@ func (h *staticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	b := h.body
 	for len(b) > 0 {
-		n, err := w.Write(b)
+		n, err := w.Write(b) // #nosec G705 -- test double serving fixture bytes
 		b = b[n:]
 		if err != nil {
 			log.Printf("static handler error: %v", err)
