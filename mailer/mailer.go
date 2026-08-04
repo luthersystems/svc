@@ -9,9 +9,10 @@ import (
 	"mime/multipart"
 	"net/textproto"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ses"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
+	"github.com/aws/aws-sdk-go-v2/service/ses/types"
 )
 
 const (
@@ -22,21 +23,19 @@ const (
 // SES sends email notifications via AWS SES.
 type SES struct {
 	sender string
-	svc    *ses.SES
+	svc    *ses.Client
 }
 
 // NewSES constructs a new mailer that uses AWS SES to send emails.
 func NewSES(region string, sender string) (*SES, error) {
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(region)},
-	)
+	cfg, err := config.LoadDefaultConfig(context.Background(),
+		config.WithRegion(region))
 	if err != nil {
 		return nil, err
 	}
-	svc := ses.New(sess)
 	return &SES{
 		sender: sender,
-		svc:    svc,
+		svc:    ses.NewFromConfig(cfg),
 	}, nil
 }
 
@@ -44,20 +43,18 @@ func NewSES(region string, sender string) (*SES, error) {
 func (m *SES) Send(ctx context.Context, content string, email string, subject string) error {
 	// Assemble the email.
 	input := &ses.SendEmailInput{
-		Destination: &ses.Destination{
-			CcAddresses: []*string{},
-			ToAddresses: []*string{
-				aws.String(email),
-			},
+		Destination: &types.Destination{
+			CcAddresses: []string{},
+			ToAddresses: []string{email},
 		},
-		Message: &ses.Message{
-			Body: &ses.Body{
-				Html: &ses.Content{
+		Message: &types.Message{
+			Body: &types.Body{
+				Html: &types.Content{
 					Charset: aws.String(CharSet),
 					Data:    aws.String(content),
 				},
 			},
-			Subject: &ses.Content{
+			Subject: &types.Content{
 				Charset: aws.String(CharSet),
 				Data:    aws.String(subject),
 			},
@@ -65,7 +62,7 @@ func (m *SES) Send(ctx context.Context, content string, email string, subject st
 		Source: aws.String(m.sender),
 	}
 	// Attempt to send the email.
-	_, err := m.svc.SendEmailWithContext(ctx, input)
+	_, err := m.svc.SendEmail(ctx, input)
 	if err != nil {
 		return err
 	}
@@ -126,11 +123,11 @@ func (m *SES) SendWithAttachment(ctx context.Context, body, to, subject string, 
 	}
 
 	input := &ses.SendRawEmailInput{
-		RawMessage: &ses.RawMessage{
+		RawMessage: &types.RawMessage{
 			Data: msg.Bytes(),
 		},
 	}
 
-	_, err := m.svc.SendRawEmailWithContext(ctx, input)
+	_, err := m.svc.SendRawEmail(ctx, input)
 	return err
 }
