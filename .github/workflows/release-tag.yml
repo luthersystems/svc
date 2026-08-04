@@ -1,0 +1,88 @@
+name: Release (tag)
+
+# On-demand release cut, dispatched by an operator (or an agent the operator
+# directed) from the Actions UI or `gh workflow run`. This is a library repo
+# with no tag-triggered pipelines, so the default GITHUB_TOKEN can create the
+# tag + release directly — no app token needed (contrast lutherauth/buildenv,
+# whose tags must trigger docker publish workflows and therefore release via
+# the Claude App; see lutherauth/.github/workflows/release-tag.yml).
+#
+# Leave `version` empty to auto-bump the patch component of the latest
+# vMAJOR.MINOR.PATCH tag; pass an explicit version for minor/major bumps.
+# Always cuts from main HEAD.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag (vMAJOR.MINOR.PATCH). Empty = auto-bump patch of the latest tag."
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Print the computed version but do NOT cut the release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # gh release create (creates the tag + release)
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Cut release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # all tags, for latest-version detection
+      - name: Compute and validate version
+        id: ver
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          latest=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
+          if [ -n "$REQUESTED" ]; then
+            version="$REQUESTED"
+          elif [ -n "$latest" ]; then
+            IFS=. read -r major minor patch <<<"${latest#v}"
+            version="v${major}.${minor}.$((patch + 1))"
+          else
+            echo "error: no existing vMAJOR.MINOR.PATCH tag to bump from; pass an explicit version" >&2
+            exit 1
+          fi
+          echo "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "error: version '$version' is not vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          }
+          if [ -n "$latest" ]; then
+            newest=$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -n1)
+            if [ "$newest" != "$version" ] || [ "$version" = "$latest" ]; then
+              echo "error: version $version is not strictly newer than latest tag $latest" >&2
+              exit 1
+            fi
+          fi
+          echo "computed version: $version (latest existing: ${latest:-none})"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Dry run — print only
+        if: ${{ inputs.dry_run }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: echo "DRY RUN — would release $VERSION from $GITHUB_SHA; nothing created."
+      - name: Cut release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes
+          echo "released $VERSION at $GITHUB_SHA"
