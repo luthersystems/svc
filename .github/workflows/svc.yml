@@ -32,7 +32,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "stable"
+          # Pin to the module's Go version rather than floating "stable",
+          # matching the build job above: a floating "stable" flips this
+          # PR-gating job red the day a new Go major lands (the go1.27
+          # incident that broke the lint jobs). The scheduled, non-gating
+          # scanner (govulncheck-scheduled.yml) keeps "stable" for
+          # fresh-stdlib advisory coverage.
+          go-version-file: go.mod
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
