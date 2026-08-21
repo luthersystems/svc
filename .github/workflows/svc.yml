@@ -11,7 +11,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: "stable"
+          # Pin to the module's Go version rather than floating "stable":
+          # the golangci-lint v2.11 binary (built with Go 1.26) cannot read
+          # export data produced by newer toolchains (Go 1.27 broke it with
+          # "export data version 4 is greater than maximum supported version 2").
+          go-version-file: go.mod
       - name: Clean Go Module Cache (needed for cilint in some cases)
         run: go clean -modcache
       - name: golangci-lint
