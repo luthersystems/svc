@@ -12,7 +12,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           # Pin to the module's Go version rather than floating "stable":
-          # the golangci-lint v2.11 binary (built with Go 1.26) cannot read
+          # the golangci-lint v2.13 binary (built with Go 1.26) cannot read
           # export data produced by newer toolchains (Go 1.27 broke it with
           # "export data version 4 is greater than maximum supported version 2").
           go-version-file: go.mod
@@ -21,7 +21,9 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.11
+          # Fleet-wide pin (matches luthersystems/ui-core): an exact patch so
+          # lint results don't shift under a floating minor.
+          version: v2.13.2
       - name: Run CI tests
         run: script -q -e -c "make citest"
   # Known-vulnerability gate: call-graph-aware, fails only on vulns whose

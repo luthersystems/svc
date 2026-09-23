@@ -57,8 +57,8 @@ make plugin
 
 Single GitHub Actions workflow (`.github/workflows/svc.yml`):
 - **Triggers**: PRs targeting `main` only
-- **Runner**: `ubuntu-22.04`, Go 1.23
-- **Steps**: checkout → setup-go → clean modcache → golangci-lint (v1.63) → `make citest`
+- **Runner**: `ubuntu-22.04`, Go from `go.mod` (`go-version-file`)
+- **Steps**: checkout → setup-go → clean modcache → golangci-lint (v2.13.2, v2 config) → `make citest`
 - **Linter config**: `.golangci.yml` — gosec enabled, 2m timeout
 - **No deploy/release automation** — this is a library repo
 

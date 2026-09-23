@@ -78,7 +78,12 @@ func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCooki
 			return nil
 		}
 
-		cookie := &http.Cookie{
+		// Secure is the caller's explicit choice (AddCookieForwarder's
+		// `secure` arg, false only for plain-HTTP local dev), and SameSite is
+		// None when secure so cross-site frontends keep working; HttpOnly is
+		// always set. Changing either would alter this library's public
+		// cookie contract for every downstream oracle.
+		cookie := &http.Cookie{ //nolint:gosec // G124: Secure/SameSite are deliberately caller-configured (see above)
 			Name:     cookieName,
 			Value:    value,
 			MaxAge:   maxAge,
