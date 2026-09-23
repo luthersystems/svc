@@ -9,7 +9,7 @@ Run every check that CI runs, in order. This is a local mirror of `.github/workf
 
 ## Workflow
 
-### 1. Lint (golangci-lint v1.63, gosec enabled)
+### 1. Lint (golangci-lint v2.13.2, gosec enabled)
 
 ```bash
 golangci-lint run
