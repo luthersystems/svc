@@ -71,24 +71,25 @@ func (cf *CookieForwarder) GetValue(ctx context.Context) (string, error) {
 	return getCookie(ctx, cf.cookieName)
 }
 
-func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCookie bool) func(context.Context, http.ResponseWriter, proto.Message) error {
+func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCookie, httpOnly bool) func(context.Context, http.ResponseWriter, proto.Message) error {
 	return func(ctx context.Context, w http.ResponseWriter, resp proto.Message) error {
 		value := getGRPCHeader(ctx, grpcHeader)
 		if value == "" {
 			return nil
 		}
 
-		// Secure is the caller's explicit choice (AddCookieForwarder's
-		// `secure` arg, false only for plain-HTTP local dev), and SameSite is
-		// None when secure so cross-site frontends keep working; HttpOnly is
-		// always set. Changing either would alter this library's public
-		// cookie contract for every downstream oracle.
-		cookie := &http.Cookie{ //nolint:gosec // G124: Secure/SameSite are deliberately caller-configured (see above)
+		// Secure and HttpOnly are the caller's explicit choices
+		// (AddCookieForwarder's `secure` and `httpOnly` args). Secure is false
+		// only for plain-HTTP local dev, and SameSite is None when secure so
+		// cross-site frontends keep working. HttpOnly used to be hardcoded to
+		// true regardless of the `httpOnly` arg; it now follows the arg, so a
+		// caller passing false gets a cookie that page JavaScript can read.
+		cookie := &http.Cookie{ //nolint:gosec // G124: Secure/HttpOnly/SameSite are deliberately caller-configured (see above)
 			Name:     cookieName,
 			Value:    value,
 			MaxAge:   maxAge,
 			Secure:   secureCookie,
-			HttpOnly: true,
+			HttpOnly: httpOnly,
 			Path:     "/",
 		}
 		if secureCookie {
@@ -104,7 +105,7 @@ func cookieHandler(grpcHeader string, cookieName string, maxAge int, secureCooki
 // ForwardResponseOption returns a gRPC-Gateway ForwardResponseOption that reads
 // the forwarder’s header from metadata and writes it as a Set-Cookie in HTTP.
 func (cf *CookieForwarder) forwardResponseOption() func(ctx context.Context, w http.ResponseWriter, resp proto.Message) error {
-	return cookieHandler(cf.header, cf.cookieName, cf.maxAge, cf.secure)
+	return cookieHandler(cf.header, cf.cookieName, cf.maxAge, cf.secure, cf.httpOnly)
 }
 
 // getIncomingCookie retrieves the named cookie from the gRPC metadata that
