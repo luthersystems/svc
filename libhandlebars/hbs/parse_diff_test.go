@@ -14,6 +14,7 @@ import (
 	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
 	refast "github.com/luthersystems/svc/libhandlebars/internal/raymondref/ast"
 	refparser "github.com/luthersystems/svc/libhandlebars/internal/raymondref/parser"
+	"github.com/stretchr/testify/require"
 )
 
 // dumpValue prints every exported field of an AST, by field name in sorted
@@ -252,6 +253,54 @@ func TestParseMatchesRaymond(t *testing.T) {
 		checkSame(t, src)
 	}
 	t.Logf("%d templates", len(cases))
+}
+
+// TestParseMatchesRaymondShapes compares the scaling shapes at small sizes
+// and every depth shape from depth 1 to 32, so long, wide and deep trees
+// are checked against raymond's Print and error text, not only fragments.
+func TestParseMatchesRaymondShapes(t *testing.T) {
+	for _, n := range []int{0, 1, 7, 64, 512, 2 << 10} {
+		for _, build := range scalingShapes {
+			checkSame(t, build(n))
+		}
+	}
+	for n := 1; n <= 32; n++ {
+		for name, build := range depthCases {
+			if n < 4 && (name == "chainsexpr" || name == "blocksexpr") {
+				continue
+			}
+			checkSame(t, build(n))
+		}
+	}
+}
+
+// TestParseErrorsMatchRaymond compares the error text of broken templates
+// at several positions: after leading lines, inside nested blocks and at
+// the end of input, so the line numbers and token dumps agree too.
+func TestParseErrorsMatchRaymond(t *testing.T) {
+	broken := []string{
+		"{{#if a}}", "{{/if}}", "{{x", "{{x}", "{{f (g}}", "{{f g)}}", "{{! x", "{{!-- x",
+		"{{f \"x}}", "{{[x", "{{x.5}}", "{{#if a}}{{/unless}}", "{{{{raw}}}}x", "{{=}}",
+		"{{#each a as |b}}x{{/each}}", "{{#*inline \"p\"}}x{{/inline}}", "{{else x}}", "{{}}",
+	}
+	n := 0
+	for _, b := range broken {
+		for _, pre := range []string{"", "x\n", "\n\n\n", "{{#if a}}\n", "{{#each l}}{{#if a}}\n  "} {
+			for _, post := range []string{"", "\n", "\ny{{z}}", "{{/if}}"} {
+				src := pre + b + post
+				got, ok := engineParse(t, src)
+				require.True(t, ok, src)
+				want := refParse(src, false)
+				if want.panic == "" && want.err != "" {
+					n++
+					require.Equal(t, want.err, got.err, src)
+				}
+				checkSame(t, src)
+			}
+		}
+	}
+	require.Positive(t, n)
+	t.Logf("%d error texts", n)
 }
 
 // TestParseMatchesRaymondCorpus compares every .html/.hbs file under
