@@ -2,6 +2,7 @@
 // (addHelpers and everything after it) at the commit that froze this
 // package. It is the reference helper set. DO NOT EDIT: see NOTICE.md.
 
+//nolint:errorlint,forcetypeassert,nonamedreturns,perfsprint,predeclared,unconvert // frozen verbatim copy; a lint fix would change the reference
 package hbref
 
 import (

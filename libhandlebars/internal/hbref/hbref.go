@@ -63,19 +63,36 @@ func newError(stage Stage, raw string) *Error {
 
 // MustParse reproduces handlebars:must-parse: it parses tpl and discards
 // the result. The error, when non-nil, is an *Error.
-func MustParse(tpl string) (err error) {
-	defer recoverPanic(&err)
-	if _, perr := raymond.Parse(tpl); perr != nil {
-		return newError(StageParse, perr.Error())
-	}
-	return nil
+func MustParse(tpl string) error {
+	var err error
+	func() {
+		defer recoverPanic(&err)
+		if _, perr := raymond.Parse(tpl); perr != nil {
+			err = newError(StageParse, perr.Error())
+		}
+	}()
+	return err
 }
 
 // RenderJSON reproduces handlebars:render for a context already serialized
 // to JSON (the bytes path of the builtin, and the ELPS-value path after
 // libjson serialization). The error, when non-nil, is an *Error.
-func RenderJSON(tpl string, ctxJSON []byte) (out string, err error) {
-	defer recoverPanic(&err)
+func RenderJSON(tpl string, ctxJSON []byte) (string, error) {
+	var (
+		out string
+		err error
+	)
+	func() {
+		defer recoverPanic(&err)
+		out, err = renderJSON(tpl, ctxJSON)
+	}()
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func renderJSON(tpl string, ctxJSON []byte) (string, error) {
 	var jsonContext map[string]interface{}
 	if uerr := json.Unmarshal(ctxJSON, &jsonContext); uerr != nil {
 		return "", newError(StageUnmarshal, uerr.Error())
@@ -107,7 +124,7 @@ func panicDescription(p any) string {
 		return err.Error()
 	}
 	v := reflect.ValueOf(p)
-	switch v.Kind() {
+	switch v.Kind() { //nolint:exhaustive // other kinds fall through to error/fmt below
 	case reflect.String:
 		return v.String()
 	case reflect.Bool:
