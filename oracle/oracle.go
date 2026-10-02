@@ -272,18 +272,19 @@ func (orc *Oracle) getLastPhylumVersion() string {
 // JSON-RPC calls but not on its gateway health_check request, which would
 // otherwise reach the gateway with no trace (luthersystems/svc#55).
 //
-// It injects only when the span in the context is recording, that is when
-// tracing is configured. With tracing off the span is a no-op that can still
-// carry a caller's span context, and forwarding that would send the gateway
-// headers it never received before. With tracing on, the global propagator
-// (W3C trace context and baggage) also forwards the caller's tracestate and
-// baggage, as W3C trace context and standard OpenTelemetry instrumentation do.
+// The oracle uses it only when tracing is configured; with tracing off the
+// health check uses shiroclient's default client and sends no trace headers,
+// as before. It injects whenever the context holds a valid span context,
+// sampled or not, as shiroclient's JSON-RPC path does, so the gateway keeps
+// the caller's sampling decision. The global propagator also forwards the
+// caller's tracestate and baggage, as standard OpenTelemetry instrumentation
+// does.
 type traceHeaderTransport struct {
 	base http.RoundTripper
 }
 
 func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if !trace.SpanFromContext(req.Context()).IsRecording() {
+	if !trace.SpanContextFromContext(req.Context()).IsValid() {
 		return t.base.RoundTrip(req)
 	}
 	req = req.Clone(req.Context())
@@ -300,7 +301,11 @@ var healthCheckHTTPClient = &http.Client{
 func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthCheckReport {
 	ctx, span := orc.tracer.Span(ctx, "PhylumHealthCheck", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
-	sopts := orc.txConfigs(ctx, shiroclient.WithHTTPClient(healthCheckHTTPClient))
+	var extra []shiroclient.Config
+	if orc.tracer.Enabled() {
+		extra = append(extra, shiroclient.WithHTTPClient(healthCheckHTTPClient))
+	}
+	sopts := orc.txConfigs(ctx, extra...)
 	ccHealth, err := orc.phylum.GetHealthCheck(ctx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return []*healthcheck.HealthCheckReport{{

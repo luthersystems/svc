@@ -86,6 +86,12 @@ func newTracedGatewayOracle(t *testing.T) (*Oracle, *tracetest.InMemoryExporter,
 // tracing configured by traceOpts (none: tracing off).
 func newGatewayOracle(t *testing.T, traceOpts ...opttrace.Option) (*Oracle, *fakeGateway) {
 	t.Helper()
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+	})
 	gw := &fakeGateway{}
 	srv := httptest.NewServer(gw)
 	t.Cleanup(srv.Close)
@@ -285,4 +291,32 @@ func TestHealthCheckTracingOffForwardsNoTrace(t *testing.T) {
 	require.Len(t, hdrs, 1)
 	require.Empty(t, hdrs[0].Get("traceparent"), "tracing off forwarded traceparent")
 	require.Empty(t, hdrs[0].Get("tracestate"), "tracing off forwarded tracestate")
+}
+
+// TestHealthCheckForwardsUnsampledTrace checks that, with tracing on, an
+// unsampled caller trace still reaches the gateway, unsampled, so the
+// gateway keeps the caller's sampling decision instead of starting a new
+// root trace.
+func TestHealthCheckForwardsUnsampledTrace(t *testing.T) {
+	orc, _, gw := newTracedGatewayOracle(t)
+
+	remote := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{0x5, 0x6, 0x7},
+		SpanID:  trace.SpanID{0x8, 0x9, 0xa},
+		Remote:  true,
+	})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, healthCheckPath, nil)
+	propagation.TraceContext{}.Inject(
+		trace.ContextWithSpanContext(context.Background(), remote),
+		propagation.HeaderCarrier(req.Header))
+	require.NotEmpty(t, req.Header.Get("traceparent"))
+	rec := httptest.NewRecorder()
+	orc.healthCheckHandler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	reqs := gw.requests()
+	require.Len(t, reqs, 1)
+	require.True(t, reqs[0].IsValid(), "unsampled caller trace was not forwarded")
+	require.Equal(t, remote.TraceID(), reqs[0].TraceID())
+	require.False(t, reqs[0].IsSampled(), "forwarded trace became sampled")
 }
