@@ -124,6 +124,7 @@ func TestHealthCheckPropagatesTrace(t *testing.T) {
 
 	spans := exp.GetSpans()
 	hc := findSpan(t, spans, "HealthCheck")
+	require.Equal(t, trace.SpanKindServer, hc.SpanKind)
 
 	var children []tracetest.SpanStub
 	for _, s := range spans {
