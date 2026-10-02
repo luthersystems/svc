@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -25,6 +26,9 @@ import (
 //	kinds:<ref>-><cand>    error kinds; "ok" is success, "*" is any kind
 //	tpl:<substring>        the template contains substring
 //	field:<kind|msg|out>   the first differing field
+//	candout:<substring>    the candidate's output contains substring
+//	arch:<goarch>          the harness runs on GOARCH goarch; arch:!<goarch>
+//	                       means any other GOARCH
 type Allowlist struct {
 	Entries []*AllowEntry
 }
@@ -111,7 +115,11 @@ func ParseAllowlist(b []byte, now time.Time) (*Allowlist, error) {
 				if _, _, ok := strings.Cut(arg, "->"); !ok {
 					return nil, fmt.Errorf("allowlist line %d: kinds wants ref->cand", n)
 				}
-			case "tpl":
+			case "tpl", "candout":
+			case "arch":
+				if strings.TrimPrefix(arg, "!") == "" {
+					return nil, fmt.Errorf("allowlist line %d: arch wants a GOARCH", n)
+				}
 			case "field":
 				if arg != "kind" && arg != "msg" && arg != "out" {
 					return nil, fmt.Errorf("allowlist line %d: field wants kind, msg or out", n)
@@ -170,6 +178,14 @@ func (e *AllowEntry) matches(c Case, ref, cand Result, m *Mismatch) bool {
 			ok = strings.Contains(c.Template, cd.arg)
 		case "field":
 			ok = m.Field == cd.arg
+		case "candout":
+			ok = strings.Contains(cand.Out, cd.arg)
+		case "arch":
+			if a, neg := strings.CutPrefix(cd.arg, "!"); neg {
+				ok = goarch != a
+			} else {
+				ok = goarch == a
+			}
 		}
 		if !ok {
 			return false
@@ -177,6 +193,9 @@ func (e *AllowEntry) matches(c Case, ref, cand Result, m *Mismatch) bool {
 	}
 	return true
 }
+
+// goarch is the architecture arch: conditions test; tests override it.
+var goarch = runtime.GOARCH
 
 func kindMatch(pat string, k ErrKind) bool {
 	return pat == "*" || pat == kindName(k)

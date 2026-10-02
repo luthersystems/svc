@@ -4,7 +4,8 @@
 #   pattern | expires | issue | reason
 #
 # pattern conditions (joined by &&): case:<glob>  kinds:<ref>-><cand>
-# tpl:<substring>  field:<kind|msg|out>. expires is YYYY-MM-DD or never.
+# tpl:<substring>  field:<kind|msg|out>  candout:<substring>
+# arch:<goarch> or arch:!<goarch>. expires is YYYY-MM-DD or never.
 # Every entry needs an issue and a reason. Keep this list short: anything
 # not here must render byte for byte as the reference does.
 
@@ -24,3 +25,15 @@ kinds:panic->render | never | #106 | a Go runtime panic in the reference becomes
 # (DefaultLimits); raymond had no limits and overflowed the Go stack on
 # deep nesting (D4), which kills the process.
 kinds:*->limit | never | #106 | D4: the engine enforces Limits that raymond did not have
+
+# to-int on NaN, +-Inf or a float outside [-2^63, 2^63) is CPU-dependent in
+# the reference (Go leaves the conversion undefined: amd64 gives MinInt64,
+# arm64 gives 0 for NaN and saturates otherwise). The engine pins the amd64
+# result on every CPU (hbs/DETERMINISM.md), so these differ only when the
+# harness runs on another architecture. Examples: {{to-int (div 1 0)}},
+# {{to-int (div -1 0)}}, {{to-int (times -1 (div 1 0))}} (+-Inf);
+# {{to-int (div 0 0)}}, {{to-int (mod 1 0)}} (NaN); {{to-int x}} for a
+# context x of 1e19, -1e19, 2^63 or any |x| >= 2^63 except exactly -2^63;
+# any to-int argument computed by times, div, mod, plus or minus that is
+# non-finite or out of int64 range. On amd64 nothing here matches.
+arch:!amd64 && tpl:to-int && field:out && candout:-9223372036854775808 | never | #110 | to-int on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64

@@ -179,10 +179,40 @@ field:out && case:g/* | 2027-01-01 | #3 | out only
 		"case:a | soon | #1 | r",
 		"kinds:a | never | #1 | r",
 		"case:a | never | #1",
+		"arch:! | never | #1 | r",
 	} {
 		_, err := ParseAllowlist([]byte(bad), now)
 		require.Error(t, err, bad)
 	}
+}
+
+func TestAllowlistArch(t *testing.T) {
+	al, err := ParseAllowlist([]byte(`
+arch:!amd64 && candout:-9 | never | #1 | not amd64
+arch:riscv64 && tpl:r | never | #2 | riscv64 only
+`), time.Now())
+	require.NoError(t, err)
+	defer func(a string) { goarch = a }(goarch)
+	c := Case{Name: "g/x", Template: "{{to-int x}}"}
+	pinned := Result{Out: "-9223372036854775808"}
+	goarch = "amd64"
+	require.Nil(t, al.Match(c, Result{Out: "0"}, pinned))
+	goarch = "arm64"
+	require.Equal(t, "#1", al.Match(c, Result{Out: "0"}, pinned).Issue)
+	require.Nil(t, al.Match(c, Result{Out: "0"}, Result{Out: "1"}), "candout must hold")
+	goarch = "riscv64"
+	require.Equal(t, "#2", al.Match(Case{Template: "r"}, Result{Out: "0"}, Result{Out: "1"}).Issue)
+
+	// The checked-in to-int entry: arm64 saturates +Inf where the engine
+	// pins the amd64 result.
+	builtin, err := CheckedInAllowlist(time.Now())
+	require.NoError(t, err)
+	inf := Case{Name: "g/inf", Template: "{{to-int (div 1 0)}}"}
+	arm := Result{Out: "9223372036854775807"}
+	goarch = "arm64"
+	require.NotNil(t, builtin.Match(inf, arm, pinned))
+	goarch = "amd64"
+	require.Nil(t, builtin.Match(inf, arm, pinned))
 }
 
 func TestTxtarRoundTrip(t *testing.T) {
