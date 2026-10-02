@@ -202,17 +202,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		panic(err)
 	}
 
-	grpcServer := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			grpclogging.LogrusMethodInterceptor(
-				orc.logBase,
-				grpclogging.UpperBoundTimer(time.Millisecond),
-				grpclogging.RealTime()),
-			orc.txctxInterceptor, // Ensures transaction context is set
-			svcerr.AppErrorUnaryInterceptor(orc.Log),
-		)),
-	)
+	grpcServer := orc.newGRPCServer()
 
 	grpcConfig.RegisterServiceServer(grpcServer)
 
@@ -325,4 +315,21 @@ func getGRPCHeader(ctx context.Context, grpcHeaderKey string) string {
 		return ""
 	}
 	return values[0]
+}
+
+// newGRPCServer builds the oracle's grpc server. Its otel handler continues a
+// trace found in the request metadata using the global propagator, which
+// opttrace.Tracer.SetGlobalTracer installs when tracing is configured.
+func (orc *Oracle) newGRPCServer() *grpc.Server {
+	return grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			grpclogging.LogrusMethodInterceptor(
+				orc.logBase,
+				grpclogging.UpperBoundTimer(time.Millisecond),
+				grpclogging.RealTime()),
+			orc.txctxInterceptor, // Ensures transaction context is set
+			svcerr.AppErrorUnaryInterceptor(orc.Log),
+		)),
+	)
 }

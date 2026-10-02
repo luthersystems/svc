@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -55,4 +57,24 @@ func TestIsTraceContextWithoutELPSFilter(t *testing.T) {
 		ctx := trace.ContextWithSpanContext(context.Background(), sc)
 		assert.False(t, IsTraceContextWithoutELPSFilter(ctx))
 	})
+}
+
+// TestSetGlobalTracerPropagator checks that SetGlobalTracer installs the W3C
+// trace context and baggage propagator only when tracing is configured.
+func TestSetGlobalTracerPropagator(t *testing.T) {
+	ctx := context.Background()
+
+	off, err := New(ctx, "test")
+	require.NoError(t, err)
+	off.SetGlobalTracer()
+	assert.Empty(t, otel.GetTextMapPropagator().Fields(),
+		"tracing off must leave the no-op default propagator")
+
+	on, err := New(ctx, "test", WithExporter(tracetest.NewInMemoryExporter()), WithSyncExport())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = on.Shutdown(ctx) })
+	on.SetGlobalTracer()
+	assert.ElementsMatch(t, Propagator().Fields(), otel.GetTextMapPropagator().Fields())
+	assert.Contains(t, otel.GetTextMapPropagator().Fields(), "traceparent")
+	assert.Contains(t, otel.GetTextMapPropagator().Fields(), "baggage")
 }

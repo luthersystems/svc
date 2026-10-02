@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
@@ -210,9 +211,23 @@ func (t *Tracer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// SetGlobalTracer sets the global tracer provider to this tracer instance
+// SetGlobalTracer sets the global tracer provider to this tracer instance and,
+// when tracing is configured, the global propagator to W3C trace context and
+// baggage, so instrumentation that reads the globals (otelgrpc, the oracle's
+// health check) continues incoming traces and propagates outgoing ones.
+//
+// When tracing is not configured it changes neither global: the propagator
+// stays the no-op default, so a service without tracing neither continues
+// nor forwards a caller's trace headers.
 func (t *Tracer) SetGlobalTracer() {
 	if t != nil && t.exportTP != nil {
 		otel.SetTracerProvider(t.exportTP)
+		otel.SetTextMapPropagator(Propagator())
 	}
+}
+
+// Propagator returns the propagator SetGlobalTracer installs: W3C trace
+// context and baggage.
+func Propagator() propagation.TextMapPropagator {
+	return propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 }
