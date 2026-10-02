@@ -231,3 +231,29 @@ func TestRunReportsNondeterminism(t *testing.T) {
 	require.Equal(t, Diff, cr.Outcome)
 	require.Equal(t, "determinism", cr.Mismatch.Field)
 }
+
+// TestRefFatal checks the templates that crash the reference: RefFatal
+// must flag each (so no harness renders it through hbref), and a built-in
+// candidate must answer each with an error.
+func TestRefFatal(t *testing.T) {
+	cases, err := LoadCorpusFile("testdata/ref-fatal.txtar")
+	require.NoError(t, err)
+	require.NotEmpty(t, cases)
+	for _, c := range cases {
+		require.True(t, RefFatal(c.Template), c.Name)
+		if DefaultCandidate == nil {
+			continue
+		}
+		r := DefaultCandidate(c.Template, c.Context)
+		if r.ErrKind != KindRender && r.ErrKind != KindLimit {
+			t.Errorf("%s: candidate gave %s, want a render or limit error", c.Name, describe(r))
+		}
+	}
+	// The corpus itself must hold no fatal template.
+	all, groups := loadCorpus(t)
+	for _, g := range groups {
+		for _, c := range all[g] {
+			require.False(t, RefFatal(c.Template), "%s would crash the reference; move it to ref-fatal.txtar", c.Name)
+		}
+	}
+}
