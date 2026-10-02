@@ -21,6 +21,10 @@ type parser struct {
 	// Lexer
 	lex *lexer.Lexer
 
+	// Tokens are allocated from slabs: one allocation per tokenSlab
+	// tokens. A slab is never reused, so token pointers stay valid.
+	slab []lexer.Token
+
 	// Tokens parsed but not consumed yet; tokens[head:] are live
 	tokens []*lexer.Token
 	head   int
@@ -32,6 +36,9 @@ type parser struct {
 	// All tokens have been retreieved from lexer
 	lexOver bool
 }
+
+// tokenSlab is the number of tokens allocated at once.
+const tokenSlab = 64
 
 // LimitError reports a template nested deeper than the limit. The
 // prescan (Depth) reports it before parsing; the parser's own depth
@@ -901,10 +908,15 @@ func (p *parser) ensure(index int) {
 
 	for len(p.tokens) < nb {
 		// fetch next token
-		tok := p.lex.NextToken()
+		if len(p.slab) == cap(p.slab) {
+			// start small for small templates, then grow to tokenSlab
+			p.slab = make([]lexer.Token, 0, min(max(2*cap(p.slab), 8), tokenSlab))
+		}
+		p.slab = append(p.slab, p.lex.NextToken())
+		tok := &p.slab[len(p.slab)-1]
 
 		// queue it
-		p.tokens = append(p.tokens, &tok)
+		p.tokens = append(p.tokens, tok)
 
 		if (tok.Kind == lexer.TokenEOF) || (tok.Kind == lexer.TokenError) {
 			p.lexOver = true
