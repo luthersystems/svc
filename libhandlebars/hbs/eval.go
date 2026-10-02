@@ -503,10 +503,15 @@ func (r *renderer) visitBlock(node *ast.BlockStatement) {
 		if node.Program != nil {
 			if arr, ok := v.([]any); ok {
 				frame := &dataFrame{parent: r.frame, iter: true}
+				boxKey := len(node.Program.BlockParams) > 1
 				for i, e := range arr {
 					r.step()
 					frame.setIter(len(arr), i, nil)
-					r.evalProgram(node.Program, e, frame, i)
+					var key any
+					if boxKey {
+						key = i
+					}
+					r.evalProgram(node.Program, e, frame, key)
 				}
 			} else {
 				r.evalProgram(node.Program, v, nil, nil)

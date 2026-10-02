@@ -208,6 +208,14 @@ func (c *hcall) evalBlock(ctx any, data *dataFrame, key any) {
 	}
 }
 
+// wantsKey reports whether the current block names a second block
+// parameter, the only reader of an iteration key. Boxing the key only then
+// keeps #each over arrays allocation-free.
+func (c *hcall) wantsKey() bool {
+	block := c.r.curBlock()
+	return block != nil && block.Program != nil && len(block.Program.BlockParams) > 1
+}
+
 func (c *hcall) fn()            { c.evalBlock(nil, nil, nil) }
 func (c *hcall) fnWith(ctx any) { c.evalBlock(ctx, nil, nil) }
 
@@ -274,10 +282,15 @@ func helperEach(c *hcall) any {
 	switch x := ctx.(type) {
 	case []any:
 		frame := &dataFrame{parent: r.frame, iter: true}
+		boxKey := c.wantsKey()
 		for i, e := range x {
 			r.step()
 			frame.setIter(len(x), i, nil)
-			c.evalBlock(e, frame, i)
+			var key any
+			if boxKey {
+				key = i
+			}
+			c.evalBlock(e, frame, key)
 		}
 	case map[string]any:
 		keys := make([]string, 0, len(x))

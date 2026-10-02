@@ -41,7 +41,10 @@ type gen struct {
 	depth int
 }
 
-func newGen(s1, s2 uint64) *gen { return &gen{r: rand.New(rand.NewPCG(s1, s2))} }
+// newGen is seeded so a failure reproduces; it needs no cryptographic randomness.
+func newGen(s1, s2 uint64) *gen {
+	return &gen{r: rand.New(rand.NewPCG(s1, s2))} //nolint:gosec // reproducible test input
+}
 
 func (g *gen) pick(xs []string) string { return xs[g.r.IntN(len(xs))] }
 
