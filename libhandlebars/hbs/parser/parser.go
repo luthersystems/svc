@@ -199,7 +199,9 @@ func errToken(tok *lexer.Token, msg string) {
 
 // errNode panics because of an unexpected Token kind
 func errExpected(expect lexer.TokenKind, tok *lexer.Token) {
-	errPanic(fmt.Errorf("Expecting %s, got: '%s'", expect, tok), tok.Line)
+	// raymond's text, capital included: error messages must not change
+	msg := fmt.Sprintf("Expecting %s, got: '%s'", expect, tok)
+	errPanic(errors.New(msg), tok.Line)
 }
 
 // program : statement*
