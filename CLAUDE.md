@@ -59,7 +59,7 @@ Single GitHub Actions workflow (`.github/workflows/svc.yml`):
 - **Triggers**: PRs targeting `main` only
 - **Runner**: `ubuntu-22.04`, Go from `go.mod` (`go-version-file`)
 - **Steps**: checkout → setup-go → clean modcache → golangci-lint (v2.13.2, v2 config) → `make citest`
-- **Linter config**: `.golangci.yml` — the luthersystems/elps linter set (gosec included), 5m timeout, no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/`; `libhandlebars/internal/raymondref/` not linted
+- **Linter config**: `.golangci.yml` — the luthersystems/elps linter set (gosec included), 5m timeout, no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
 - **No deploy/release automation** — this is a library repo
 
 ## Branch Protection

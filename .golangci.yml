@@ -68,14 +68,16 @@ linters:
   exclusions:
     paths:
       # A frozen, byte-for-byte copy of the luthersystems/raymond fork, kept
-      # only as the reference the new engine is checked against. It must not
+      # only as the reference the new engine is checked against. It arrives
+      # with the Handlebars engine work (#106); until then this matches nothing. It must not
       # be edited, so it is not linted. Delete the directory, not this line,
       # when the reference is retired.
       - '^libhandlebars/internal/raymondref/'
     rules:
       # --- fieldalignment scope -------------------------------------------
       # Enforced only in the handlebars engine (libhandlebars/hbs/...), the
-      # one hot path in svc (see govet above). The guard covers the whole
+      # one hot path in svc (see govet above). The engine arrives with #106;
+      # until then fieldalignment reports nothing. The guard covers the whole
       # tree, not just today's hot files, so a struct added there is checked
       # the day it lands. This exclusion can only shrink: to protect another
       # package, add it to the negative pattern and fix its findings.
