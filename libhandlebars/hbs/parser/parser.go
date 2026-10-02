@@ -2,10 +2,11 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
-	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
 	"github.com/luthersystems/svc/libhandlebars/hbs/lexer"
@@ -20,71 +21,170 @@ type parser struct {
 	// Lexer
 	lex *lexer.Lexer
 
-	// Root node
-	root ast.Node
+	// Tokens are allocated from slabs: one allocation per tokenSlab
+	// tokens. A slab is never reused, so token pointers stay valid.
+	slab []lexer.Token
 
-	// Tokens parsed but not consumed yet
+	// Tokens parsed but not consumed yet; tokens[head:] are live
 	tokens []*lexer.Token
+	head   int
+
+	// Nesting depth of the construct being parsed, and its limit (0: none)
+	depth    int
+	maxDepth int
 
 	// All tokens have been retreieved from lexer
 	lexOver bool
 }
 
-var (
-	rOpenComment  = regexp.MustCompile(`^\{\{~?!-?-?`)
-	rCloseComment = regexp.MustCompile(`-?-?~?\}\}$`)
-	rOpenAmp      = regexp.MustCompile(`^\{\{~?&`)
-)
+// tokenSlab is the number of tokens allocated at once.
+const tokenSlab = 64
 
-// new instanciates a new parser
-func new(input string) *parser {
-	return &parser{
-		lex: lexer.Scan(input),
-	}
+// LimitError reports a template nested deeper than the limit. The
+// prescan (Depth) reports it before parsing; the parser's own depth
+// counter reports it too, as a second line of defence.
+type LimitError struct {
+	Msg string
+}
+
+func (e *LimitError) Error() string { return e.Msg }
+
+// DepthError returns the error for nesting deeper than maxDepth, reached
+// at the given line. Depth and the parser use the same message.
+func DepthError(maxDepth, line int) *LimitError {
+	return &LimitError{Msg: fmt.Sprintf("Parse error on line %d:\ntemplate nesting depth exceeds limit of %d", line, maxDepth)}
 }
 
 // Parse analyzes given input and returns the AST root node.
-func Parse(input string) (result *ast.Program, err error) {
-	// recover error
-	defer errRecover(&err)
+func Parse(input string) (*ast.Program, error) {
+	return ParseLimit(input, 0)
+}
 
-	parser := new(input)
+// ParseLimit is Parse with a nesting limit: a template whose blocks
+// (counting each else-if link), raw blocks and subexpressions nest deeper
+// than maxDepth fails with a *LimitError. maxDepth <= 0 means no limit.
+//
+// The parser recurses once per nesting level, so callers taking untrusted
+// input must check Depth first and pass the same limit here.
+func ParseLimit(input string, maxDepth int) (*ast.Program, error) {
+	var result *ast.Program
+	var err error
 
-	// parse
-	result = parser.parseProgram()
+	func() {
+		// recover error
+		defer errRecover(&err)
 
-	// check last token
-	token := parser.shift()
-	if token.Kind != lexer.TokenEOF {
-		// Parsing ended before EOF
-		errToken(token, "Syntax error")
+		p := &parser{
+			lex:      lexer.Scan(input),
+			maxDepth: maxDepth,
+		}
+
+		// parse
+		result = p.parseProgram()
+
+		// check last token
+		token := p.shift()
+		if token.Kind != lexer.TokenEOF {
+			// Parsing ended before EOF
+			errToken(token, "Syntax error")
+		}
+
+		// fix whitespaces
+		processWhitespaces(result)
+	}()
+
+	if err != nil {
+		return nil, err
 	}
+	return result, nil
+}
 
-	// fix whitespaces
-	processWhitespaces(result)
+// Depth scans input's tokens without recursion, in time linear in its
+// length, and reports a *LimitError at the first token that takes the
+// nesting depth (as ParseLimit counts it) past maxDepth. It stops at the
+// first lexer error, where the parser stops too.
+func Depth(input string, maxDepth int) error {
+	type frame struct{ links int }
+	var blocks []frame
+	depth, sexprs, raw := 0, 0, false
 
-	// named returned values
-	return
+	l := lexer.Scan(input)
+	for {
+		tok := l.NextToken()
+		switch tok.Kind {
+		case lexer.TokenEOF, lexer.TokenError:
+			return nil
+		case lexer.TokenOpenBlock, lexer.TokenOpenInverse:
+			blocks = append(blocks, frame{})
+			depth++
+		case lexer.TokenOpenInverseChain:
+			if len(blocks) > 0 {
+				blocks[len(blocks)-1].links++
+			}
+			depth++
+		case lexer.TokenOpenEndBlock:
+			if len(blocks) > 0 {
+				depth -= 1 + blocks[len(blocks)-1].links
+				blocks = blocks[:len(blocks)-1]
+			}
+			continue
+		case lexer.TokenOpenRawBlock:
+			raw = true
+			depth++
+		case lexer.TokenOpenEndRawBlock:
+			if raw {
+				raw = false
+				depth--
+			}
+			continue
+		case lexer.TokenOpenSexpr:
+			sexprs++
+			depth++
+		case lexer.TokenCloseSexpr:
+			if sexprs > 0 {
+				sexprs--
+				depth--
+			}
+			continue
+		default:
+			continue
+		}
+		if maxDepth > 0 && depth > maxDepth {
+			return DepthError(maxDepth, tok.Line)
+		}
+	}
+}
+
+// enter records one more level of nesting, opened by tok.
+func (p *parser) enter(tok *lexer.Token) {
+	p.depth++
+	if p.maxDepth > 0 && p.depth > p.maxDepth {
+		panic(DepthError(p.maxDepth, tok.Line))
+	}
+}
+
+// leave closes the level opened by the matching enter.
+func (p *parser) leave() {
+	p.depth--
 }
 
 // errRecover recovers parsing panic
 func errRecover(errp *error) {
 	e := recover()
-	if e != nil {
-		switch err := e.(type) {
-		case runtime.Error:
-			panic(e)
-		case error:
-			*errp = err
-		default:
-			panic(e)
-		}
+	if e == nil {
+		return
 	}
+	var rerr runtime.Error
+	err, ok := e.(error)
+	if !ok || errors.As(err, &rerr) {
+		panic(e)
+	}
+	*errp = err
 }
 
 // errPanic panics
 func errPanic(err error, line int) {
-	panic(fmt.Errorf("Parse error on line %d:\n%s", line, err))
+	panic(fmt.Errorf("Parse error on line %d:\n%w", line, err))
 }
 
 // errNode panics with given node infos
@@ -99,7 +199,9 @@ func errToken(tok *lexer.Token, msg string) {
 
 // errNode panics because of an unexpected Token kind
 func errExpected(expect lexer.TokenKind, tok *lexer.Token) {
-	errPanic(fmt.Errorf("Expecting %s, got: '%s'", expect, tok), tok.Line)
+	// raymond's text, capital included: error messages must not change
+	msg := fmt.Sprintf("Expecting %s, got: '%s'", expect, tok)
+	errPanic(errors.New(msg), tok.Line)
 }
 
 // program : statement*
@@ -141,6 +243,8 @@ func (p *parser) parseStatement() ast.Node {
 	case lexer.TokenComment:
 		// COMMENT
 		result = p.parseComment()
+	default:
+		// isStatement admits no other kind
 	}
 
 	return result
@@ -157,9 +261,9 @@ func (p *parser) isStatement() bool {
 		lexer.TokenOpenInverse, lexer.TokenOpenRawBlock, lexer.TokenOpenPartial,
 		lexer.TokenContent, lexer.TokenComment:
 		return true
+	default:
+		return false
 	}
-
-	return false
 }
 
 // content : CONTENT
@@ -179,13 +283,45 @@ func (p *parser) parseComment() *ast.CommentStatement {
 	// COMMENT
 	tok := p.shift()
 
-	value := rOpenComment.ReplaceAllString(tok.Val, "")
-	value = rCloseComment.ReplaceAllString(value, "")
+	value := trimCommentClose(trimCommentOpen(tok.Val))
 
 	result := ast.NewCommentStatement(tok.Pos, tok.Line, value)
 	result.Strip = ast.NewStripForStr(tok.Val)
 
 	return result
+}
+
+// trimCommentOpen removes ^\{\{~?!-?-? (raymond's rOpenComment).
+func trimCommentOpen(s string) string {
+	t, ok := strings.CutPrefix(s, "{{")
+	if !ok {
+		return s
+	}
+	t = strings.TrimPrefix(t, "~")
+	t, ok = strings.CutPrefix(t, "!")
+	if !ok {
+		return s
+	}
+	t = strings.TrimPrefix(t, "-")
+	return strings.TrimPrefix(t, "-")
+}
+
+// trimCommentClose removes -?-?~?\}\}$ (raymond's rCloseComment). The
+// leftmost match is the longest suffix of that shape.
+func trimCommentClose(s string) string {
+	t, ok := strings.CutSuffix(s, "}}")
+	if !ok {
+		return s
+	}
+	t = strings.TrimSuffix(t, "~")
+	t = strings.TrimSuffix(t, "-")
+	return strings.TrimSuffix(t, "-")
+}
+
+// isOpenAmp matches ^\{\{~?& (raymond's rOpenAmp).
+func isOpenAmp(s string) bool {
+	t, ok := strings.CutPrefix(s, "{{")
+	return ok && strings.HasPrefix(strings.TrimPrefix(t, "~"), "&")
 }
 
 // param* hash?
@@ -225,6 +361,8 @@ func (p *parser) parseExpression(tok *lexer.Token) *ast.Expression {
 func (p *parser) parseRawBlock() *ast.BlockStatement {
 	// OPEN_RAW_BLOCK
 	tok := p.shift()
+	p.enter(tok)
+	defer p.leave()
 
 	result := ast.NewBlockStatement(tok.Pos, tok.Line)
 
@@ -278,6 +416,9 @@ func (p *parser) parseRawBlock() *ast.BlockStatement {
 
 // block : openBlock program inverseChain? closeBlock
 func (p *parser) parseBlock() *ast.BlockStatement {
+	p.enter(p.next())
+	defer p.leave()
+
 	// openBlock
 	result, blockParams := p.parseOpenBlock()
 
@@ -304,7 +445,8 @@ func (p *parser) parseBlock() *ast.BlockStatement {
 // TODO: This was totally cargo culted ! CHECK THAT !
 //
 // cf. prepareBlock() in:
-//   https://github.com/wycats/handlebars.js/blob/master/lib/handlebars/compiler/helper.js
+//
+//	https://github.com/wycats/handlebars.js/blob/master/lib/handlebars/compiler/helper.js
 func setBlockInverseStrip(block *ast.BlockStatement) {
 	if block.Inverse == nil {
 		return
@@ -320,6 +462,9 @@ func setBlockInverseStrip(block *ast.BlockStatement) {
 
 // block : openInverse program inverseAndProgram? closeBlock
 func (p *parser) parseInverse() *ast.BlockStatement {
+	p.enter(p.next())
+	defer p.leave()
+
 	// openInverse
 	result, blockParams := p.parseOpenBlock()
 
@@ -361,12 +506,16 @@ func (p *parser) parseOpenBlockExpression(tok *lexer.Token) (*ast.BlockStatement
 }
 
 // inverseChain : openInverseChain program inverseChain?
-//              | inverseAndProgram
+//
+//	| inverseAndProgram
 func (p *parser) parseInverseChain() *ast.Program {
 	if p.isInverse() {
 		// inverseAndProgram
 		return p.parseInverseAndProgram()
 	}
+
+	p.enter(p.next())
+	defer p.leave()
 
 	result := ast.NewProgram(p.next().Pos, p.next().Line)
 
@@ -462,7 +611,8 @@ func (p *parser) parseCloseBlock(block *ast.BlockStatement) {
 }
 
 // mustache : OPEN helperName param* hash? CLOSE
-//          | OPEN_UNESCAPED helperName param* hash? CLOSE_UNESCAPED
+//
+//	| OPEN_UNESCAPED helperName param* hash? CLOSE_UNESCAPED
 func (p *parser) parseMustache() *ast.MustacheStatement {
 	// OPEN | OPEN_UNESCAPED
 	tok := p.shift()
@@ -472,10 +622,7 @@ func (p *parser) parseMustache() *ast.MustacheStatement {
 		closeToken = lexer.TokenCloseUnescaped
 	}
 
-	unescaped := false
-	if (tok.Kind == lexer.TokenOpenUnescaped) || (rOpenAmp.MatchString(tok.Val)) {
-		unescaped = true
-	}
+	unescaped := (tok.Kind == lexer.TokenOpenUnescaped) || isOpenAmp(tok.Val)
 
 	result := ast.NewMustacheStatement(tok.Pos, tok.Line, unescaped)
 
@@ -553,6 +700,8 @@ func (p *parser) parseParams() []ast.Node {
 func (p *parser) parseSexpr() *ast.SubExpression {
 	// OPEN_SEXPR
 	tok := p.shift()
+	p.enter(tok)
+	defer p.leave()
 
 	result := ast.NewSubExpression(tok.Pos, tok.Line)
 
@@ -612,7 +761,7 @@ func (p *parser) parseBlockParams() []string {
 	var result []string
 
 	// OPEN_BLOCK_PARAMS
-	tok := p.shift()
+	p.shift()
 
 	// ID+
 	for p.isID() {
@@ -624,7 +773,7 @@ func (p *parser) parseBlockParams() []string {
 	}
 
 	// CLOSE_BLOCK_PARAMS
-	tok = p.shift()
+	tok := p.shift()
 	if tok.Kind != lexer.TokenCloseBlockParams {
 		errExpected(lexer.TokenCloseBlockParams, tok)
 	}
@@ -665,26 +814,17 @@ func (p *parser) parseHelperName() ast.Node {
 }
 
 // parseNumber parses a number
-func parseNumber(tok *lexer.Token) (result float64, isInt bool) {
-	var valInt int
-	var err error
-
-	valInt, err = strconv.Atoi(tok.Val)
-	if err == nil {
-		isInt = true
-
-		result = float64(valInt)
-	} else {
-		isInt = false
-
-		result, err = strconv.ParseFloat(tok.Val, 64)
-		if err != nil {
-			errToken(tok, fmt.Sprintf("Failed to parse number: %s", tok.Val))
-		}
+func parseNumber(tok *lexer.Token) (float64, bool) {
+	if valInt, err := strconv.Atoi(tok.Val); err == nil {
+		return float64(valInt), true
 	}
 
-	// named returned values
-	return
+	result, err := strconv.ParseFloat(tok.Val, 64)
+	if err != nil {
+		errToken(tok, "Failed to parse number: "+tok.Val)
+	}
+
+	return result, false
 }
 
 // Returns true if next tokens represent a `helperName`
@@ -692,9 +832,9 @@ func (p *parser) isHelperName() bool {
 	switch p.next().Kind {
 	case lexer.TokenBoolean, lexer.TokenNumber, lexer.TokenString, lexer.TokenData, lexer.TokenID:
 		return true
+	default:
+		return false
 	}
-
-	return false
 }
 
 // partialName : helperName | sexpr
@@ -713,7 +853,8 @@ func (p *parser) parseDataName() *ast.PathExpression {
 
 // path : pathSegments
 // pathSegments : pathSegments SEP ID
-//              | ID
+//
+//	| ID
 func (p *parser) parsePath(data bool) *ast.PathExpression {
 	var tok *lexer.Token
 
@@ -724,12 +865,17 @@ func (p *parser) parsePath(data bool) *ast.PathExpression {
 	}
 
 	result := ast.NewPathExpression(tok.Pos, tok.Line, data)
-	result.Part(tok.Val)
+
+	// Build Original once: Part would copy it for every segment.
+	var original strings.Builder
+	original.WriteString(result.Original)
+	original.WriteString(tok.Val)
+	result.AddPart(tok.Val)
 
 	for p.isPathSep() {
 		// SEP
 		tok = p.shift()
-		result.Sep(tok.Val)
+		original.WriteString(tok.Val)
 
 		// ID
 		tok = p.shift()
@@ -737,15 +883,18 @@ func (p *parser) parsePath(data bool) *ast.PathExpression {
 			errExpected(lexer.TokenID, tok)
 		}
 
-		result.Part(tok.Val)
+		original.WriteString(tok.Val)
+		result.AddPart(tok.Val)
 
 		if len(result.Parts) > 0 {
 			switch tok.Val {
 			case "..", ".", "this":
-				errToken(tok, "Invalid path: "+result.Original)
+				errToken(tok, "Invalid path: "+original.String())
 			}
 		}
 	}
+
+	result.Original = original.String()
 
 	return result
 }
@@ -757,14 +906,19 @@ func (p *parser) ensure(index int) {
 		return
 	}
 
-	nb := index + 1
+	nb := p.head + index + 1
 
 	for len(p.tokens) < nb {
 		// fetch next token
-		tok := p.lex.NextToken()
+		if len(p.slab) == cap(p.slab) {
+			// start small for small templates, then grow to tokenSlab
+			p.slab = make([]lexer.Token, 0, min(max(2*cap(p.slab), 8), tokenSlab))
+		}
+		p.slab = append(p.slab, p.lex.NextToken())
+		tok := &p.slab[len(p.slab)-1]
 
 		// queue it
-		p.tokens = append(p.tokens, &tok)
+		p.tokens = append(p.tokens, tok)
 
 		if (tok.Kind == lexer.TokenEOF) || (tok.Kind == lexer.TokenError) {
 			p.lexOver = true
@@ -777,14 +931,14 @@ func (p *parser) ensure(index int) {
 func (p *parser) have(nb int) bool {
 	p.ensure(nb - 1)
 
-	return len(p.tokens) >= nb
+	return len(p.tokens)-p.head >= nb
 }
 
 // nextAt returns next token at given index, without consuming it
 func (p *parser) nextAt(index int) *lexer.Token {
 	p.ensure(index)
 
-	return p.tokens[index]
+	return p.tokens[p.head+index]
 }
 
 // next returns next token without consuming it
@@ -800,7 +954,14 @@ func (p *parser) shift() *lexer.Token {
 
 	p.ensure(0)
 
-	result, p.tokens = p.tokens[0], p.tokens[1:]
+	result = p.tokens[p.head]
+	p.tokens[p.head] = nil
+	p.head++
+	if p.head == len(p.tokens) {
+		// drained: reuse the buffer from its start
+		p.tokens = p.tokens[:0]
+		p.head = 0
+	}
 
 	// check error token
 	if result.Kind == lexer.TokenError {

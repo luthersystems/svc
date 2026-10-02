@@ -1,34 +1,108 @@
 package parser
 
 import (
-	"regexp"
+	"strings"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/lexer"
 )
 
 // whitespaceVisitor walks through the AST to perform whitespace control
 //
 // The logic was shamelessly borrowed from:
-//   https://github.com/wycats/handlebars.js/blob/master/lib/handlebars/compiler/whitespace-control.js
+//
+//	https://github.com/wycats/handlebars.js/blob/master/lib/handlebars/compiler/whitespace-control.js
 type whitespaceVisitor struct {
 	isRootSeen bool
 }
 
-var (
-	rTrimLeft         = regexp.MustCompile(`^[ \t]*\r?\n?`)
-	rTrimLeftMultiple = regexp.MustCompile(`^\s+`)
+// The helpers below replace raymond's regular expressions. Each examines only
+// a run of whitespace at one end of the string, so whitespace control costs
+// time linear in the content it trims, not in the content's length per
+// regexp call. \s is ASCII [\t\n\f\r ] (lexer.IsSpace), as in Go's RE2.
 
-	rTrimRight         = regexp.MustCompile(`[ \t]+$`)
-	rTrimRightMultiple = regexp.MustCompile(`\s+$`)
+// trimLeft removes ^[ \t]*\r?\n?.
+func trimLeft(s string) string {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	if i < len(s) && s[i] == '\r' {
+		i++
+	}
+	if i < len(s) && s[i] == '\n' {
+		i++
+	}
+	return s[i:]
+}
 
-	rPrevWhitespace      = regexp.MustCompile(`\r?\n\s*?$`)
-	rPrevWhitespaceStart = regexp.MustCompile(`(^|\r?\n)\s*?$`)
+// trimLeftMultiple removes ^\s+.
+func trimLeftMultiple(s string) string {
+	i := 0
+	for i < len(s) && lexer.IsSpace(s[i]) {
+		i++
+	}
+	return s[i:]
+}
 
-	rNextWhitespace    = regexp.MustCompile(`^\s*?\r?\n`)
-	rNextWhitespaceEnd = regexp.MustCompile(`^\s*?(\r?\n|$)`)
+// trimRight removes [ \t]+$.
+func trimRight(s string) string {
+	return strings.TrimRight(s, " \t")
+}
 
-	rPartialIndent = regexp.MustCompile(`([ \t]+$)`)
-)
+// trimRightMultiple removes \s+$.
+func trimRightMultiple(s string) string {
+	i := len(s)
+	for i > 0 && lexer.IsSpace(s[i-1]) {
+		i--
+	}
+	return s[:i]
+}
+
+// trailingSpace returns the start of the trailing \s run of s and whether
+// that run holds a newline.
+func trailingSpace(s string) (int, bool) {
+	nl := false
+	i := len(s)
+	for i > 0 && lexer.IsSpace(s[i-1]) {
+		i--
+		if s[i] == '\n' {
+			nl = true
+		}
+	}
+	return i, nl
+}
+
+// leadingSpace returns the end of the leading \s run of s and whether that
+// run holds a newline.
+func leadingSpace(s string) (int, bool) {
+	nl := false
+	i := 0
+	for i < len(s) && lexer.IsSpace(s[i]) {
+		if s[i] == '\n' {
+			nl = true
+		}
+		i++
+	}
+	return i, nl
+}
+
+// isPrevWhitespaceStr matches \r?\n\s*?$, or (^|\r?\n)\s*?$ when start.
+func isPrevWhitespaceStr(s string, start bool) bool {
+	i, nl := trailingSpace(s)
+	return nl || (start && i == 0)
+}
+
+// isNextWhitespaceStr matches ^\s*?\r?\n, or ^\s*?(\r?\n|$) when end.
+func isNextWhitespaceStr(s string, end bool) bool {
+	i, nl := leadingSpace(s)
+	return nl || (end && i == len(s))
+}
+
+// partialIndent finds ([ \t]+$).
+func partialIndent(s string) string {
+	return s[len(trimRight(s)):]
+}
 
 // newWhitespaceVisitor instanciates a new whitespaceVisitor
 func newWhitespaceVisitor() *whitespaceVisitor {
@@ -64,12 +138,11 @@ func omitRight(body []ast.Node, i int, multiple bool) {
 
 	original := node.Value
 
-	r := rTrimLeft
 	if multiple {
-		r = rTrimLeftMultiple
+		node.Value = trimLeftMultiple(node.Value)
+	} else {
+		node.Value = trimLeft(node.Value)
 	}
-
-	node.Value = r.ReplaceAllString(node.Value, "")
 
 	node.RightStripped = (original != node.Value)
 }
@@ -96,12 +169,11 @@ func omitLeft(body []ast.Node, i int, multiple bool) bool {
 
 	original := node.Value
 
-	r := rTrimRight
 	if multiple {
-		r = rTrimRightMultiple
+		node.Value = trimRightMultiple(node.Value)
+	} else {
+		node.Value = trimRight(node.Value)
 	}
-
-	node.Value = r.ReplaceAllString(node.Value, "")
 
 	node.LeftStripped = (original != node.Value)
 
@@ -125,12 +197,7 @@ func isPrevWhitespaceProgram(body []ast.Node, i int, isRoot bool) bool {
 			return true
 		}
 
-		r := rPrevWhitespaceStart
-		if (i > 1) || !isRoot {
-			r = rPrevWhitespace
-		}
-
-		return r.MatchString(node.Value)
+		return isPrevWhitespaceStr(node.Value, (i <= 1) && isRoot)
 	}
 
 	return false
@@ -153,12 +220,7 @@ func isNextWhitespaceProgram(body []ast.Node, i int, isRoot bool) bool {
 			return true
 		}
 
-		r := rNextWhitespaceEnd
-		if (i+2 > len(body)) || !isRoot {
-			r = rNextWhitespace
-		}
-
-		return r.MatchString(node.Value)
+		return isNextWhitespaceStr(node.Value, (i+2 <= len(body)) && isRoot)
 	}
 
 	return false
@@ -203,7 +265,7 @@ func (v *whitespaceVisitor) VisitProgram(program *ast.Program) interface{} {
 					// Pull out the whitespace from the final line
 					if i > 0 {
 						if prevContent, ok := body[i-1].(*ast.ContentStatement); ok {
-							partial.Indent = rPartialIndent.FindString(prevContent.Original)
+							partial.Indent = partialIndent(prevContent.Original)
 						}
 					}
 				}

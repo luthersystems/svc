@@ -4,6 +4,7 @@ package ast
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // References:
@@ -152,15 +153,16 @@ func (s *Strip) String() string {
 
 // Program represents a program node.
 type Program struct {
-	NodeType
-	Loc
+	// whitespace management
+	Strip *Strip
 
 	Body        []Node // [ Statement ... ]
 	BlockParams []string
-	Chained     bool
 
-	// whitespace management
-	Strip *Strip
+	NodeType
+	Loc
+
+	Chained bool
 }
 
 // NewProgram instanciates a new program node.
@@ -173,7 +175,7 @@ func NewProgram(pos int, line int) *Program {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *Program) String() string {
-	return fmt.Sprintf("Program{Pos: %d}", node.Loc.Pos)
+	return fmt.Sprintf("Program{Pos: %d}", node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -192,14 +194,15 @@ func (node *Program) AddStatement(statement Node) {
 
 // MustacheStatement represents a mustache node.
 type MustacheStatement struct {
-	NodeType
-	Loc
-
-	Unescaped  bool
 	Expression *Expression
 
 	// whitespace management
 	Strip *Strip
+
+	NodeType
+	Loc
+
+	Unescaped bool
 }
 
 // NewMustacheStatement instanciates a new mustache node.
@@ -213,7 +216,7 @@ func NewMustacheStatement(pos int, line int, unescaped bool) *MustacheStatement 
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *MustacheStatement) String() string {
-	return fmt.Sprintf("Mustache{Pos: %d}", node.Loc.Pos)
+	return fmt.Sprintf("Mustache{Pos: %d}", node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -227,9 +230,6 @@ func (node *MustacheStatement) Accept(visitor Visitor) interface{} {
 
 // BlockStatement represents a block node.
 type BlockStatement struct {
-	NodeType
-	Loc
-
 	Expression *Expression
 
 	Program *Program
@@ -239,6 +239,9 @@ type BlockStatement struct {
 	OpenStrip    *Strip
 	InverseStrip *Strip
 	CloseStrip   *Strip
+
+	NodeType
+	Loc
 }
 
 // NewBlockStatement instanciates a new block node.
@@ -251,7 +254,7 @@ func NewBlockStatement(pos int, line int) *BlockStatement {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *BlockStatement) String() string {
-	return fmt.Sprintf("Block{Pos: %d}", node.Loc.Pos)
+	return fmt.Sprintf("Block{Pos: %d}", node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -265,16 +268,17 @@ func (node *BlockStatement) Accept(visitor Visitor) interface{} {
 
 // PartialStatement represents a partial node.
 type PartialStatement struct {
-	NodeType
-	Loc
-
-	Name   Node   // PathExpression | SubExpression
-	Params []Node // [ Expression ... ]
-	Hash   *Hash
+	Name Node // PathExpression | SubExpression
+	Hash *Hash
 
 	// whitespace management
 	Strip  *Strip
 	Indent string
+
+	Params []Node // [ Expression ... ]
+
+	NodeType
+	Loc
 }
 
 // NewPartialStatement instanciates a new partial node.
@@ -287,7 +291,7 @@ func NewPartialStatement(pos int, line int) *PartialStatement {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *PartialStatement) String() string {
-	return fmt.Sprintf("Partial{Name:%s, Pos:%d}", node.Name, node.Loc.Pos)
+	return fmt.Sprintf("Partial{Name:%s, Pos:%d}", node.Name, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -301,11 +305,11 @@ func (node *PartialStatement) Accept(visitor Visitor) interface{} {
 
 // ContentStatement represents a content node.
 type ContentStatement struct {
-	NodeType
-	Loc
-
 	Value    string
 	Original string
+
+	NodeType
+	Loc
 
 	// whitespace management
 	RightStripped bool
@@ -325,7 +329,7 @@ func NewContentStatement(pos int, line int, val string) *ContentStatement {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *ContentStatement) String() string {
-	return fmt.Sprintf("Content{Value:'%s', Pos:%d}", node.Value, node.Loc.Pos)
+	return fmt.Sprintf("Content{Value:'%s', Pos:%d}", node.Value, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -339,13 +343,13 @@ func (node *ContentStatement) Accept(visitor Visitor) interface{} {
 
 // CommentStatement represents a comment node.
 type CommentStatement struct {
-	NodeType
-	Loc
+	// whitespace management
+	Strip *Strip
 
 	Value string
 
-	// whitespace management
-	Strip *Strip
+	NodeType
+	Loc
 }
 
 // NewCommentStatement instanciates a new comment node.
@@ -360,7 +364,7 @@ func NewCommentStatement(pos int, line int, val string) *CommentStatement {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *CommentStatement) String() string {
-	return fmt.Sprintf("Comment{Value:'%s', Pos:%d}", node.Value, node.Loc.Pos)
+	return fmt.Sprintf("Comment{Value:'%s', Pos:%d}", node.Value, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -374,12 +378,12 @@ func (node *CommentStatement) Accept(visitor Visitor) interface{} {
 
 // Expression represents an expression node.
 type Expression struct {
+	Path   Node // PathExpression | StringLiteral | BooleanLiteral | NumberLiteral
+	Hash   *Hash
+	Params []Node // [ Expression ... ]
+
 	NodeType
 	Loc
-
-	Path   Node   // PathExpression | StringLiteral | BooleanLiteral | NumberLiteral
-	Params []Node // [ Expression ... ]
-	Hash   *Hash
 }
 
 // NewExpression instanciates a new expression node.
@@ -392,7 +396,7 @@ func NewExpression(pos int, line int) *Expression {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *Expression) String() string {
-	return fmt.Sprintf("Expr{Path:%s, Pos:%d}", node.Path, node.Loc.Pos)
+	return fmt.Sprintf("Expr{Path:%s, Pos:%d}", node.Path, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -494,10 +498,10 @@ func LiteralStr(node Node) (string, bool) {
 
 // SubExpression represents a subexpression node.
 type SubExpression struct {
+	Expression *Expression
+
 	NodeType
 	Loc
-
-	Expression *Expression
 }
 
 // NewSubExpression instanciates a new subexpression node.
@@ -510,7 +514,7 @@ func NewSubExpression(pos int, line int) *SubExpression {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *SubExpression) String() string {
-	return fmt.Sprintf("Sexp{Path:%s, Pos:%d}", node.Expression.Path, node.Loc.Pos)
+	return fmt.Sprintf("Sexp{Path:%s, Pos:%d}", node.Expression.Path, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -524,14 +528,15 @@ func (node *SubExpression) Accept(visitor Visitor) interface{} {
 
 // PathExpression represents a path expression node.
 type PathExpression struct {
+	Original string
+	Parts    []string
+
 	NodeType
 	Loc
 
-	Original string
-	Depth    int
-	Parts    []string
-	Data     bool
-	Scoped   bool
+	Depth  int
+	Data   bool
+	Scoped bool
 }
 
 // NewPathExpression instanciates a new path expression node.
@@ -552,7 +557,7 @@ func NewPathExpression(pos int, line int, data bool) *PathExpression {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *PathExpression) String() string {
-	return fmt.Sprintf("Path{Original:'%s', Pos:%d}", node.Original, node.Loc.Pos)
+	return fmt.Sprintf("Path{Original:'%s', Pos:%d}", node.Original, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -563,7 +568,13 @@ func (node *PathExpression) Accept(visitor Visitor) interface{} {
 // Part adds path part.
 func (node *PathExpression) Part(part string) {
 	node.Original += part
+	node.AddPart(part)
+}
 
+// AddPart records path part like Part, but leaves Original unchanged. A
+// parser that builds Original itself uses it to stay linear in the number
+// of parts (Part copies Original each time).
+func (node *PathExpression) AddPart(part string) {
 	switch part {
 	case "..":
 		node.Depth++
@@ -591,10 +602,10 @@ func (node *PathExpression) IsDataRoot() bool {
 
 // StringLiteral represents a string node.
 type StringLiteral struct {
+	Value string
+
 	NodeType
 	Loc
-
-	Value string
 }
 
 // NewStringLiteral instanciates a new string node.
@@ -609,7 +620,7 @@ func NewStringLiteral(pos int, line int, val string) *StringLiteral {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *StringLiteral) String() string {
-	return fmt.Sprintf("String{Value:'%s', Pos:%d}", node.Value, node.Loc.Pos)
+	return fmt.Sprintf("String{Value:'%s', Pos:%d}", node.Value, node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -623,11 +634,12 @@ func (node *StringLiteral) Accept(visitor Visitor) interface{} {
 
 // BooleanLiteral represents a boolean node.
 type BooleanLiteral struct {
+	Original string
+
 	NodeType
 	Loc
 
-	Value    bool
-	Original string
+	Value bool
 }
 
 // NewBooleanLiteral instanciates a new boolean node.
@@ -643,7 +655,7 @@ func NewBooleanLiteral(pos int, line int, val bool, original string) *BooleanLit
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *BooleanLiteral) String() string {
-	return fmt.Sprintf("Boolean{Value:%s, Pos:%d}", node.Canonical(), node.Loc.Pos)
+	return fmt.Sprintf("Boolean{Value:%s, Pos:%d}", node.Canonical(), node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -666,12 +678,13 @@ func (node *BooleanLiteral) Canonical() string {
 
 // NumberLiteral represents a number node.
 type NumberLiteral struct {
+	Original string
+
 	NodeType
 	Loc
 
-	Value    float64
-	IsInt    bool
-	Original string
+	Value float64
+	IsInt bool
 }
 
 // NewNumberLiteral instanciates a new number node.
@@ -688,7 +701,7 @@ func NewNumberLiteral(pos int, line int, val float64, isInt bool, original strin
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *NumberLiteral) String() string {
-	return fmt.Sprintf("Number{Value:%s, Pos:%d}", node.Canonical(), node.Loc.Pos)
+	return fmt.Sprintf("Number{Value:%s, Pos:%d}", node.Canonical(), node.Pos)
 }
 
 // Accept is the receiver entry point for visitors.
@@ -720,10 +733,10 @@ func (node *NumberLiteral) Number() interface{} {
 
 // Hash represents a hash node.
 type Hash struct {
+	Pairs []*HashPair
+
 	NodeType
 	Loc
-
-	Pairs []*HashPair
 }
 
 // NewHash instanciates a new hash node.
@@ -736,16 +749,18 @@ func NewHash(pos int, line int) *Hash {
 
 // String returns a string representation of receiver that can be used for debugging.
 func (node *Hash) String() string {
-	result := fmt.Sprintf("Hash{[%d", node.Loc.Pos)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Hash{[%d", node.Pos)
 
 	for i, p := range node.Pairs {
 		if i > 0 {
-			result += ", "
+			b.WriteString(", ")
 		}
-		result += p.String()
+		b.WriteString(p.String())
 	}
 
-	return result + fmt.Sprintf("], Pos:%d}", node.Loc.Pos)
+	fmt.Fprintf(&b, "], Pos:%d}", node.Pos)
+	return b.String()
 }
 
 // Accept is the receiver entry point for visitors.
@@ -759,11 +774,11 @@ func (node *Hash) Accept(visitor Visitor) interface{} {
 
 // HashPair represents a hash pair node.
 type HashPair struct {
+	Val Node // Expression
+	Key string
+
 	NodeType
 	Loc
-
-	Key string
-	Val Node // Expression
 }
 
 // NewHashPair instanciates a new hash pair node.

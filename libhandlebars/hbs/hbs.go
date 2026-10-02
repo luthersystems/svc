@@ -60,17 +60,17 @@ const (
 // Error is returned by Parse and Render. Msg is the text raymond produced
 // for the same failure, so ELPS condition messages do not change.
 type Error struct {
-	Kind ErrorKind
 	Msg  string
+	Kind ErrorKind
 }
 
 func (e *Error) Error() string { return e.Msg }
 
 // Options configure one render.
 type Options struct {
-	Mode   Mode
 	Meter  Meter // nil: no charge
 	Limits Limits
+	Mode   Mode
 }
 
 func errorf(kind ErrorKind, format string, args ...any) *Error {
