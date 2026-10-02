@@ -1,0 +1,302 @@
+{
+  "basics/after-after": {
+    "out": "true"
+  },
+  "basics/after-before": {
+    "out": "false"
+  },
+  "basics/after-same": {
+    "out": "false"
+  },
+  "basics/and": {
+    "out": "false"
+  },
+  "basics/and-true": {
+    "out": "true"
+  },
+  "basics/array-length": {
+    "out": "3"
+  },
+  "basics/basic": {
+    "out": "\n<div class=\"entry\">\n  <h1>My New Post</h1>\n  <div class=\"body\">\n    This is my first post!\n  </div>\n</div>\n"
+  },
+  "basics/books": {
+    "out": "\nMy first book\nMy second book\nGood book\nBad book\n"
+  },
+  "basics/books-each": {
+    "out": "\n    User: didier Book: bookA\n    User: didier Book: bookB\n    User: marcel Book: book1\n    User: marcel Book: book2\n"
+  },
+  "basics/date-DDMMYY-slash": {
+    "out": "30/01/20"
+  },
+  "basics/date-DDMMYYYY": {
+    "out": "30-01-2020"
+  },
+  "basics/date-DDMMYYYY-slash": {
+    "out": "30/01/2020"
+  },
+  "basics/date-add-next-year": {
+    "out": "2020-01-26"
+  },
+  "basics/date-add-one-month-negative": {
+    "out": "2018-12-31"
+  },
+  "basics/date-add-one-month-shorter": {
+    "out": "2019-03-03"
+  },
+  "basics/date-add-two-months": {
+    "out": "2019-12-26"
+  },
+  "basics/date-beautify-DMY-not-MDY": {
+    "out": "11 March 2020"
+  },
+  "basics/date-beautify-null": {
+    "out": ""
+  },
+  "basics/date-beautify-standard": {
+    "out": "30 January 2020"
+  },
+  "basics/date-diff-month-after": {
+    "out": "5"
+  },
+  "basics/date-diff-month-before": {
+    "out": "5"
+  },
+  "basics/date-diff-month-same": {
+    "out": "0"
+  },
+  "basics/divide": {
+    "out": "2.5"
+  },
+  "basics/embedded-if": {
+    "out": "yes"
+  },
+  "basics/equality-numeric": {
+    "out": "true"
+  },
+  "basics/equality-string": {
+    "out": "true"
+  },
+  "basics/escape-uri-email": {
+    "out": "hello%40example.com"
+  },
+  "basics/escape-uri-other": {
+    "out": "%26+one+%25+two+%2F+three+"
+  },
+  "basics/format-phone-gb-US": {
+    "out": "+18882378289"
+  },
+  "basics/format-phone-gb-invalid": {
+    "out": "numberzz"
+  },
+  "basics/format-phone-gb-null": {
+    "out": ""
+  },
+  "basics/format-phone-gb-valid": {
+    "out": "07709 789111"
+  },
+  "basics/format-phone-isle-of-man": {
+    "out": "01624 861484"
+  },
+  "basics/format-phone-jersey": {
+    "out": "01534 726278"
+  },
+  "basics/format-phone-pre-formatted": {
+    "out": "07709 789111"
+  },
+  "basics/global-vars": {
+    "out": "Invalid"
+  },
+  "basics/global-vars-loop": {
+    "out": "InvalidInvalidInvalidInvalid"
+  },
+  "basics/greater-than": {
+    "out": "yes"
+  },
+  "basics/greater-than-equal": {
+    "out": "yes"
+  },
+  "basics/in-string-array-exist": {
+    "out": "true"
+  },
+  "basics/in-string-array-non-exist": {
+    "out": "false"
+  },
+  "basics/less-than": {
+    "out": "yes"
+  },
+  "basics/less-than-equal": {
+    "out": "yes"
+  },
+  "basics/minus": {
+    "out": "1"
+  },
+  "basics/missing": {
+    "out": "\n<div class=\"entry\">\n  <h1>My New Post</h1>\n  <div class=\"body\">\n    This is my first post!\n  </div>\n  <div></div>\n</div>\n"
+  },
+  "basics/mod": {
+    "out": "1"
+  },
+  "basics/must-parse-error": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting OpenEndBlock, got: 'EOF'"
+  },
+  "basics/no-log": {
+    "out": "\n\n"
+  },
+  "basics/no-lookup": {
+    "out": "\n\n"
+  },
+  "basics/not": {
+    "out": "false"
+  },
+  "basics/or": {
+    "out": "true"
+  },
+  "basics/or-false": {
+    "out": "false"
+  },
+  "basics/plus": {
+    "out": "7"
+  },
+  "basics/possessive-apostrophe-s": {
+    "out": "David's"
+  },
+  "basics/possessive-empty": {
+    "out": ""
+  },
+  "basics/possessive-ending-with-s": {
+    "out": "friends'"
+  },
+  "basics/possessive-full-name": {
+    "out": "David Fincher's"
+  },
+  "basics/possessive-spaces-right": {
+    "out": "David's"
+  },
+  "basics/prettyp-num-en-2dp": {
+    "out": "0.20"
+  },
+  "basics/prettyp-num-en-2dp-rounding": {
+    "out": "0.21"
+  },
+  "basics/prettyp-num-en-decimal": {
+    "out": "200,000.20"
+  },
+  "basics/prettyp-num-en-decimal-large-number": {
+    "out": "21,543,000.20"
+  },
+  "basics/prettyp-num-en-integer": {
+    "out": "200,000.00"
+  },
+  "basics/prettyp-num-en-negative": {
+    "out": "-76,543.20"
+  },
+  "basics/prettyp-num-en-string-number": {
+    "out": "1,212.12"
+  },
+  "basics/prettyp-num-en-zeros": {
+    "out": "0.00"
+  },
+  "basics/readme-and": {
+    "out": "false"
+  },
+  "basics/readme-date-add-months": {
+    "out": "2019-12-01"
+  },
+  "basics/readme-date-beautify-unclosed-string": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unterminated string\"}"
+  },
+  "basics/readme-date-diff-month": {
+    "out": "12"
+  },
+  "basics/readme-in-string-array": {
+    "out": "true"
+  },
+  "basics/readme-is-after": {
+    "out": "true"
+  },
+  "basics/readme-len-top-level-array": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal array into Go value of type map[string]interface {}"
+  },
+  "basics/readme-lte": {
+    "out": "yes"
+  },
+  "basics/readme-or": {
+    "out": "false"
+  },
+  "basics/readme-possessive-chris": {
+    "out": "Chris'"
+  },
+  "basics/readme-possessive-escaped": {
+    "out": "David&apos;s"
+  },
+  "basics/readme-possessive-long-trailing": {
+    "out": "David Fincher's"
+  },
+  "basics/readme-prettyp-0001": {
+    "out": "1.00"
+  },
+  "basics/readme-prettyp-10.1": {
+    "out": "10.10"
+  },
+  "basics/readme-prettyp-20000": {
+    "out": "20,000.00"
+  },
+  "basics/readme-round-to-nth": {
+    "out": "2.00"
+  },
+  "basics/round-to-nth-1": {
+    "out": "2.00"
+  },
+  "basics/round-to-nth-2": {
+    "out": "1.00"
+  },
+  "basics/select-from-where-2ok": {
+    "out": "www.luthersystems.com/"
+  },
+  "basics/select-from-where-empty": {
+    "out": ""
+  },
+  "basics/select-from-where-ok": {
+    "out": "www.luthersystems.com"
+  },
+  "basics/times": {
+    "out": "4"
+  },
+  "basics/to-int-date-add-month-float": {
+    "out": "2020-01-26"
+  },
+  "basics/to-int-date-add-month-string": {
+    "out": "2020-01-26"
+  },
+  "basics/to-int-valid-float": {
+    "out": "123"
+  },
+  "basics/to-int-valid-int": {
+    "out": "123"
+  },
+  "basics/to-int-valid-string": {
+    "out": "123"
+  },
+  "basics/to-str-invalid-input": {
+    "out": ""
+  },
+  "basics/to-str-valid-float": {
+    "out": "123.123000"
+  },
+  "basics/to-str-valid-int": {
+    "out": "-123"
+  },
+  "basics/to-str-valid-string": {
+    "out": "123"
+  },
+  "basics/to-str-valid-uint": {
+    "out": "123"
+  },
+  "basics/to-str-with-global-vars-and-plus": {
+    "out": "100.00"
+  }
+}
