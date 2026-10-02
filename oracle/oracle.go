@@ -328,7 +328,7 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 // GetHealthCheck checks this service and all dependent services to construct a
 // health report. Returns a grpc error code if a service is down.
 func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealthCheckRequest) (*healthcheck.GetHealthCheckResponse, error) {
-	ctx, span := orc.tracer.Span(ctx, "HealthCheck")
+	ctx, span := orc.tracer.Span(ctx, "HealthCheck", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 	// No ACL: Open to everyone
 	healthy := true
