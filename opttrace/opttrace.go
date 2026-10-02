@@ -211,17 +211,31 @@ func (t *Tracer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// Enabled reports whether tracing is configured, that is whether spans are
+// exported.
+func (t *Tracer) Enabled() bool {
+	return t != nil && t.exportTP != nil
+}
+
 // SetGlobalTracer sets the global tracer provider to this tracer instance and,
-// when tracing is configured, the global propagator to W3C trace context and
-// baggage, so instrumentation that reads the globals (otelgrpc, the oracle's
-// health check) continues incoming traces and propagates outgoing ones.
+// when tracing is configured, installs the W3C trace context and baggage
+// propagator as the global propagator, so instrumentation that reads the
+// globals (otelgrpc, the oracle's health check) continues incoming traces and
+// propagates outgoing ones.
+//
+// It installs the propagator only while the global propagator is still the
+// no-op default: a propagator the application set (B3, X-Ray, a custom
+// composite) is kept.
 //
 // When tracing is not configured it changes neither global: the propagator
 // stays the no-op default, so a service without tracing neither continues
 // nor forwards a caller's trace headers.
 func (t *Tracer) SetGlobalTracer() {
-	if t != nil && t.exportTP != nil {
-		otel.SetTracerProvider(t.exportTP)
+	if !t.Enabled() {
+		return
+	}
+	otel.SetTracerProvider(t.exportTP)
+	if len(otel.GetTextMapPropagator().Fields()) == 0 {
 		otel.SetTextMapPropagator(Propagator())
 	}
 }
