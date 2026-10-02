@@ -1,0 +1,102 @@
+select (from/where filter over an array of objects) and global (a
+per-render string map).
+-- select-basic.hbs --
+{{#select from=xs where="k=v"}}[{{n}}]{{/select}}
+-- select-basic.jsonl --
+{"xs":[{"k":"v","n":1},{"k":"w","n":2},{"k":"v","n":3}]}
+{"xs":[{"k":1,"n":"num-never-matches"}]}
+{"xs":[{"k":"v"},"scalar",null,[1]]}
+{"xs":[]}
+{"xs":{"k":"v"}}
+{"xs":"str"}
+{}
+{"xs":null}
+-- select-numeric-where.hbs --
+{{#select from=xs where="k=1"}}[{{n}}]{{/select}}
+-- select-numeric-where.jsonl --
+{"xs":[{"k":1,"n":"float"},{"k":"1","n":"string"},{"k":true,"n":"bool"}]}
+-- select-where-forms.hbs --
+[{{#select from=xs where=w}}{{n}}{{/select}}]
+-- select-where-forms.jsonl --
+{"xs":[{"k":"v","n":1}],"w":"k=v"}
+{"xs":[{"k":"v","n":1}],"w":"k=v=x"}
+{"xs":[{"k":"","n":1}],"w":"k="}
+{"xs":[{"":"v","n":1}],"w":"=v"}
+{"xs":[{"k":"v","n":1}],"w":"kv"}
+{"xs":[{"k":"v","n":1}],"w":""}
+{"xs":[{"k":"v","n":1}]}
+{"xs":[{"k":"v","n":1}],"w":5}
+-- select-parent-climb.hbs --
+{{#select from=xs where="k=v"}}{{n}}{{../t}}{{t}}{{@index}}{{/select}}
+-- select-parent-climb.jsonl --
+{"t":"T","n":"P","xs":[{"k":"v"},{"k":"v","n":"N"}]}
+-- select-escaping.hbs --
+{{#select from=xs where="k=v"}}{{n}}{{/select}}|{{{select from=xs where="k=v"}}}
+-- select-escaping.jsonl --
+{"xs":[{"k":"v","n":"<&>"}]}
+-- select-mustache-form.hbs --
+[{{select from=xs where="k=v"}}]
+-- select-mustache-form.jsonl --
+{"xs":[{"k":"v","n":1}]}
+-- select-else.hbs --
+{{#select from=xs where="k=v"}}Y{{else}}N{{/select}}
+-- select-else.jsonl --
+{"xs":[{"k":"w"}]}
+-- select-nested.hbs --
+{{#select from=a where="t=x"}}{{#select from=b where="t=y"}}{{n}}{{/select}}{{/select}}
+-- select-nested.jsonl --
+{"a":[{"t":"x","b":[{"t":"y","n":1},{"t":"z","n":2}]},{"t":"x","b":[{"t":"y","n":3}]}]}
+-- select-in-each.hbs --
+{{#each groups}}{{#select from=../items where="g=a"}}{{n}}{{/select}};{{/each}}
+-- select-in-each.jsonl --
+{"groups":[1,2],"items":[{"g":"a","n":"x"}]}
+-- select-unicode-key.hbs --
+{{#select from=xs where="ключ=значение"}}{{n}}{{/select}}
+-- select-unicode-key.jsonl --
+{"xs":[{"ключ":"значение","n":"ok"}]}
+-- global-set-get.hbs --
+{{global "ns" key="k" val="v"}}[{{global "ns" key="k"}}][{{global "other" key="k"}}][{{global "ns" key="nope"}}]
+-- global-overwrite.hbs --
+{{global "ns" key="k" val="1"}}{{global "ns" key="k" val="2"}}{{global "ns" key="k"}}
+-- global-escaping.hbs --
+{{global "ns" key="k" val="<&>"}}{{global "ns" key="k"}}|{{{global "ns" key="k"}}}
+-- global-errors.hbs --
+{{global "ns" key=k val=v}}[{{global "ns" key=k}}]
+-- global-errors.jsonl --
+{"k":"a","v":"b"}
+{"k":1,"v":"b"}
+{"k":"a","v":1}
+{"k":"a","v":null}
+{"v":"b"}
+{"k":"a","v":[1]}
+{"k":"","v":""}
+-- global-missing-ns.hbs --
+{{global key="k"}}
+-- global-ns-types.hbs --
+{{global ns key="k" val="v"}}{{global ns key="k"}}
+-- global-ns-types.jsonl --
+{"ns":"a"}
+{"ns":1}
+{}
+-- global-in-subexpr.hbs --
+{{global "m" key="A" val="Alpha"}}{{#each xs}}{{global "m" key=this}}{{#if (eq (global "m" key=this) "")}}?{{/if}},{{/each}}
+-- global-in-subexpr.jsonl --
+{"xs":["A","B"]}
+-- global-mapping-table.hbs --
+{{global "status" key="A" val="Active"}}
+{{global "status" key="I" val="Inactive"}}
+{{#each xs}}
+- {{global "status" key=s}}
+{{/each}}
+-- global-mapping-table.jsonl --
+{"xs":[{"s":"A"},{"s":"I"},{"s":"X"}]}
+-- global-select-combo.hbs --
+{{#select from=xs where="t=a"}}{{global "acc" key="last" val=n}}{{/select}}{{global "acc" key="last"}}
+-- global-select-combo.jsonl --
+{"xs":[{"t":"a","n":"1"},{"t":"a","n":"2"},{"t":"b","n":"3"}]}
+{"xs":[{"t":"a","n":1}]}
+-- global-sum-pattern.hbs --
+{{global "s" key="t" val="0"}}{{#each xs}}{{global "s" key="t" val=(to-str (plus a=(global "s" key="t") b=this))}}{{/each}}{{global "s" key="t"}}
+-- global-sum-pattern.jsonl --
+{"xs":[1,2,3]}
+{"xs":["1","2"]}

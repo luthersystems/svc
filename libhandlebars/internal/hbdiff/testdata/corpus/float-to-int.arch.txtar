@@ -1,0 +1,21 @@
+Architecture-dependent reference behaviour. to-int converts a float64
+context number with Go's int(f), which is implementation-defined when f is
+out of range: amd64 gives math.MinInt64, arm64 saturates. Endorsers on
+different architectures rendered different text. Goldens are kept per
+GOARCH (golden/float-to-int.arch.<goarch>.json); an architecture without
+a golden file is not checked.
+-- to-int.hbs --
+{{to-int a}}
+-- to-int.jsonl --
+{"a":1e21}
+{"a":-1e21}
+{"a":9223372036854775807}
+{"a":1e300}
+-- to-str-to-int.hbs --
+{{to-str (to-int a)}}
+-- to-str-to-int.jsonl --
+{"a":1e21}
+-- date-add-months-overflow.hbs --
+{{date-add-months "2020-01-01" (to-int a)}}
+-- date-add-months-overflow.jsonl --
+{"a":1e21}

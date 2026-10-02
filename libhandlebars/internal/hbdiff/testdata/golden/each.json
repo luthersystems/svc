@@ -1,0 +1,100 @@
+{
+  "each/each-array#1": {
+    "out": ""
+  },
+  "each/each-array#2": {
+    "out": "0UNPRINTABLE,"
+  },
+  "each/each-array#3": {
+    "out": "01,1two,23.5,3true,4UNPRINTABLE,51,6UNPRINTABLE,"
+  },
+  "each/each-array#4": {
+    "out": ""
+  },
+  "each/each-array#5": {
+    "out": ""
+  },
+  "each/each-else#1": {
+    "out": "empty"
+  },
+  "each/each-else#2": {
+    "out": "empty"
+  },
+  "each/each-else#3": {
+    "out": "empty"
+  },
+  "each/each-else#4": {
+    "out": "0"
+  },
+  "each/each-first-last-if#1": {
+    "out": "[1, 2, 3]"
+  },
+  "each/each-first-last-if#2": {
+    "out": "[1]"
+  },
+  "each/each-global-in-loop#1": {
+    "out": "b"
+  },
+  "each/each-hash-args#1": {
+    "out": "1"
+  },
+  "each/each-index-arith#1": {
+    "out": "1 2 3 "
+  },
+  "each/each-index-eq#1": {
+    "out": "one++"
+  },
+  "each/each-key-numeric-strings#1": {
+    "out": "011102A_a"
+  },
+  "each/each-map-sorted#1": {
+    "out": "=8(0truefalse);10=5(1falsefalse);9=6(2falsefalse);B=4(3falsefalse);a=2(4falsefalse);b=1(5falsefalse);c=3(6falsefalse);é=7(7falsetrue);"
+  },
+  "each/each-map-sorted#2": {
+    "out": ""
+  },
+  "each/each-map-sorted#3": {
+    "out": "only=1(0truetrue);"
+  },
+  "each/each-no-params": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'each' called with wrong number of arguments, needed 1 but got 0\nCurrent node:\n\tExpr{Path:Path{Original:'each', Pos:3}, Pos:0}"
+  },
+  "each/each-scalar#1": {
+    "out": "[]"
+  },
+  "each/each-scalar#2": {
+    "out": "[]"
+  },
+  "each/each-scalar#3": {
+    "out": "[]"
+  },
+  "each/each-scalar#4": {
+    "out": "[E]"
+  },
+  "each/each-scalar#5": {
+    "out": "[E]"
+  },
+  "each/each-scalar#6": {
+    "out": "[E]"
+  },
+  "each/each-subexpr-source#1": {
+    "out": "|"
+  },
+  "each/each-this-path#1": {
+    "out": "111PPP"
+  },
+  "each/each-two-params#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'each' called with wrong number of arguments, needed 1 but got 2\nCurrent node:\n\tPath{Original:'ys', Pos:11}"
+  },
+  "each/each-with-helper#1": {
+    "out": "2|2|1.000000;3.5|5|2.500000;4|6|3;1|0|;"
+  },
+  "each/nested-each#1": {
+    "out": "<tr><td>100</td><td>210</td></tr><tr></tr><tr><td>a02</td></tr>"
+  },
+  "each/nested-each-maps#1": {
+    "out": "x:z=3,;y:p=2,q=1,;"
+  }
+}

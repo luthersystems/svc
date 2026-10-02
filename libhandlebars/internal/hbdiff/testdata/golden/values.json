@@ -1,0 +1,271 @@
+{
+  "values/bad-utf8-escape": {
+    "out": "�x"
+  },
+  "values/big-exponent": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal number 1e400 into Go value of type float64"
+  },
+  "values/dup-keys": {
+    "out": "2"
+  },
+  "values/if-includezero#1": {
+    "out": "F|T|F"
+  },
+  "values/if-includezero#2": {
+    "out": "F|T|F"
+  },
+  "values/if-includezero#3": {
+    "out": "T|T|T"
+  },
+  "values/if-includezero#4": {
+    "out": "F|T|F"
+  },
+  "values/if-truthiness#1": {
+    "out": "F"
+  },
+  "values/if-truthiness#10": {
+    "out": "T"
+  },
+  "values/if-truthiness#11": {
+    "out": "F"
+  },
+  "values/if-truthiness#12": {
+    "out": "T"
+  },
+  "values/if-truthiness#13": {
+    "out": "F"
+  },
+  "values/if-truthiness#14": {
+    "out": "T"
+  },
+  "values/if-truthiness#15": {
+    "out": "F"
+  },
+  "values/if-truthiness#16": {
+    "out": "T"
+  },
+  "values/if-truthiness#2": {
+    "out": "F"
+  },
+  "values/if-truthiness#3": {
+    "out": "F"
+  },
+  "values/if-truthiness#4": {
+    "out": "T"
+  },
+  "values/if-truthiness#5": {
+    "out": "F"
+  },
+  "values/if-truthiness#6": {
+    "out": "T"
+  },
+  "values/if-truthiness#7": {
+    "out": "F"
+  },
+  "values/if-truthiness#8": {
+    "out": "F"
+  },
+  "values/if-truthiness#9": {
+    "out": "T"
+  },
+  "values/literal-print": {
+    "out": "|||||||"
+  },
+  "values/number-literals": {
+    "out": "1|-1|1.000000|1500.000000|7|100.000000|0|5"
+  },
+  "values/print#1": {
+    "out": "[]"
+  },
+  "values/print#10": {
+    "out": "[100]"
+  },
+  "values/print#11": {
+    "out": "[1000000000000000000000]"
+  },
+  "values/print#12": {
+    "out": "[0.0000001]"
+  },
+  "values/print#13": {
+    "out": "[123456789012345680]"
+  },
+  "values/print#14": {
+    "out": "[9007199254740992]"
+  },
+  "values/print#15": {
+    "out": "[9007199254740991]"
+  },
+  "values/print#16": {
+    "out": "[-9007199254740992]"
+  },
+  "values/print#17": {
+    "out": "[2.675]"
+  },
+  "values/print#18": {
+    "out": "[1.1]"
+  },
+  "values/print#19": {
+    "out": "[true]"
+  },
+  "values/print#2": {
+    "out": "[]"
+  },
+  "values/print#20": {
+    "out": "[false]"
+  },
+  "values/print#21": {
+    "out": "[]"
+  },
+  "values/print#22": {
+    "out": "[123]"
+  },
+  "values/print#23": {
+    "out": "[abctrue1.5]"
+  },
+  "values/print#24": {
+    "out": "[UNPRINTABLE]"
+  },
+  "values/print#25": {
+    "out": "[UNPRINTABLE]"
+  },
+  "values/print#26": {
+    "out": "[UNPRINTABLE]"
+  },
+  "values/print#27": {
+    "out": "[é😀\u0000\t]"
+  },
+  "values/print#28": {
+    "out": "[\u2028\u2029]"
+  },
+  "values/print#29": {
+    "out": "[line1\nline2]"
+  },
+  "values/print#3": {
+    "out": "[]"
+  },
+  "values/print#30": {
+    "out": "[179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000]"
+  },
+  "values/print#31": {
+    "out": "[0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005]"
+  },
+  "values/print#32": {
+    "out": "[0.30000000000000004]"
+  },
+  "values/print#4": {
+    "out": "[0]"
+  },
+  "values/print#5": {
+    "out": "[-0]"
+  },
+  "values/print#6": {
+    "out": "[0]"
+  },
+  "values/print#7": {
+    "out": "[1]"
+  },
+  "values/print#8": {
+    "out": "[1.5]"
+  },
+  "values/print#9": {
+    "out": "[0.1]"
+  },
+  "values/print-amp#1": {
+    "out": "[<b>&amp;\"'`=]"
+  },
+  "values/print-triple#1": {
+    "out": "[<b>&amp;\"'`=]"
+  },
+  "values/print-triple#2": {
+    "out": "[<>]"
+  },
+  "values/print-triple#3": {
+    "out": "[UNPRINTABLE]"
+  },
+  "values/print-triple#4": {
+    "out": "[1000000000000000000000]"
+  },
+  "values/string-literal-escapes": {
+    "out": "a&quot;b|a&apos;b|a\\\\b|&lt;&amp;&gt;|<&>"
+  },
+  "values/this-root#1": {
+    "out": "[UNPRINTABLE][UNPRINTABLE]"
+  },
+  "values/this-root#2": {
+    "out": "[UNPRINTABLE][UNPRINTABLE]"
+  },
+  "values/this-root#3": {
+    "out": "[UNPRINTABLE][UNPRINTABLE]"
+  },
+  "values/top-level-array": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal array into Go value of type map[string]interface {}"
+  },
+  "values/top-level-empty": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: unexpected end of JSON input"
+  },
+  "values/top-level-invalid": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: unexpected end of JSON input"
+  },
+  "values/top-level-number": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal number into Go value of type map[string]interface {}"
+  },
+  "values/top-level-string": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal string into Go value of type map[string]interface {}"
+  },
+  "values/top-level-trailing": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: invalid character '{' after top-level value"
+  },
+  "values/top-level-true": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal bool into Go value of type map[string]interface {}"
+  },
+  "values/unless-truthiness#1": {
+    "out": "U"
+  },
+  "values/unless-truthiness#2": {
+    "out": "U"
+  },
+  "values/unless-truthiness#3": {
+    "out": "U"
+  },
+  "values/unless-truthiness#4": {
+    "out": "U"
+  },
+  "values/unless-truthiness#5": {
+    "out": "E"
+  },
+  "values/with-values#1": {
+    "out": "none"
+  },
+  "values/with-values#2": {
+    "out": "none"
+  },
+  "values/with-values#3": {
+    "out": "none"
+  },
+  "values/with-values#4": {
+    "out": "[UNPRINTABLE|x]"
+  },
+  "values/with-values#5": {
+    "out": "none"
+  },
+  "values/with-values#6": {
+    "out": "[1|]"
+  },
+  "values/with-values#7": {
+    "out": "[s|]"
+  },
+  "values/with-values#8": {
+    "out": "none"
+  },
+  "values/with-values#9": {
+    "out": "none"
+  }
+}

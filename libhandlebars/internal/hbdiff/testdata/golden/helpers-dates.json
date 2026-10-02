@@ -1,0 +1,1661 @@
+{
+  "helpers-dates/t01#1": {
+    "out": "0"
+  },
+  "helpers-dates/t01#10": {
+    "out": "0"
+  },
+  "helpers-dates/t01#11": {
+    "out": "0"
+  },
+  "helpers-dates/t01#12": {
+    "out": "0"
+  },
+  "helpers-dates/t01#13": {
+    "out": "0"
+  },
+  "helpers-dates/t01#14": {
+    "out": "0"
+  },
+  "helpers-dates/t01#15": {
+    "out": "0"
+  },
+  "helpers-dates/t01#16": {
+    "out": "1"
+  },
+  "helpers-dates/t01#17": {
+    "out": "12"
+  },
+  "helpers-dates/t01#18": {
+    "out": "0"
+  },
+  "helpers-dates/t01#19": {
+    "out": "0"
+  },
+  "helpers-dates/t01#2": {
+    "out": "0"
+  },
+  "helpers-dates/t01#3": {
+    "out": "0"
+  },
+  "helpers-dates/t01#4": {
+    "out": "0"
+  },
+  "helpers-dates/t01#5": {
+    "out": "0"
+  },
+  "helpers-dates/t01#6": {
+    "out": "0"
+  },
+  "helpers-dates/t01#7": {
+    "out": "0"
+  },
+  "helpers-dates/t01#8": {
+    "out": "0"
+  },
+  "helpers-dates/t01#9": {
+    "out": "0"
+  },
+  "helpers-dates/t02#1": {
+    "out": "0"
+  },
+  "helpers-dates/t02#10": {
+    "out": "0"
+  },
+  "helpers-dates/t02#11": {
+    "out": "0"
+  },
+  "helpers-dates/t02#12": {
+    "out": "0"
+  },
+  "helpers-dates/t02#13": {
+    "out": "0"
+  },
+  "helpers-dates/t02#14": {
+    "out": "0"
+  },
+  "helpers-dates/t02#15": {
+    "out": "0"
+  },
+  "helpers-dates/t02#16": {
+    "out": "1"
+  },
+  "helpers-dates/t02#17": {
+    "out": "12"
+  },
+  "helpers-dates/t02#18": {
+    "out": "0"
+  },
+  "helpers-dates/t02#19": {
+    "out": "0"
+  },
+  "helpers-dates/t02#2": {
+    "out": "0"
+  },
+  "helpers-dates/t02#3": {
+    "out": "0"
+  },
+  "helpers-dates/t02#4": {
+    "out": "0"
+  },
+  "helpers-dates/t02#5": {
+    "out": "0"
+  },
+  "helpers-dates/t02#6": {
+    "out": "0"
+  },
+  "helpers-dates/t02#7": {
+    "out": "0"
+  },
+  "helpers-dates/t02#8": {
+    "out": "0"
+  },
+  "helpers-dates/t02#9": {
+    "out": "0"
+  },
+  "helpers-dates/t03#1": {
+    "out": "0"
+  },
+  "helpers-dates/t03#10": {
+    "out": "0"
+  },
+  "helpers-dates/t03#11": {
+    "out": "0"
+  },
+  "helpers-dates/t03#12": {
+    "out": "0"
+  },
+  "helpers-dates/t03#13": {
+    "out": "0"
+  },
+  "helpers-dates/t03#14": {
+    "out": "0"
+  },
+  "helpers-dates/t03#15": {
+    "out": "0"
+  },
+  "helpers-dates/t03#16": {
+    "out": "0"
+  },
+  "helpers-dates/t03#17": {
+    "out": "1"
+  },
+  "helpers-dates/t03#18": {
+    "out": "0"
+  },
+  "helpers-dates/t03#19": {
+    "out": "0"
+  },
+  "helpers-dates/t03#2": {
+    "out": "0"
+  },
+  "helpers-dates/t03#3": {
+    "out": "0"
+  },
+  "helpers-dates/t03#4": {
+    "out": "0"
+  },
+  "helpers-dates/t03#5": {
+    "out": "0"
+  },
+  "helpers-dates/t03#6": {
+    "out": "0"
+  },
+  "helpers-dates/t03#7": {
+    "out": "0"
+  },
+  "helpers-dates/t03#8": {
+    "out": "0"
+  },
+  "helpers-dates/t03#9": {
+    "out": "0"
+  },
+  "helpers-dates/t04#1": {
+    "out": "false"
+  },
+  "helpers-dates/t04#10": {
+    "out": "false"
+  },
+  "helpers-dates/t04#11": {
+    "out": "false"
+  },
+  "helpers-dates/t04#12": {
+    "out": "false"
+  },
+  "helpers-dates/t04#13": {
+    "out": "false"
+  },
+  "helpers-dates/t04#14": {
+    "out": "false"
+  },
+  "helpers-dates/t04#15": {
+    "out": "false"
+  },
+  "helpers-dates/t04#16": {
+    "out": "true"
+  },
+  "helpers-dates/t04#17": {
+    "out": "false"
+  },
+  "helpers-dates/t04#18": {
+    "out": "false"
+  },
+  "helpers-dates/t04#19": {
+    "out": "false"
+  },
+  "helpers-dates/t04#2": {
+    "out": "false"
+  },
+  "helpers-dates/t04#3": {
+    "out": "false"
+  },
+  "helpers-dates/t04#4": {
+    "out": "false"
+  },
+  "helpers-dates/t04#5": {
+    "out": "false"
+  },
+  "helpers-dates/t04#6": {
+    "out": "false"
+  },
+  "helpers-dates/t04#7": {
+    "out": "false"
+  },
+  "helpers-dates/t04#8": {
+    "out": "false"
+  },
+  "helpers-dates/t04#9": {
+    "out": "false"
+  },
+  "helpers-dates/t05#1": {
+    "out": "false"
+  },
+  "helpers-dates/t05#10": {
+    "out": "false"
+  },
+  "helpers-dates/t05#11": {
+    "out": "false"
+  },
+  "helpers-dates/t05#12": {
+    "out": "false"
+  },
+  "helpers-dates/t05#13": {
+    "out": "false"
+  },
+  "helpers-dates/t05#14": {
+    "out": "false"
+  },
+  "helpers-dates/t05#15": {
+    "out": "false"
+  },
+  "helpers-dates/t05#16": {
+    "out": "false"
+  },
+  "helpers-dates/t05#17": {
+    "out": "true"
+  },
+  "helpers-dates/t05#18": {
+    "out": "false"
+  },
+  "helpers-dates/t05#19": {
+    "out": "false"
+  },
+  "helpers-dates/t05#2": {
+    "out": "false"
+  },
+  "helpers-dates/t05#3": {
+    "out": "false"
+  },
+  "helpers-dates/t05#4": {
+    "out": "false"
+  },
+  "helpers-dates/t05#5": {
+    "out": "false"
+  },
+  "helpers-dates/t05#6": {
+    "out": "false"
+  },
+  "helpers-dates/t05#7": {
+    "out": "false"
+  },
+  "helpers-dates/t05#8": {
+    "out": "false"
+  },
+  "helpers-dates/t05#9": {
+    "out": "false"
+  },
+  "helpers-dates/t06#1": {
+    "out": "false"
+  },
+  "helpers-dates/t06#10": {
+    "out": "false"
+  },
+  "helpers-dates/t06#11": {
+    "out": "false"
+  },
+  "helpers-dates/t06#12": {
+    "out": "false"
+  },
+  "helpers-dates/t06#13": {
+    "out": "false"
+  },
+  "helpers-dates/t06#14": {
+    "out": "false"
+  },
+  "helpers-dates/t06#15": {
+    "out": "false"
+  },
+  "helpers-dates/t06#16": {
+    "out": "false"
+  },
+  "helpers-dates/t06#17": {
+    "out": "false"
+  },
+  "helpers-dates/t06#18": {
+    "out": "false"
+  },
+  "helpers-dates/t06#19": {
+    "out": "false"
+  },
+  "helpers-dates/t06#2": {
+    "out": "false"
+  },
+  "helpers-dates/t06#3": {
+    "out": "false"
+  },
+  "helpers-dates/t06#4": {
+    "out": "false"
+  },
+  "helpers-dates/t06#5": {
+    "out": "false"
+  },
+  "helpers-dates/t06#6": {
+    "out": "false"
+  },
+  "helpers-dates/t06#7": {
+    "out": "false"
+  },
+  "helpers-dates/t06#8": {
+    "out": "false"
+  },
+  "helpers-dates/t06#9": {
+    "out": "false"
+  },
+  "helpers-dates/t07#1": {
+    "out": ""
+  },
+  "helpers-dates/t07#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type bool but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type map[string]interface {} but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#2": {
+    "out": ""
+  },
+  "helpers-dates/t07#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t07#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tPath{Original:'b', Pos:20}"
+  },
+  "helpers-dates/t08#1": {
+    "out": ""
+  },
+  "helpers-dates/t08#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t08#11": {
+    "out": "x"
+  },
+  "helpers-dates/t08#12": {
+    "out": "true"
+  },
+  "helpers-dates/t08#13": {
+    "out": "12"
+  },
+  "helpers-dates/t08#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t08#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t08#16": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t08#17": {
+    "out": "2020-03-29"
+  },
+  "helpers-dates/t08#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t08#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t08#2": {
+    "out": ""
+  },
+  "helpers-dates/t08#3": {
+    "out": ""
+  },
+  "helpers-dates/t08#4": {
+    "out": "0"
+  },
+  "helpers-dates/t08#5": {
+    "out": "0"
+  },
+  "helpers-dates/t08#6": {
+    "out": "3"
+  },
+  "helpers-dates/t08#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t08#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t08#9": {
+    "out": "3"
+  },
+  "helpers-dates/t09#1": {
+    "out": ""
+  },
+  "helpers-dates/t09#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t09#11": {
+    "out": "x"
+  },
+  "helpers-dates/t09#12": {
+    "out": "true"
+  },
+  "helpers-dates/t09#13": {
+    "out": "12"
+  },
+  "helpers-dates/t09#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t09#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t09#16": {
+    "out": "2019-12-31"
+  },
+  "helpers-dates/t09#17": {
+    "out": "2020-01-29"
+  },
+  "helpers-dates/t09#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t09#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t09#2": {
+    "out": ""
+  },
+  "helpers-dates/t09#3": {
+    "out": ""
+  },
+  "helpers-dates/t09#4": {
+    "out": "0"
+  },
+  "helpers-dates/t09#5": {
+    "out": "0"
+  },
+  "helpers-dates/t09#6": {
+    "out": "3"
+  },
+  "helpers-dates/t09#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t09#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t09#9": {
+    "out": "3"
+  },
+  "helpers-dates/t10#1": {
+    "out": ""
+  },
+  "helpers-dates/t10#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t10#11": {
+    "out": "x"
+  },
+  "helpers-dates/t10#12": {
+    "out": "true"
+  },
+  "helpers-dates/t10#13": {
+    "out": "12"
+  },
+  "helpers-dates/t10#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t10#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t10#16": {
+    "out": "2020-01-31"
+  },
+  "helpers-dates/t10#17": {
+    "out": "2020-02-29"
+  },
+  "helpers-dates/t10#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t10#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t10#2": {
+    "out": ""
+  },
+  "helpers-dates/t10#3": {
+    "out": ""
+  },
+  "helpers-dates/t10#4": {
+    "out": "0"
+  },
+  "helpers-dates/t10#5": {
+    "out": "0"
+  },
+  "helpers-dates/t10#6": {
+    "out": "3"
+  },
+  "helpers-dates/t10#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t10#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t10#9": {
+    "out": "3"
+  },
+  "helpers-dates/t11#1": {
+    "out": ""
+  },
+  "helpers-dates/t11#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t11#11": {
+    "out": "x"
+  },
+  "helpers-dates/t11#12": {
+    "out": "true"
+  },
+  "helpers-dates/t11#13": {
+    "out": "12"
+  },
+  "helpers-dates/t11#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t11#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t11#16": {
+    "out": "2021-03-03"
+  },
+  "helpers-dates/t11#17": {
+    "out": "2021-03-29"
+  },
+  "helpers-dates/t11#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t11#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t11#2": {
+    "out": ""
+  },
+  "helpers-dates/t11#3": {
+    "out": ""
+  },
+  "helpers-dates/t11#4": {
+    "out": "0"
+  },
+  "helpers-dates/t11#5": {
+    "out": "0"
+  },
+  "helpers-dates/t11#6": {
+    "out": "3"
+  },
+  "helpers-dates/t11#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t11#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t11#9": {
+    "out": "3"
+  },
+  "helpers-dates/t12#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t12#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tNumber{Value:1, Pos:20}"
+  },
+  "helpers-dates/t13#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t13#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type string but it should be int\nCurrent node:\n\tString{Value:'1', Pos:21}"
+  },
+  "helpers-dates/t14#1": {
+    "out": ""
+  },
+  "helpers-dates/t14#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t14#11": {
+    "out": "x"
+  },
+  "helpers-dates/t14#12": {
+    "out": "true"
+  },
+  "helpers-dates/t14#13": {
+    "out": "12"
+  },
+  "helpers-dates/t14#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t14#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t14#16": {
+    "out": "2020-01-31"
+  },
+  "helpers-dates/t14#17": {
+    "out": "2020-02-29"
+  },
+  "helpers-dates/t14#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t14#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t14#2": {
+    "out": ""
+  },
+  "helpers-dates/t14#3": {
+    "out": ""
+  },
+  "helpers-dates/t14#4": {
+    "out": "0"
+  },
+  "helpers-dates/t14#5": {
+    "out": "0"
+  },
+  "helpers-dates/t14#6": {
+    "out": "3"
+  },
+  "helpers-dates/t14#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t14#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t14#9": {
+    "out": "3"
+  },
+  "helpers-dates/t15#1": {
+    "out": ""
+  },
+  "helpers-dates/t15#10": {
+    "out": "3.50"
+  },
+  "helpers-dates/t15#11": {
+    "out": "x"
+  },
+  "helpers-dates/t15#12": {
+    "out": "true"
+  },
+  "helpers-dates/t15#13": {
+    "out": "12"
+  },
+  "helpers-dates/t15#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-dates/t15#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-dates/t15#16": {
+    "out": "2021-01-31"
+  },
+  "helpers-dates/t15#17": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t15#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-dates/t15#19": {
+    "out": "12345.675"
+  },
+  "helpers-dates/t15#2": {
+    "out": ""
+  },
+  "helpers-dates/t15#3": {
+    "out": ""
+  },
+  "helpers-dates/t15#4": {
+    "out": "0"
+  },
+  "helpers-dates/t15#5": {
+    "out": "0"
+  },
+  "helpers-dates/t15#6": {
+    "out": "3"
+  },
+  "helpers-dates/t15#7": {
+    "out": "3.5"
+  },
+  "helpers-dates/t15#8": {
+    "out": "-1.25"
+  },
+  "helpers-dates/t15#9": {
+    "out": "3"
+  },
+  "helpers-dates/t16#1": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#10": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#11": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#12": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#13": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#14": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#15": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#16": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#17": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#18": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#19": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#2": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#3": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#4": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#5": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#6": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#7": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#8": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t16#9": {
+    "out": "2020-03-02"
+  },
+  "helpers-dates/t17#1": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#10": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#11": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#12": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#13": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#14": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#15": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#16": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#17": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#18": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#19": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#2": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#3": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#4": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#5": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#6": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#7": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#8": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t17#9": {
+    "out": "2021-03-01"
+  },
+  "helpers-dates/t18#1": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#10": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#11": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#12": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#13": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#14": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#15": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#16": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#17": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#18": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#19": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#2": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#3": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#4": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#5": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#6": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#7": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#8": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t18#9": {
+    "out": "not-a-date"
+  },
+  "helpers-dates/t19#1": {
+    "out": ""
+  },
+  "helpers-dates/t19#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3.50\" as \"2006-01-02\": cannot parse \"3.50\" as \"2006\""
+  },
+  "helpers-dates/t19#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"x\" as \"2006-01-02\": cannot parse \"x\" as \"2006\""
+  },
+  "helpers-dates/t19#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"true\" as \"2006-01-02\": cannot parse \"true\" as \"2006\""
+  },
+  "helpers-dates/t19#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"12\" as \"2006-01-02\": cannot parse \"12\" as \"2006\""
+  },
+  "helpers-dates/t19#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"9007199254740992\" as \"2006-01-02\": cannot parse \"199254740992\" as \"-\""
+  },
+  "helpers-dates/t19#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"1000000000000000000000\" as \"2006-01-02\": cannot parse \"000000000000000000\" as \"-\""
+  },
+  "helpers-dates/t19#16": {
+    "out": "31 January 2020"
+  },
+  "helpers-dates/t19#17": {
+    "out": "29 February 2020"
+  },
+  "helpers-dates/t19#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"<&>\\\"'\" as \"2006-01-02\": cannot parse \"<&>\\\"'\" as \"2006\""
+  },
+  "helpers-dates/t19#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"12345.675\" as \"2006-01-02\": cannot parse \"5.675\" as \"-\""
+  },
+  "helpers-dates/t19#2": {
+    "out": ""
+  },
+  "helpers-dates/t19#3": {
+    "out": ""
+  },
+  "helpers-dates/t19#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t19#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t19#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t19#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3.5\" as \"2006-01-02\": cannot parse \"3.5\" as \"2006\""
+  },
+  "helpers-dates/t19#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"-1.25\" as \"2006-01-02\": cannot parse \"-1.25\" as \"2006\""
+  },
+  "helpers-dates/t19#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t20#1": {
+    "out": ""
+  },
+  "helpers-dates/t20#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \" 2\" as \"2006-01-02\": cannot parse \" 2\" as \"2006\""
+  },
+  "helpers-dates/t20#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"y\" as \"2006-01-02\": cannot parse \"y\" as \"2006\""
+  },
+  "helpers-dates/t20#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"false\" as \"2006-01-02\": cannot parse \"false\" as \"2006\""
+  },
+  "helpers-dates/t20#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"UNPRINTABLE\" as \"2006-01-02\": cannot parse \"UNPRINTABLE\" as \"2006\""
+  },
+  "helpers-dates/t20#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"-9007199254740992\" as \"2006-01-02\": cannot parse \"-9007199254740992\" as \"2006\""
+  },
+  "helpers-dates/t20#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0.0000001\" as \"2006-01-02\": cannot parse \"0.0000001\" as \"2006\""
+  },
+  "helpers-dates/t20#16": {
+    "out": "31 December 2019"
+  },
+  "helpers-dates/t20#17": {
+    "out": "28 February 2021"
+  },
+  "helpers-dates/t20#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"\\xc3\\xa9\\xf0\\x9f\\x98\\x80\" as \"2006-01-02\": cannot parse \"\\xc3\\xa9\\xf0\\x9f\\x98\\x80\" as \"2006\""
+  },
+  "helpers-dates/t20#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"1234567.885\" as \"2006-01-02\": cannot parse \"567.885\" as \"-\""
+  },
+  "helpers-dates/t20#2": {
+    "out": ""
+  },
+  "helpers-dates/t20#3": {
+    "out": ""
+  },
+  "helpers-dates/t20#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t20#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t20#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2\" as \"2006-01-02\": cannot parse \"2\" as \"2006\""
+  },
+  "helpers-dates/t20#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2.25\" as \"2006-01-02\": cannot parse \"2.25\" as \"2006\""
+  },
+  "helpers-dates/t20#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0.1\" as \"2006-01-02\": cannot parse \"0.1\" as \"2006\""
+  },
+  "helpers-dates/t20#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2\" as \"2006-01-02\": cannot parse \"2\" as \"2006\""
+  },
+  "helpers-dates/t21#1": {
+    "out": ""
+  },
+  "helpers-dates/t21#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3.50\" as \"2006-01-02\": cannot parse \"3.50\" as \"2006\""
+  },
+  "helpers-dates/t21#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"x\" as \"2006-01-02\": cannot parse \"x\" as \"2006\""
+  },
+  "helpers-dates/t21#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"true\" as \"2006-01-02\": cannot parse \"true\" as \"2006\""
+  },
+  "helpers-dates/t21#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"12\" as \"2006-01-02\": cannot parse \"12\" as \"2006\""
+  },
+  "helpers-dates/t21#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"9007199254740992\" as \"2006-01-02\": cannot parse \"199254740992\" as \"-\""
+  },
+  "helpers-dates/t21#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"1000000000000000000000\" as \"2006-01-02\": cannot parse \"000000000000000000\" as \"-\""
+  },
+  "helpers-dates/t21#16": {
+    "out": "31/01/20"
+  },
+  "helpers-dates/t21#17": {
+    "out": "29/02/20"
+  },
+  "helpers-dates/t21#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"<&>\\\"'\" as \"2006-01-02\": cannot parse \"<&>\\\"'\" as \"2006\""
+  },
+  "helpers-dates/t21#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"12345.675\" as \"2006-01-02\": cannot parse \"5.675\" as \"-\""
+  },
+  "helpers-dates/t21#2": {
+    "out": ""
+  },
+  "helpers-dates/t21#3": {
+    "out": ""
+  },
+  "helpers-dates/t21#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t21#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t21#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t21#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3.5\" as \"2006-01-02\": cannot parse \"3.5\" as \"2006\""
+  },
+  "helpers-dates/t21#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"-1.25\" as \"2006-01-02\": cannot parse \"-1.25\" as \"2006\""
+  },
+  "helpers-dates/t21#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t22#1": {
+    "out": ""
+  },
+  "helpers-dates/t22#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3.50\" as \"2006-01-02\": cannot parse \"3.50\" as \"2006\""
+  },
+  "helpers-dates/t22#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"x\" as \"2006-01-02\": cannot parse \"x\" as \"2006\""
+  },
+  "helpers-dates/t22#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"true\" as \"2006-01-02\": cannot parse \"true\" as \"2006\""
+  },
+  "helpers-dates/t22#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"12\" as \"2006-01-02\": cannot parse \"12\" as \"2006\""
+  },
+  "helpers-dates/t22#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"9007199254740992\" as \"2006-01-02\": cannot parse \"199254740992\" as \"-\""
+  },
+  "helpers-dates/t22#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"1000000000000000000000\" as \"2006-01-02\": cannot parse \"000000000000000000\" as \"-\""
+  },
+  "helpers-dates/t22#16": {
+    "out": "31/01/2020"
+  },
+  "helpers-dates/t22#17": {
+    "out": "29/02/2020"
+  },
+  "helpers-dates/t22#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"<&>\\\"'\" as \"2006-01-02\": cannot parse \"<&>\\\"'\" as \"2006\""
+  },
+  "helpers-dates/t22#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"12345.675\" as \"2006-01-02\": cannot parse \"5.675\" as \"-\""
+  },
+  "helpers-dates/t22#2": {
+    "out": ""
+  },
+  "helpers-dates/t22#3": {
+    "out": ""
+  },
+  "helpers-dates/t22#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t22#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t22#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t22#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3.5\" as \"2006-01-02\": cannot parse \"3.5\" as \"2006\""
+  },
+  "helpers-dates/t22#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"-1.25\" as \"2006-01-02\": cannot parse \"-1.25\" as \"2006\""
+  },
+  "helpers-dates/t22#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t23#1": {
+    "out": ""
+  },
+  "helpers-dates/t23#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"3.50\" as \"2006-01-02\": cannot parse \"3.50\" as \"2006\""
+  },
+  "helpers-dates/t23#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"x\" as \"2006-01-02\": cannot parse \"x\" as \"2006\""
+  },
+  "helpers-dates/t23#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"true\" as \"2006-01-02\": cannot parse \"true\" as \"2006\""
+  },
+  "helpers-dates/t23#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"12\" as \"2006-01-02\": cannot parse \"12\" as \"2006\""
+  },
+  "helpers-dates/t23#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"9007199254740992\" as \"2006-01-02\": cannot parse \"199254740992\" as \"-\""
+  },
+  "helpers-dates/t23#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"1000000000000000000000\" as \"2006-01-02\": cannot parse \"000000000000000000\" as \"-\""
+  },
+  "helpers-dates/t23#16": {
+    "out": "31-01-2020"
+  },
+  "helpers-dates/t23#17": {
+    "out": "29-02-2020"
+  },
+  "helpers-dates/t23#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"<&>\\\"'\" as \"2006-01-02\": cannot parse \"<&>\\\"'\" as \"2006\""
+  },
+  "helpers-dates/t23#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"12345.675\" as \"2006-01-02\": cannot parse \"5.675\" as \"-\""
+  },
+  "helpers-dates/t23#2": {
+    "out": ""
+  },
+  "helpers-dates/t23#3": {
+    "out": ""
+  },
+  "helpers-dates/t23#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t23#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t23#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t23#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"3.5\" as \"2006-01-02\": cannot parse \"3.5\" as \"2006\""
+  },
+  "helpers-dates/t23#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"-1.25\" as \"2006-01-02\": cannot parse \"-1.25\" as \"2006\""
+  },
+  "helpers-dates/t23#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t24#1": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#16": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#17": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#2": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#3": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t24#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-1-3\" as \"2006-01-02\": cannot parse \"1-3\" as \"01\""
+  },
+  "helpers-dates/t25#1": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#16": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#17": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#2": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#3": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t25#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYYYY: expecting date format YYYY-MM-DD, got: parsing time \"31/01/2020\" as \"2006-01-02\": cannot parse \"31/01/2020\" as \"2006\""
+  },
+  "helpers-dates/t26#1": {
+    "out": ""
+  },
+  "helpers-dates/t26#10": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3.50\" as \"2006-01-02\": cannot parse \"3.50\" as \"2006\""
+  },
+  "helpers-dates/t26#11": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"x\" as \"2006-01-02\": cannot parse \"x\" as \"2006\""
+  },
+  "helpers-dates/t26#12": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"true\" as \"2006-01-02\": cannot parse \"true\" as \"2006\""
+  },
+  "helpers-dates/t26#13": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"12\" as \"2006-01-02\": cannot parse \"12\" as \"2006\""
+  },
+  "helpers-dates/t26#14": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"9007199254740992\" as \"2006-01-02\": cannot parse \"199254740992\" as \"-\""
+  },
+  "helpers-dates/t26#15": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"1000000000000000000000\" as \"2006-01-02\": cannot parse \"000000000000000000\" as \"-\""
+  },
+  "helpers-dates/t26#16": {
+    "out": "31 January 2020"
+  },
+  "helpers-dates/t26#17": {
+    "out": "29 February 2020"
+  },
+  "helpers-dates/t26#18": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"<&>\\\"'\" as \"2006-01-02\": cannot parse \"<&>\\\"'\" as \"2006\""
+  },
+  "helpers-dates/t26#19": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"12345.675\" as \"2006-01-02\": cannot parse \"5.675\" as \"-\""
+  },
+  "helpers-dates/t26#2": {
+    "out": ""
+  },
+  "helpers-dates/t26#3": {
+    "out": ""
+  },
+  "helpers-dates/t26#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t26#5": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"0\" as \"2006-01-02\": cannot parse \"0\" as \"2006\""
+  },
+  "helpers-dates/t26#6": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  },
+  "helpers-dates/t26#7": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3.5\" as \"2006-01-02\": cannot parse \"3.5\" as \"2006\""
+  },
+  "helpers-dates/t26#8": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"-1.25\" as \"2006-01-02\": cannot parse \"-1.25\" as \"2006\""
+  },
+  "helpers-dates/t26#9": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"3\" as \"2006-01-02\": cannot parse \"3\" as \"2006\""
+  }
+}

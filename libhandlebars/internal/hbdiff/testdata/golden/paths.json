@@ -1,0 +1,103 @@
+{
+  "paths/array-index-paths#1": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'Number{\"0\"}'"
+  },
+  "paths/block-param-shadow#1": {
+    "out": "aP"
+  },
+  "paths/block-params#1": {
+    "out": "0=a(00ap)(01aq);1=b(10bp)(11bq);"
+  },
+  "paths/block-params-map#1": {
+    "out": "a=1;b=2;"
+  },
+  "paths/block-params-with#1": {
+    "out": "KK"
+  },
+  "paths/climb-quirk#1": {
+    "out": "[a][P][][][P]"
+  },
+  "paths/climb-quirk#2": {
+    "out": "[a][]"
+  },
+  "paths/climb-quirk-nested-path#1": {
+    "out": "[x][][P]"
+  },
+  "paths/climb-quirk-with#1": {
+    "out": ""
+  },
+  "paths/climb-quirk-with#2": {
+    "out": "[o|o|o]"
+  },
+  "paths/data-dot-panics": {
+    "kind": "panic",
+    "msg": "internal error (recovered panic): runtime error: index out of range [0] with length 0"
+  },
+  "paths/data-outside": {
+    "out": "[][][][]"
+  },
+  "paths/data-parent-index#1": {
+    "out": "0.0 0.1 1.0 "
+  },
+  "paths/data-root#1": {
+    "out": "RRRR|R"
+  },
+  "paths/data-this-in-each#1": {
+    "kind": "panic",
+    "msg": "internal error (recovered panic): runtime error: index out of range [0] with length 0"
+  },
+  "paths/data-this-panics": {
+    "kind": "panic",
+    "msg": "internal error (recovered panic): runtime error: index out of range [0] with length 0"
+  },
+  "paths/data-vars#1": {
+    "out": "0::true:false|1::false:false|2::false:true|"
+  },
+  "paths/data-vars#2": {
+    "out": "0:a:true:false|1:m:false:false|2:z:false:true|"
+  },
+  "paths/data-vars#3": {
+    "out": "0::true:true|"
+  },
+  "paths/dotdot#1": {
+    "out": "a:T:;b:T:;"
+  },
+  "paths/dotdot-deep#1": {
+    "out": "3210|2210|"
+  },
+  "paths/dotdot-in-param#1": {
+    "out": "falsetrue"
+  },
+  "paths/dotdot-with-if#1": {
+    "out": "T|"
+  },
+  "paths/helper-name-as-field#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'len' called with wrong number of arguments, needed 1 but got 0\nCurrent node:\n\tExpr{Path:Path{Original:'len', Pos:3}, Pos:1}"
+  },
+  "paths/missing-deep#1": {
+    "out": "[][][]"
+  },
+  "paths/missing-deep#2": {
+    "out": "[][][]"
+  },
+  "paths/missing-deep#3": {
+    "out": "[][][]"
+  },
+  "paths/path-on-scalar#1": {
+    "out": "[][][]"
+  },
+  "paths/segment-literals#1": {
+    "out": "AB|z|Y|W|KK|T|zero"
+  },
+  "paths/this-helper-name#1": {
+    "out": "[L][E]"
+  },
+  "paths/this-paths#1": {
+    "out": "UNPRINTABLE|UNPRINTABLE|UNPRINTABLE|x|x|UNPRINTABLE"
+  },
+  "paths/this-paths#2": {
+    "out": "s|s|s|||UNPRINTABLE"
+  }
+}

@@ -1,0 +1,30 @@
+HTML escaping: & < > " ' become &amp; &lt; &gt; &quot; &apos;. Helper
+string results are escaped too unless triple-stash.
+-- escape-all.hbs --
+{{v}}|{{{v}}}|{{&v}}
+-- escape-all.jsonl --
+{"v":"&<>\"'`=/"}
+{"v":"&amp;"}
+{"v":"plain"}
+{"v":"<script>"}
+{"v":["<",">","&"]}
+-- helper-result-escaped.hbs --
+{{possessive v}}|{{{possessive v}}}|{{escape-uri-component v}}|{{to-str v}}|{{date-beautify d}}
+-- helper-result-escaped.jsonl --
+{"v":"O'Neil","d":"2020-01-01"}
+{"v":"A&B","d":""}
+{"v":"<x>","d":""}
+-- escaped-mustache.hbs --
+\{{v}}|\\{{v}}|\\\{{v}}|{{v}}
+-- escaped-mustache.jsonl --
+{"v":"x"}
+-- escaped-mustache-triple.hbs --
+\{{{v}}}|a\{{#if}}b
+-- escaped-mustache-triple.jsonl --
+{"v":"x"}
+-- backslash-content.hbs --
+a\b\\c\{d}\}
+-- in-attr.hbs --
+<a href="{{url}}" title='{{t}}'>{{t}}</a>
+-- in-attr.jsonl --
+{"url":"https://x.test/?a=1&b=2","t":"it's \"q\""}

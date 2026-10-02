@@ -1,0 +1,26 @@
+# Intended differences between the native engine (ModeCompat) and the
+# frozen reference (internal/hbref). Format, one entry per line:
+#
+#   pattern | expires | issue | reason
+#
+# pattern conditions (joined by &&): case:<glob>  kinds:<ref>-><cand>
+# tpl:<substring>  field:<kind|msg|out>. expires is YYYY-MM-DD or never.
+# Every entry needs an issue and a reason. Keep this list short: anything
+# not here must render byte for byte as the reference does.
+
+# D1: plus and minus summed hash values in Go map order, so the reference
+# is not deterministic when float rounding depends on order. The engine
+# sums in sorted key order. Nondeterministic reference cases are reported
+# separately and never fail; this covers the corpus cases that pin the
+# order fix where the reference happened to be stable across runs.
+case:plusminus/order-* && field:out | never | #106 | D1: plus/minus sum hash values in sorted key order, not Go map order
+
+# raymond panics with a runtime error (index out of range in
+# ast.IsDataRoot) on {{@this}} and {{@.}} after must-parse accepted them;
+# ELPS reported internal-panic. The engine returns a render error instead.
+kinds:panic->render | never | #106 | a Go runtime panic in the reference becomes a handlebars-render error
+
+# The engine bounds template size, nesting depth and output size
+# (DefaultLimits); raymond had no limits and overflowed the Go stack on
+# deep nesting (D4), which kills the process.
+kinds:*->limit | never | #106 | D4: the engine enforces Limits that raymond did not have

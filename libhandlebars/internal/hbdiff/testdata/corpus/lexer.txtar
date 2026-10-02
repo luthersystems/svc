@@ -1,0 +1,64 @@
+Lexer corners: whitespace inside mustaches, literal forms, comments,
+content near delimiters.
+-- comment-forms.hbs --
+a{{! simple }}b{{!-- dashes {{x}} --}}c{{!}}d{{!-- --}}e{{!--}}f
+-- comment-contains-close.hbs --
+{{!-- a }} b --}}x
+-- comment-short-contains-brace.hbs --
+{{! a } b }}x
+-- braces-in-content.hbs --
+{ } {x} }} {{{{ not raw? 
+-- lone-open.hbs --
+a {{ b
+-- single-brace-content.hbs --
+a { b } c {{v}} }
+-- single-brace-content.json --
+{"v":"V"}
+-- whitespace-in-mustache.hbs --
+{{   v   }}|{{
+v
+}}|{{	v	}}|{{# if v }}y{{/ if }}
+-- whitespace-in-mustache.json --
+{"v":"V"}
+-- ids-with-dashes.hbs --
+{{a-b}}|{{a_b}}|{{a$b}}|{{a:b}}|{{a?b}}|{{-a}}
+-- ids-with-dashes.json --
+{"a-b":1,"a_b":2,"a$b":3,"a:b":4,"a?b":5,"-a":6}
+-- true-false-prefix.hbs --
+{{truex}}|{{falsey}}|{{true}}|{{false}}|{{eq true "true"}}
+-- true-false-prefix.json --
+{"truex":"T","falsey":"F"}
+-- null-undefined-literals.hbs --
+[{{null}}][{{undefined}}][{{eq null ""}}]
+-- null-undefined-literals.json --
+{"null":"N","undefined":"U"}
+-- numbers-as-params.hbs --
+{{to-str 1.5e3}}|{{to-str 1E2}}|{{to-str -1}}|{{to-str 00}}|{{to-str 1.}}|{{to-str 089}}
+-- string-quotes.hbs --
+{{to-str 'single'}}|{{to-str "dou'ble"}}|{{to-str 'sin"gle'}}|{{to-str "es\"c"}}|{{to-str "tab	in"}}
+-- string-backslash-n.hbs --
+{{{to-str "a\nb"}}}
+-- as-without-params.hbs --
+{{#each xs as}}{{/each}}
+-- as-without-params.json --
+{"xs":[1],"as":"A"}
+-- dot-forms.hbs --
+{{.}}|{{./.}}|{{this.}}
+-- dot-forms.json --
+{"a":1}
+-- slash-path.hbs --
+{{a/b/c}}|{{a.b/c}}
+-- slash-path.json --
+{"a":{"b":{"c":"C"}}}
+-- sexpr-whitespace.hbs --
+{{eq ( to-str 1 ) "1"}}|{{eq(to-str 1)"1"}}
+-- equals-spacing.hbs --
+{{plus a = 1 b=2}}
+-- long-content.hbs --
+<style>body { font: 12px; } .x{{"{"}} }</style>
+-- content-tilde-no-mustache.hbs --
+a ~ b ~}} c
+-- unicode-ids.hbs --
+{{ключ}}|{{名前}}|{{émoji😀}}
+-- unicode-ids.json --
+{"ключ":"K","名前":"N","émoji😀":"E"}

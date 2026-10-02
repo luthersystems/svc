@@ -1,0 +1,69 @@
+{
+  "lexer/as-without-params": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'each' called with wrong number of arguments, needed 1 but got 2\nCurrent node:\n\tPath{Original:'as', Pos:11}"
+  },
+  "lexer/braces-in-content": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed expression\"}"
+  },
+  "lexer/comment-contains-close": {
+    "out": "x"
+  },
+  "lexer/comment-forms": {
+    "out": "abcdef"
+  },
+  "lexer/comment-short-contains-brace": {
+    "out": "x"
+  },
+  "lexer/content-tilde-no-mustache": {
+    "out": "a ~ b ~}} c"
+  },
+  "lexer/dot-forms": {
+    "out": "UNPRINTABLE|UNPRINTABLE|UNPRINTABLE"
+  },
+  "lexer/equals-spacing": {
+    "out": "3"
+  },
+  "lexer/ids-with-dashes": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"bad number syntax: \\\"-a\\\"\"}"
+  },
+  "lexer/lone-open": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed expression\"}"
+  },
+  "lexer/long-content": {
+    "out": "<style>body { font: 12px; } .x }</style>"
+  },
+  "lexer/null-undefined-literals": {
+    "out": "[N][U][false]"
+  },
+  "lexer/numbers-as-params": {
+    "out": "1500.000000|100.000000|-1|0|1.000000|89"
+  },
+  "lexer/sexpr-whitespace": {
+    "out": "true|true"
+  },
+  "lexer/single-brace-content": {
+    "out": "a { b } c V }"
+  },
+  "lexer/slash-path": {
+    "out": "C|C"
+  },
+  "lexer/string-backslash-n": {
+    "out": "a\\nb"
+  },
+  "lexer/string-quotes": {
+    "out": "single|dou&apos;ble|sin&quot;gle|es&quot;c|tab\tin"
+  },
+  "lexer/true-false-prefix": {
+    "out": "T|F|||true"
+  },
+  "lexer/unicode-ids": {
+    "out": "K|N|E"
+  },
+  "lexer/whitespace-in-mustache": {
+    "out": "V|V|V|y"
+  }
+}

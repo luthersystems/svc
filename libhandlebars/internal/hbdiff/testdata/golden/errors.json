@@ -1,0 +1,283 @@
+{
+  "errors/bad-hash": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 0\nCurrent node:\n\tPath{Original:'b', Pos:8}"
+  },
+  "errors/bad-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"bad number syntax: \\\"1a\\\"\"}"
+  },
+  "errors/block-params-bad": {
+    "out": ""
+  },
+  "errors/block-params-on-mustache": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting Close, got: 'OpenBlockParams{\"as |\"}'"
+  },
+  "errors/block-params-unclosed": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting CloseBlockParams, got: 'Close{\"}}\"}'"
+  },
+  "errors/chained-else-mismatch": {
+    "out": ""
+  },
+  "errors/close-with-params": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting Close, got: 'ID{\"a\"}'"
+  },
+  "errors/complex-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nFailed to parse number: 1+2i\nToken: Number{\"1+2i\"}"
+  },
+  "errors/dup-hash": {
+    "out": "2"
+  },
+  "errors/else-in-mustache": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nSyntax error\nToken: OpenInverseChain{\"{{else\"}"
+  },
+  "errors/empty-block": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'Close{\"}}\"}'"
+  },
+  "errors/empty-mustache": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'Close{\"}}\"}'"
+  },
+  "errors/extra-paren": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting Close, got: 'CloseSexpr{\")\"}'"
+  },
+  "errors/hash-before-param": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting Close, got: 'ID{\"a\"}'"
+  },
+  "errors/hex-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nFailed to parse number: 0x10\nToken: Number{\"0x10\"}"
+  },
+  "errors/imaginary-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nFailed to parse number: 1i\nToken: Number{\"1i\"}"
+  },
+  "errors/invalid-data-dotdot": {
+    "out": ""
+  },
+  "errors/invalid-path-dotdot-middle": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nInvalid path: a/..\nToken: ID{\"..\"}"
+  },
+  "errors/invalid-path-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'Number{\"5\"}'"
+  },
+  "errors/invalid-path-this-middle": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nInvalid path: a.this\nToken: ID{\"this\"}"
+  },
+  "errors/invalid-utf8-content": {
+    "out_base64": "Yf9i/g=="
+  },
+  "errors/invalid-utf8-id": {
+    "out": ""
+  },
+  "errors/invalid-utf8-mustache": {
+    "out": ""
+  },
+  "errors/leading-dot-number": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'Number{\"5\"}'"
+  },
+  "errors/mismatched-close": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nif doesn't match each\nNode: Path{Original:'each', Pos:13}"
+  },
+  "errors/newline-in-string": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unterminated string\"}"
+  },
+  "errors/nul-byte": {
+    "out": "a"
+  },
+  "errors/nul-byte-content": {
+    "out": "a\u0000b"
+  },
+  "errors/parse-before-render": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nSyntax error\nToken: OpenEndBlock{\"{{/\"}"
+  },
+  "errors/plus-number": {
+    "out": "1"
+  },
+  "errors/render-date-beautify#1": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-13-01\": month out of range"
+  },
+  "errors/render-date-beautify#2": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"20200101\" as \"2006-01-02\": cannot parse \"0101\" as \"-\""
+  },
+  "errors/render-date-beautify#3": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"2020-02-30\": day out of range"
+  },
+  "errors/render-date-beautify#4": {
+    "kind": "render",
+    "msg": "error while rendering template: date-beautify: expecting date format YYYY-MM-DD, got: parsing time \"1\" as \"2006-01-02\": cannot parse \"1\" as \"2006\""
+  },
+  "errors/render-date-fmt-errors#1": {
+    "kind": "render",
+    "msg": "error while rendering template: date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: parsing time \"bad\" as \"2006-01-02\": cannot parse \"bad\" as \"2006\""
+  },
+  "errors/render-error-after-output": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:12}"
+  },
+  "errors/render-error-in-each": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'this', Pos:18}"
+  },
+  "errors/render-error-in-else-branch#1": {
+    "out": "ok"
+  },
+  "errors/render-error-in-else-branch#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:25}"
+  },
+  "errors/render-global-key-type": {
+    "kind": "render",
+    "msg": "error while rendering template: global: invalid key type: int"
+  },
+  "errors/render-helper-missing-hash-wrong": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "errors/render-in-string-array": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "errors/render-partial": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Partial not found: p\nCurrent node:\n\tPartial{Name:Path{Original:'p', Pos:4}, Pos:0}"
+  },
+  "errors/render-partial-ctx": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Partial not found: p\nCurrent node:\n\tPartial{Name:Path{Original:'p', Pos:4}, Pos:0}"
+  },
+  "errors/render-prettyp#1": {
+    "kind": "render",
+    "msg": "error while rendering template: value passed in must be a number, got: abc"
+  },
+  "errors/render-prettyp#2": {
+    "kind": "render",
+    "msg": "error while rendering template: value passed in must be a number, got: true"
+  },
+  "errors/render-prettyp#3": {
+    "kind": "render",
+    "msg": "error while rendering template: value passed in must be a number, got: <nil>"
+  },
+  "errors/render-prettyp#4": {
+    "kind": "render",
+    "msg": "error while rendering template: value passed in must be a number, got: <nil>"
+  },
+  "errors/render-prettyp#5": {
+    "kind": "render",
+    "msg": "error while rendering template: value passed in must be a number, got: [1]"
+  },
+  "errors/render-select-from": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'from' must be an array: map[string]interface {}"
+  },
+  "errors/render-select-where": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: ab"
+  },
+  "errors/render-type-date-int-float": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'n', Pos:20}"
+  },
+  "errors/render-type-in-subexpr": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:19}"
+  },
+  "errors/render-type-len-ctx": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'x', Pos:6}"
+  },
+  "errors/render-type-len-int": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "errors/render-wrong-argc": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tString{Value:'a', Pos:6}"
+  },
+  "errors/render-wrong-argc-many": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'not' called with wrong number of arguments, needed 1 but got 2\nCurrent node:\n\tPath{Original:'b', Pos:8}"
+  },
+  "errors/stray-close": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nSyntax error\nToken: OpenEndBlock{\"{{/\"}"
+  },
+  "errors/stray-else": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nSyntax error\nToken: Inverse{\"{{else}}\"}"
+  },
+  "errors/triple-mismatch": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting CloseUnescaped, got: 'CloseRawBlock{\"}}}}\"}'"
+  },
+  "errors/unclosed-block": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting OpenEndBlock, got: 'EOF'"
+  },
+  "errors/unclosed-comment": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed comment\"}"
+  },
+  "errors/unclosed-mustache": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed expression\"}"
+  },
+  "errors/unclosed-mustache-eof-brace": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: '}'\"}"
+  },
+  "errors/unclosed-short-comment": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed comment\"}"
+  },
+  "errors/unclosed-subexpr": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting CloseSexpr, got: 'Close{\"}}\"}'"
+  },
+  "errors/unclosed-triple": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting CloseUnescaped, got: 'Close{\"}}\"}'"
+  },
+  "errors/unexpected-char": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: '!'\"}"
+  },
+  "errors/unexpected-char-semicolon": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: ';'\"}"
+  },
+  "errors/unmarshal-before-parse": {
+    "kind": "unmarshal",
+    "msg": "error while unmarshaling: json: cannot unmarshal array into Go value of type map[string]interface {}"
+  },
+  "errors/unterminated-segment": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unterminated path literal\"}"
+  },
+  "errors/unterminated-string": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unterminated string\"}"
+  },
+  "errors/unterminated-string-escape": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unterminated string\"}"
+  }
+}

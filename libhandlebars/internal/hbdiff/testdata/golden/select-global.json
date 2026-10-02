@@ -1,0 +1,149 @@
+{
+  "select-global/global-errors#1": {
+    "out": "[b]"
+  },
+  "select-global/global-errors#2": {
+    "kind": "render",
+    "msg": "error while rendering template: global: invalid key type: float64"
+  },
+  "select-global/global-errors#3": {
+    "kind": "render",
+    "msg": "error while rendering template: global: invalid val type: float64"
+  },
+  "select-global/global-errors#4": {
+    "out": "[]"
+  },
+  "select-global/global-errors#5": {
+    "kind": "render",
+    "msg": "error while rendering template: global: missing key"
+  },
+  "select-global/global-errors#6": {
+    "kind": "render",
+    "msg": "error while rendering template: global: invalid val type: []interface {}"
+  },
+  "select-global/global-errors#7": {
+    "out": "[]"
+  },
+  "select-global/global-escaping": {
+    "out": "&lt;&amp;&gt;|<&>"
+  },
+  "select-global/global-in-subexpr#1": {
+    "out": "Alpha,?,"
+  },
+  "select-global/global-mapping-table#1": {
+    "out": "\n\n- Active\n- Inactive\n- \n"
+  },
+  "select-global/global-missing-ns": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'global' called with wrong number of arguments, needed 1 but got 0\nCurrent node:\n\tString{Value:'k', Pos:14}"
+  },
+  "select-global/global-ns-types#1": {
+    "out": "v"
+  },
+  "select-global/global-ns-types#2": {
+    "out": "v"
+  },
+  "select-global/global-ns-types#3": {
+    "out": "v"
+  },
+  "select-global/global-overwrite": {
+    "out": "2"
+  },
+  "select-global/global-select-combo#1": {
+    "out": "2"
+  },
+  "select-global/global-select-combo#2": {
+    "kind": "render",
+    "msg": "error while rendering template: global: invalid val type: float64"
+  },
+  "select-global/global-set-get": {
+    "out": "[v][][]"
+  },
+  "select-global/global-sum-pattern#1": {
+    "out": "6.000000"
+  },
+  "select-global/global-sum-pattern#2": {
+    "out": "3.000000"
+  },
+  "select-global/select-basic#1": {
+    "out": "[1][3]"
+  },
+  "select-global/select-basic#2": {
+    "out": ""
+  },
+  "select-global/select-basic#3": {
+    "out": "[]"
+  },
+  "select-global/select-basic#4": {
+    "out": ""
+  },
+  "select-global/select-basic#5": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'from' must be an array: map[string]interface {}"
+  },
+  "select-global/select-basic#6": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'from' must be an array: string"
+  },
+  "select-global/select-basic#7": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'from' must be an array: <nil>"
+  },
+  "select-global/select-basic#8": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'from' must be an array: <nil>"
+  },
+  "select-global/select-else#1": {
+    "out": ""
+  },
+  "select-global/select-escaping#1": {
+    "out": "&lt;&amp;&gt;|"
+  },
+  "select-global/select-in-each#1": {
+    "out": "x;x;"
+  },
+  "select-global/select-mustache-form#1": {
+    "out": "[]"
+  },
+  "select-global/select-nested#1": {
+    "out": "13"
+  },
+  "select-global/select-numeric-where#1": {
+    "out": "[string]"
+  },
+  "select-global/select-parent-climb#1": {
+    "out": "PTTNTT"
+  },
+  "select-global/select-unicode-key#1": {
+    "out": "ok"
+  },
+  "select-global/select-where-forms#1": {
+    "out": "[1]"
+  },
+  "select-global/select-where-forms#2": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: k=v=x"
+  },
+  "select-global/select-where-forms#3": {
+    "out": "[1]"
+  },
+  "select-global/select-where-forms#4": {
+    "out": "[1]"
+  },
+  "select-global/select-where-forms#5": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: kv"
+  },
+  "select-global/select-where-forms#6": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: "
+  },
+  "select-global/select-where-forms#7": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: "
+  },
+  "select-global/select-where-forms#8": {
+    "kind": "render",
+    "msg": "error while rendering template: select: 'where' not in K=V format: 5"
+  }
+}
