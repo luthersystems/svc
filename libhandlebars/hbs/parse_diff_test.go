@@ -81,7 +81,9 @@ type parseResult struct {
 	panic string // reference only: a recovered panic
 }
 
-func refParse(src string) parseResult {
+// refParse parses src with raymondref. It runs raymond's Print only when
+// withPrint is true.
+func refParse(src string, withPrint bool) parseResult {
 	var res parseResult
 	func() {
 		defer func() {
@@ -95,17 +97,21 @@ func refParse(src string) parseResult {
 			return
 		}
 		res = parseResult{tree: dump(prog)}
-		if len(src) <= refPrintMaxBytes {
+		if withPrint {
 			res.print = refast.Print(prog)
 		}
 	}()
 	return res
 }
 
-// refPrintMaxBytes bounds the templates whose raymond Print is compared:
-// raymond's Print is quadratic (about 30s for a 46KB template). Larger
-// templates are compared by tree dump, which covers every field Print shows.
-const refPrintMaxBytes = 16 << 10
+// refPrintMaxBytes bounds the Print output compared with raymond's. raymond's
+// Print appends to a string, two bytes of indent at a time, so it is
+// quadratic in its output; and the output is quadratic in nesting depth,
+// not in source length: a 2KB template 128 blocks deep prints 100KB, which
+// raymond takes about a second to build, and 256 deep takes over ten. The
+// engine's Print is linear and prints the same text. A larger tree is still
+// compared by tree dump, which covers every field Print shows.
+const refPrintMaxBytes = 32 << 10
 
 // engineParse parses with the production limits. ok is false when the
 // template is over a limit, where raymond's behaviour is not reproduced.
@@ -137,7 +143,7 @@ func checkSame(t testing.TB, src string) {
 	if !ok {
 		return
 	}
-	want := refParse(src)
+	want := refParse(src, len(got.print) <= refPrintMaxBytes)
 	if want.panic != "" {
 		// raymond crashed; the engine must at least fail cleanly
 		if got.err == "" {
@@ -148,7 +154,7 @@ func checkSame(t testing.TB, src string) {
 	if got.err != want.err {
 		t.Fatalf("template %q: error\n got: %q\nwant: %q", src, got.err, want.err)
 	}
-	if len(src) <= refPrintMaxBytes && got.print != want.print {
+	if len(got.print) <= refPrintMaxBytes && got.print != want.print {
 		t.Fatalf("template %q: Print\n got: %q\nwant: %q", src, got.print, want.print)
 	}
 	if got.tree != want.tree {
