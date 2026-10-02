@@ -1,6 +1,92 @@
 version: "2"
 run:
-  timeout: 2m
+  timeout: 5m
+issues:
+  # Report EVERY finding. golangci-lint's defaults (max-issues-per-linter: 50,
+  # max-same-issues: 3) silently collapse repeats, so a plain run
+  # under-reports and "fix and re-run" becomes an open-ended loop. The exit
+  # code is correct either way; the list is not. Matches luthersystems/elps.
+  max-issues-per-linter: 0
+  max-same-issues: 0
 linters:
+  # The same set as luthersystems/elps (#108). gosec was already enabled here
+  # and is part of that set.
   enable:
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - errorlint
+    - exhaustive
+    - forcetypeassert
     - gosec
+    - intrange
+    - makezero
+    - nilerr
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - perfsprint
+    - predeclared
+    - testifylint
+    - unconvert
+    - usestdlibvars
+    - wastedassign
+  settings:
+    exhaustive:
+      # A switch that already carries a `default:` has made an explicit
+      # decision about the cases it does not name, so it is not a silent
+      # fallthrough. Report only switches with no default.
+      default-signifies-exhaustive: true
+    nonamedreturns:
+      # A deferred closure that writes a named result is the one case where
+      # result names change behaviour. Report it too: such a function keeps
+      # its result in a local and wraps the deferring body in a func literal.
+      report-error-in-defer: true
+    govet:
+      enable:
+        # fieldalignment guards struct layout on a hot path. It is scoped to
+        # libhandlebars/hbs/ by the exclusion rules below: the template
+        # engine allocates its structs per render (and per node, per frame),
+        # inside every chaincode transaction that renders a template. The
+        # rest of svc builds its structs once per process or per request, so
+        # the reordering churn is not worth it there.
+        - fieldalignment
+        # shadow reports a `:=` that redeclares a name from an enclosing
+        # scope, the shape that leaves an outer err or result unset.
+        - shadow
+      settings:
+        shadow:
+          # Report a shadow only when the outer variable is used after the
+          # inner declaration.
+          strict: false
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019" # Allow deprecated usage during migration to *Context methods
+        - "-ST*"    # Preserve pre-existing style check behavior
+  exclusions:
+    paths:
+      # A frozen, byte-for-byte copy of the luthersystems/raymond fork, kept
+      # only as the reference the new engine is checked against. It must not
+      # be edited, so it is not linted. Delete the directory, not this line,
+      # when the reference is retired.
+      - '^libhandlebars/internal/raymondref/'
+    rules:
+      # --- fieldalignment scope -------------------------------------------
+      # Enforced only in the handlebars engine (libhandlebars/hbs/...), the
+      # one hot path in svc (see govet above). The guard covers the whole
+      # tree, not just today's hot files, so a struct added there is checked
+      # the day it lands. This exclusion can only shrink: to protect another
+      # package, add it to the negative pattern and fix its findings.
+      - linters:
+          - govet
+        text: "fieldalignment:"
+        path-except: '^libhandlebars/hbs/'
+
+      # Test files are exempt: table-driven fixtures and mock structs are
+      # written for readability and are not on any hot path.
+      - linters:
+          - govet
+        text: "fieldalignment:"
+        path: '_test\.go'
