@@ -11,6 +11,13 @@ import "github.com/luthersystems/svc/libhandlebars/hbs/ast"
 // o.Limits; or the Meter's error, unchanged. A zero Limits field means the
 // DefaultLimits value.
 //
+// Steps charged to o.Meter (nil: none): 1 per AST node evaluated, 1 per
+// #each iteration, 1 per helper call and 1 per started KiB of output
+// written, batched in groups of 64 and flushed at the end. Parse is charged
+// by the caller. The charges depend only on (template, context, options).
+//
+// ModeFixed's differences are listed in helpers_svc.go.
+//
 // Render does not modify the Program or ctx and keeps all per-render state
 // (data frames, the global helper's map, the output) in the call.
 func (p *Program) Render(ctx Value, o Options) (string, error) {
