@@ -11,7 +11,7 @@ import (
 
 const shapesDir = "testdata/shapes"
 
-func loadShapes(t *testing.T) []Case {
+func loadShapes(t testing.TB) []Case {
 	t.Helper()
 	cases, err := LoadShapes(shapesDir)
 	require.NoError(t, err)
