@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
@@ -117,8 +118,8 @@ func (a *Store) Get(ctx context.Context, key string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() {
-		if err := result.Body.Close(); err != nil {
-			logrus.WithError(err).Warn("get: close")
+		if closeErr := result.Body.Close(); closeErr != nil {
+			logrus.WithError(closeErr).Warn("get: close")
 		}
 	}()
 	body, err := io.ReadAll(result.Body)
@@ -140,11 +141,11 @@ func (a *Store) GetStreaming(key string, w http.ResponseWriter) error {
 		w.Header().Set("Content-Type", *result.ContentType)
 	}
 	if result.ContentLength != nil {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", *result.ContentLength))
+		w.Header().Set("Content-Length", strconv.FormatInt(*result.ContentLength, 10))
 	}
 	defer func() {
-		if err := result.Body.Close(); err != nil {
-			logrus.WithError(err).Warn("get streaming: close")
+		if closeErr := result.Body.Close(); closeErr != nil {
+			logrus.WithError(closeErr).Warn("get streaming: close")
 		}
 	}()
 	_, err = io.Copy(w, result.Body)
