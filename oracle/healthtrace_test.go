@@ -16,6 +16,7 @@ import (
 	"github.com/luthersystems/svc/opttrace"
 	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -29,6 +30,7 @@ import (
 type fakeGateway struct {
 	mu       sync.Mutex
 	incoming []trace.SpanContext
+	headers  []http.Header
 }
 
 func (g *fakeGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +38,7 @@ func (g *fakeGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header)))
 	g.mu.Lock()
 	g.incoming = append(g.incoming, sc)
+	g.headers = append(g.headers, r.Header.Clone())
 	g.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	type report struct {
@@ -63,23 +66,37 @@ func (g *fakeGateway) requests() []trace.SpanContext {
 	return append([]trace.SpanContext(nil), g.incoming...)
 }
 
+func (g *fakeGateway) requestHeaders() []http.Header {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]http.Header(nil), g.headers...)
+}
+
 func newTracedGatewayOracle(t *testing.T) (*Oracle, *tracetest.InMemoryExporter, *fakeGateway) {
+	t.Helper()
+	exp := tracetest.NewInMemoryExporter()
+	orc, gw := newGatewayOracle(t,
+		opttrace.WithExporter(exp),
+		opttrace.WithSyncExport(),
+	)
+	return orc, exp, gw
+}
+
+// newGatewayOracle builds an oracle whose phylum is a fake gateway, with
+// tracing configured by traceOpts (none: tracing off).
+func newGatewayOracle(t *testing.T, traceOpts ...opttrace.Option) (*Oracle, *fakeGateway) {
 	t.Helper()
 	gw := &fakeGateway{}
 	srv := httptest.NewServer(gw)
 	t.Cleanup(srv.Close)
 
-	exp := tracetest.NewInMemoryExporter()
 	cfg := DefaultConfig()
 	cfg.GatewayEndpoint = srv.URL
-	cfg.TraceOpts = []opttrace.Option{
-		opttrace.WithExporter(exp),
-		opttrace.WithSyncExport(),
-	}
+	cfg.TraceOpts = traceOpts
 	orc, err := newOracle(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = orc.tracer.Shutdown(context.Background()) })
-	return orc, exp, gw
+	return orc, gw
 }
 
 func findSpan(t *testing.T, spans tracetest.SpanStubs, name string) tracetest.SpanStub {
@@ -232,4 +249,39 @@ func (c metadataCarrier) Keys() []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// TestHealthCheckTracingOffForwardsNoTrace checks that with tracing off the
+// health check sends the gateway no trace headers, as before #55, even when
+// the caller sent some and a global propagator is installed (by another
+// oracle in the process, or another library).
+func TestHealthCheckTracingOffForwardsNoTrace(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(opttrace.Propagator())
+	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
+
+	orc, gw := newGatewayOracle(t)
+
+	ts, err := trace.ParseTraceState("vendor=value")
+	require.NoError(t, err)
+	remote := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x1, 0x2, 0x3},
+		SpanID:     trace.SpanID{0x7, 0x8, 0x9},
+		TraceFlags: trace.FlagsSampled,
+		TraceState: ts,
+		Remote:     true,
+	})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, healthCheckPath, nil)
+	propagation.TraceContext{}.Inject(
+		trace.ContextWithSpanContext(context.Background(), remote),
+		propagation.HeaderCarrier(req.Header))
+	require.NotEmpty(t, req.Header.Get("tracestate"))
+	rec := httptest.NewRecorder()
+	orc.healthCheckHandler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	hdrs := gw.requestHeaders()
+	require.Len(t, hdrs, 1)
+	require.Empty(t, hdrs[0].Get("traceparent"), "tracing off forwarded traceparent")
+	require.Empty(t, hdrs[0].Get("tracestate"), "tracing off forwarded tracestate")
 }

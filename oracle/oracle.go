@@ -271,11 +271,21 @@ func (orc *Oracle) getLastPhylumVersion() string {
 // outgoing HTTP headers. shiroclient's RPC client injects trace headers on
 // JSON-RPC calls but not on its gateway health_check request, which would
 // otherwise reach the gateway with no trace (luthersystems/svc#55).
+//
+// It injects only when the span in the context is recording, that is when
+// tracing is configured. With tracing off the span is a no-op that can still
+// carry a caller's span context, and forwarding that would send the gateway
+// headers it never received before. With tracing on, the global propagator
+// (W3C trace context and baggage) also forwards the caller's tracestate and
+// baggage, as W3C trace context and standard OpenTelemetry instrumentation do.
 type traceHeaderTransport struct {
 	base http.RoundTripper
 }
 
 func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !trace.SpanFromContext(req.Context()).IsRecording() {
+		return t.base.RoundTrip(req)
+	}
 	req = req.Clone(req.Context())
 	otel.GetTextMapPropagator().Inject(req.Context(), propagation.HeaderCarrier(req.Header))
 	return t.base.RoundTrip(req)
