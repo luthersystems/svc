@@ -89,7 +89,7 @@ func TestSendWithAttachment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write zip entry: %v", err)
 	}
-	if err := zipWriter.Close(); err != nil {
+	if err = zipWriter.Close(); err != nil {
 		t.Fatalf("close zip writer: %v", err)
 	}
 
