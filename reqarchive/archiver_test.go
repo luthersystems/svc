@@ -54,12 +54,12 @@ func TestPut(t *testing.T) {
 	b, err := json.Marshal(map[string]bool{"Hello": true})
 	require.NoError(t, err)
 	body := bytes.NewReader(b)
-	req := httptest.NewRequest(http.MethodPut, "/foo", body)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/foo", body)
 	req.Header.Set("Content-Type", "application/json")
 	setTraceHeader(req, "request-id")
 	err = archiver.put(req)
 	require.NoError(t, err)
-	require.Len(t, hook.Entries, 0)
+	require.Empty(t, hook.Entries)
 }
 
 func TestFilter(t *testing.T) {
@@ -75,9 +75,9 @@ func TestFilter(t *testing.T) {
 		backend:      backend,
 	}
 	logrus.SetLevel(logrus.DebugLevel)
-	req := httptest.NewRequest(http.MethodPut, "/healthcheck", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/healthcheck", nil)
 	rr := httptest.NewRecorder()
 	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	archiver.Wrap(next).ServeHTTP(rr, req)
-	require.Len(t, hook.Entries, 0)
+	require.Empty(t, hook.Entries)
 }

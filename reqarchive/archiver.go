@@ -77,7 +77,7 @@ func hasJSONBody(r *http.Request, bodyContent *[]byte) (bool, error) {
 	contentType := r.Header.Get("Content-Type")
 	mType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return false, fmt.Errorf("unable to parse Content-Type header '%s': %v", contentType, err)
+		return false, fmt.Errorf("unable to parse Content-Type header '%s': %w", contentType, err)
 	}
 	// Only support JSON for now
 	if mType != "application/json" {
@@ -118,9 +118,9 @@ func (a *archiver) put(r *http.Request) error {
 	cookie := requestCookie(r, "authorization")
 	if cookie != nil {
 		parser := &jwtgo.Parser{}
-		token, _, err := parser.ParseUnverified(cookie.Value, &jwtgo.RegisteredClaims{})
+		token, _, parseErr := parser.ParseUnverified(cookie.Value, &jwtgo.RegisteredClaims{})
 		// Don't log, just omit invalid cookies
-		if err == nil {
+		if parseErr == nil {
 			reqClaims, _ = token.Claims.(*jwtgo.RegisteredClaims)
 		}
 	}

@@ -30,14 +30,14 @@ func (b *s3Backend) Write(ctx context.Context, reqID string, content []byte) {
 	b.wg.Add(1)
 	go (func() {
 		defer b.wg.Done()
-		ctx, done := context.WithTimeout(ctx, b.timeout)
+		putCtx, done := context.WithTimeout(ctx, b.timeout)
 		defer done()
 		input := &s3.PutObjectInput{
 			Body:   bytes.NewReader(content),
 			Bucket: aws.String(b.bucket),
 			Key:    aws.String(fmt.Sprintf("%s/%s", b.prefix, reqID)),
 		}
-		_, err := b.client.PutObject(ctx, input)
+		_, err := b.client.PutObject(putCtx, input)
 		if err != nil {
 			b.log(reqID).WithError(err).
 				Error("request archiver failed to write request")
