@@ -2,6 +2,7 @@ package svcerr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -19,10 +20,10 @@ func TestRawError(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("internal", func(t *testing.T) {
-		err := grpcToLutherError(ctx, log, fmt.Errorf("unknown error"))
+		err := grpcToLutherError(ctx, log, errors.New("unknown error"))
 		stat, ok := status.FromError(err)
 		require.True(t, ok, "expected ok status")
-		require.Equal(t, stat.Code(), codes.Internal)
+		require.Equal(t, codes.Internal, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -30,7 +31,7 @@ func TestRawError(t *testing.T) {
 		err := grpcToLutherError(ctx, log, status.Error(codes.Canceled, context.Canceled.Error()))
 		stat, ok := status.FromError(err)
 		require.True(t, ok, "expected ok status")
-		require.Equal(t, stat.Code(), codes.Canceled)
+		require.Equal(t, codes.Canceled, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -40,7 +41,7 @@ func TestRawError(t *testing.T) {
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		require.True(t, ok)
-		require.Equal(t, stat.Code(), codes.Unknown)
+		require.Equal(t, codes.Unknown, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -50,7 +51,7 @@ func TestRawError(t *testing.T) {
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		require.True(t, ok)
-		require.Equal(t, stat.Code(), codes.InvalidArgument)
+		require.Equal(t, codes.InvalidArgument, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -60,7 +61,7 @@ func TestRawError(t *testing.T) {
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		require.True(t, ok)
-		require.Equal(t, stat.Code(), codes.PermissionDenied)
+		require.Equal(t, codes.PermissionDenied, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -70,7 +71,7 @@ func TestRawError(t *testing.T) {
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		require.True(t, ok)
-		require.Equal(t, stat.Code(), codes.Internal)
+		require.Equal(t, codes.Internal, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 
@@ -80,7 +81,7 @@ func TestRawError(t *testing.T) {
 		err = grpcToLutherError(ctx, log, err)
 		stat, ok := status.FromError(err)
 		require.True(t, ok)
-		require.Equal(t, stat.Code(), codes.Unavailable)
+		require.Equal(t, codes.Unavailable, stat.Code())
 		require.Len(t, stat.Details(), 1)
 	})
 

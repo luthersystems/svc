@@ -103,3 +103,27 @@ linters:
           - forcetypeassert
         text: 'right hand must be only type assertion'
         path: '^libhandlebars/libhandlebars\.go$'
+
+      # --- svcerr: fixes that would change error classification -----------
+      # errorlint wants grpcToLutherError's
+      # `fmt.Errorf("%w: %s", context.Canceled, err)` to wrap err with %w as
+      # well. The message would not change, but the very next call,
+      # status.FromError, uses errors.As: wrapping a gRPC status error would
+      # make FromError report ok=true with that status's code where it now
+      # reports ok=false, and the errors.As checks for svc's own error types
+      # below it would start matching. Either changes the code and payload a
+      # cancelled request is answered with.
+      - linters:
+          - errorlint
+        text: 'non-wrapping format verb for fmt.Errorf'
+        path: '^svcerr/svcerr\.go$'
+
+      # forcetypeassert wants AppErrorUnaryInterceptor's
+      # `details = resp.(proto.Message)` checked. Today a BUSINESS exception
+      # on a response that is not a proto.Message panics; handling it would
+      # instead answer an internal error, a different outcome. Scoped to the
+      # one file.
+      - linters:
+          - forcetypeassert
+        text: 'type assertion must be checked'
+        path: '^svcerr/svcerr\.go$'
