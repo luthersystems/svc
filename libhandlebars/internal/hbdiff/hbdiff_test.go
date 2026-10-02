@@ -93,11 +93,8 @@ func TestCorpusGolden(t *testing.T) {
 }
 
 // TestCorpusDiff compares the candidate engine with the reference on the
-// literal corpus. It is skipped when no candidate is built in.
+// literal corpus.
 func TestCorpusDiff(t *testing.T) {
-	if DefaultCandidate == nil {
-		t.Skip("no candidate engine built in (build tag hbsengine)")
-	}
 	cases, groups := loadCorpus(t)
 	allow := loadAllowlist(t)
 	var all []Case
@@ -111,9 +108,6 @@ func TestCorpusDiff(t *testing.T) {
 // TestCorpusParseDiff compares must-parse on every distinct corpus
 // template.
 func TestCorpusParseDiff(t *testing.T) {
-	if DefaultParseCandidate == nil {
-		t.Skip("no candidate engine built in (build tag hbsengine)")
-	}
 	cases, groups := loadCorpus(t)
 	allow := loadAllowlist(t)
 	seen := map[string]bool{}
@@ -233,7 +227,7 @@ func TestRunReportsNondeterminism(t *testing.T) {
 }
 
 // TestRefFatal checks the templates that crash the reference: RefFatal
-// must flag each (so no harness renders it through hbref), and a built-in
+// must flag each (so no harness renders it through hbref), and the
 // candidate must answer each with an error.
 func TestRefFatal(t *testing.T) {
 	cases, err := LoadCorpusFile("testdata/ref-fatal.txtar")
@@ -241,9 +235,6 @@ func TestRefFatal(t *testing.T) {
 	require.NotEmpty(t, cases)
 	for _, c := range cases {
 		require.True(t, RefFatal(c.Template), c.Name)
-		if DefaultCandidate == nil {
-			continue
-		}
 		r := DefaultCandidate(c.Template, c.Context)
 		if r.ErrKind != KindRender && r.ErrKind != KindLimit {
 			t.Errorf("%s: candidate gave %s, want a render or limit error", c.Name, describe(r))

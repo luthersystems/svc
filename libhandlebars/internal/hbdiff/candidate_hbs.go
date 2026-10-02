@@ -1,5 +1,3 @@
-//go:build hbsengine
-
 package hbdiff
 
 import (
@@ -9,11 +7,9 @@ import (
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 )
 
-// This file binds the harness to the native engine. It is behind the
-// hbsengine build tag until hbs.FromJSON, hbs.Value and Program.Render
-// land; integration drops the tag.
+// This file binds the harness to the native engine.
 //
-// Contract assumed:
+// Contract:
 //
 //	hbs.Parse(tpl string, lim hbs.Limits) (*hbs.Program, error)
 //	hbs.FromJSON(ctxJSON []byte) (hbs.Value, error)
@@ -23,11 +19,6 @@ import (
 // without the ELPS prefix. A FromJSON error's text is exactly what
 // json.Unmarshal into map[string]interface{} reports. The order matches the
 // builtin: decode the context, then parse, then render.
-
-func init() {
-	DefaultCandidate = HBSCandidate
-	DefaultParseCandidate = HBSParseCandidate
-}
 
 // HBSCandidate renders through hbs in ModeCompat with DefaultLimits.
 func HBSCandidate(tpl string, ctxJSON []byte) Result {

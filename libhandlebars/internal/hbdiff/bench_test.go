@@ -10,10 +10,9 @@ import (
 // The benchmarks compare the reference pipeline (hbref: JSON decode,
 // raymond parse, svc's helpers, exec) with the candidate (hbs.FromJSON,
 // Parse, Render) end to end, on the checked-in corpora. Each op is one
-// pass over every case. Candidate sub-benchmarks are skipped when no
-// candidate is built in (build tag hbsengine). Compare with benchstat:
+// pass over every case. Compare with benchstat:
 //
-//	go test -tags hbsengine -run '^$' -bench . -count 10 ./libhandlebars/internal/hbdiff
+//	go test -run '^$' -bench . -count 10 ./libhandlebars/internal/hbdiff
 
 var bigRef = flag.Bool("bigref", false, "also run the reference on the 9 MB large-output case (about 30 s per op)")
 
@@ -61,9 +60,6 @@ func benchParse(b *testing.B, tpls []string) {
 	}
 	for _, e := range benchEngines() {
 		b.Run(e.name, func(b *testing.B) {
-			if e.parse == nil {
-				b.Skip("no candidate engine built in (build tag hbsengine)")
-			}
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
@@ -79,9 +75,6 @@ func benchRender(b *testing.B, cases []Case) {
 	b.Helper()
 	for _, e := range benchEngines() {
 		b.Run(e.name, func(b *testing.B) {
-			if e.render == nil {
-				b.Skip("no candidate engine built in (build tag hbsengine)")
-			}
 			out := 0
 			for _, c := range cases {
 				out += len(e.render(c.Template, c.Context).Out)
@@ -127,10 +120,7 @@ func BenchmarkLargeOutput(b *testing.B) {
 		ctx := []byte(`{"a":[` + strings.TrimSuffix(strings.Repeat("0,", n), ",") + `]}`)
 		for _, e := range benchEngines() {
 			b.Run(fmt.Sprintf("%s/n=%d", e.name, n), func(b *testing.B) {
-				switch {
-				case e.render == nil:
-					b.Skip("no candidate engine built in (build tag hbsengine)")
-				case e.name == "ref" && n >= 3000 && !*bigRef:
+				if e.name == "ref" && n >= 3000 && !*bigRef {
 					b.Skip("reference takes about 30 s per op; run with -bigref")
 				}
 				if r := e.render(tpl, ctx); r.ErrKind != KindNone || len(r.Out) != n*n {

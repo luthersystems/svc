@@ -274,13 +274,7 @@ func TestCasesLayout(t *testing.T) {
 
 func TestRefOnly(t *testing.T) {
 	f := newFixture(t)
-	code, _, stderr := runT(t, nil, "-out", f.out, "-phylum", f.phylum)
-	require.Equal(t, exitError, code)
-	require.Contains(t, stderr, "no candidate engine")
-	_, err := os.Stat(f.out)
-	require.ErrorIs(t, err, fs.ErrNotExist)
-
-	code, stdout, stderr := runT(t, nil, "-out", f.out, "-phylum", f.phylum, "-ref-only", "-runs", "1")
+	code, stdout, stderr := runT(t, hbdiff.DefaultCandidate, "-out", f.out, "-phylum", f.phylum, "-ref-only", "-runs", "1")
 	require.Equal(t, exitOK, code, stderr)
 	require.Contains(t, stdout, "candidate: none (reference only)")
 	assert.Equal(t, []string{"4"}, row(t, stdout, "ref only"))

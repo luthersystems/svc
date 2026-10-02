@@ -1,13 +1,22 @@
 Templates that kill the reference process with a Go stack overflow
 (fatal error, not recoverable). They never run through hbref; with a
 candidate built in, TestRefFatal requires an error from it (render or
-limit), not a crash. Contexts are {}.
+limit), not a crash. Contexts are {} unless a .json section gives one.
+
+unless-in-inverse needs a truthy t: with {} the reference renders "" (unless
+calls Fn, and the {{^x}} block has no program), which the engine matches.
+With t true, unless calls Inverse, which re-enters the enclosing {{^x}}
+inverse forever: the reference overflows the Go stack, and the engine stops
+at MaxDepth with a limit error (design section 0, R1: an input that aborts
+the reference must fail the call instead).
 -- with-in-else.hbs --
 {{#if x}}{{else}}{{with a}}{{/if}}
 -- if-in-inverse-section.hbs --
 {{^x}}{{if a}}{{/x}}
 -- unless-in-inverse.hbs --
 {{^x}}{{unless t}}{{/x}}
+-- unless-in-inverse.json --
+{"t": true}
 -- each-in-each-else.hbs --
 {{#each xs}}{{else}}{{each a}}{{/each}}
 -- if-subexpr-in-else.hbs --

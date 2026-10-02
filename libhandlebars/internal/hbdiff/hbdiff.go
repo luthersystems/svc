@@ -53,12 +53,11 @@ type Candidate func(tpl string, ctxJSON []byte) Result
 // ParseCandidate validates tpl as handlebars:must-parse would.
 type ParseCandidate func(tpl string) Result
 
-// DefaultCandidate and DefaultParseCandidate are the new engine, set by
-// candidate_hbs.go when it is built (build tag hbsengine). Nil means only
-// the reference runs.
+// DefaultCandidate and DefaultParseCandidate are the native engine
+// (candidate_hbs.go).
 var (
-	DefaultCandidate      Candidate
-	DefaultParseCandidate ParseCandidate
+	DefaultCandidate      Candidate      = HBSCandidate
+	DefaultParseCandidate ParseCandidate = HBSParseCandidate
 )
 
 // Ref renders c through the frozen reference.

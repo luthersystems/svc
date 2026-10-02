@@ -21,7 +21,7 @@ import "github.com/luthersystems/svc/libhandlebars/hbs/ast"
 // Render does not modify the Program or ctx and keeps all per-render state
 // (data frames, the global helper's map, the output) in the call.
 func (p *Program) Render(ctx Value, o Options) (string, error) {
-	return render(p.prog, ctx, o)
+	return render(p.ast, ctx, o)
 }
 
 func render(prog *ast.Program, ctx Value, o Options) (string, error) {

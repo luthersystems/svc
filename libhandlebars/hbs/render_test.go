@@ -160,12 +160,18 @@ func TestLimits(t *testing.T) {
 	require.ErrorAs(t, err, &he)
 	require.Equal(t, hbs.KindLimit, he.Kind)
 
-	// Deep static nesting.
+	// Deep static nesting: Parse refuses it at the default depth, and
+	// Render enforces its own MaxDepth on a program parsed with a higher one.
 	deep := strings.Repeat(`{{#if t}}`, 300) + "x" + strings.Repeat(`{{/if}}`, 300)
-	_, err = mustParse(t, deep).Render(mustCtx(t, `{"t": true}`), hbs.Options{})
+	_, err = hbs.Parse(deep, hbs.DefaultLimits)
 	require.ErrorAs(t, err, &he)
 	require.Equal(t, hbs.KindLimit, he.Kind)
-	got, err = mustParse(t, deep).Render(mustCtx(t, `{"t": true}`), hbs.Options{Limits: hbs.Limits{MaxDepth: 300}})
+	deepProg, err := hbs.Parse(deep, hbs.Limits{MaxDepth: 300})
+	require.NoError(t, err)
+	_, err = deepProg.Render(mustCtx(t, `{"t": true}`), hbs.Options{})
+	require.ErrorAs(t, err, &he)
+	require.Equal(t, hbs.KindLimit, he.Kind)
+	got, err = deepProg.Render(mustCtx(t, `{"t": true}`), hbs.Options{Limits: hbs.Limits{MaxDepth: 300}})
 	require.NoError(t, err)
 	require.Equal(t, "x", got)
 

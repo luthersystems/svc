@@ -30,8 +30,8 @@
 // replaces it with another file, and -allow none disables it.
 //
 // The exit status is 0 when every difference is explained, 1 when any is
-// not, and 2 on a usage or I/O error. The candidate engine is built in
-// with -tags hbsengine; without it hbdiff refuses to run unless -ref-only.
+// not, and 2 on a usage or I/O error. -ref-only runs the reference alone,
+// for example to check that a private corpus is safe to render with it.
 package main
 
 import (
@@ -87,9 +87,6 @@ func run(args []string, stdout, stderr io.Writer, cand hbdiff.Candidate) int {
 	}
 	if cfg.refOnly {
 		cand = nil
-	} else if cand == nil {
-		_, _ = fmt.Fprintln(stderr, "hbdiff: no candidate engine is built in (build with -tags hbsengine), or pass -ref-only")
-		return exitError
 	}
 	code, err := diff(cfg, stdout, stderr, cand)
 	if err != nil {

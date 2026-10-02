@@ -71,9 +71,6 @@ func TestShapesGolden(t *testing.T) {
 // TestShapesDiff compares the candidate with the reference on the shape
 // corpus.
 func TestShapesDiff(t *testing.T) {
-	if DefaultCandidate == nil {
-		t.Skip("no candidate engine built in (build tag hbsengine)")
-	}
 	rep := Run(loadShapes(t), Options{Runs: *runs, Candidate: DefaultCandidate, Allow: loadAllowlist(t)})
 	reportT(t, rep)
 }

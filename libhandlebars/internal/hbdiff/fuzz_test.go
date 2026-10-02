@@ -86,9 +86,6 @@ func checkFuzzCase(t *testing.T, c Case, allow *Allowlist) {
 	if len(alt) > 0 && !sumsInMapOrder {
 		t.Fatalf("reference nondeterministic\ntemplate: %q\ncontext: %s\n%s\n%s", c.Template, c.Context, describe(ref), describe(alt[0]))
 	}
-	if DefaultCandidate == nil {
-		return
-	}
 	cand, calt := repeat(3, func() Result { return DefaultCandidate(c.Template, c.Context) })
 	if len(calt) > 0 {
 		t.Fatalf("candidate nondeterministic\ntemplate: %q\ncontext: %s", c.Template, c.Context)
