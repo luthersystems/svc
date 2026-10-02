@@ -26,6 +26,7 @@ import (
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
@@ -265,8 +266,33 @@ func (orc *Oracle) getLastPhylumVersion() string {
 	return orc.cachedPhylumVersion
 }
 
+// traceHeaderTransport injects the request context's trace into the
+// outgoing HTTP headers. shiroclient's RPC client injects trace headers on
+// JSON-RPC calls but not on its gateway health_check request, which would
+// otherwise reach the gateway with no trace (luthersystems/svc#55).
+type traceHeaderTransport struct {
+	base http.RoundTripper
+}
+
+func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	tracePropagator.Inject(req.Context(), propagation.HeaderCarrier(req.Header))
+	return t.base.RoundTrip(req)
+}
+
+// healthCheckHTTPClient matches shiroclient's default zero-value client, with
+// trace headers added.
+var healthCheckHTTPClient = &http.Client{
+	Transport: traceHeaderTransport{base: http.DefaultTransport},
+}
+
+// tracePropagator matches the W3C trace context propagator shiroclient uses.
+var tracePropagator = propagation.TraceContext{}
+
 func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthCheckReport {
-	sopts := orc.txConfigs(ctx)
+	ctx, span := orc.tracer.Span(ctx, "PhylumHealthCheck", trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+	sopts := orc.txConfigs(ctx, shiroclient.WithHTTPClient(healthCheckHTTPClient))
 	ccHealth, err := orc.phylum.GetHealthCheck(ctx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return []*healthcheck.HealthCheckReport{{
