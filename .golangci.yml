@@ -92,19 +92,6 @@ linters:
         text: "fieldalignment:"
         path: '_test\.go'
 
-      # --- forcetypeassert: the compat float32 panic ----------------------
-      # toInt's `case float64, float32: f = int(v.(float64))` panics on a
-      # float32. That panic is the current behaviour of handlebars:render
-      # (raymond re-panics runtime errors), and the replacement engine must
-      # reproduce it in its compat mode; the fix belongs to the opt-in fixed
-      # mode only. A checked assertion would turn the panic into 0, changing
-      # what a phylum sees. Scoped to the one file; delete it when
-      # libhandlebars.go stops calling toInt.
-      - linters:
-          - forcetypeassert
-        text: 'right hand must be only type assertion'
-        path: '^libhandlebars/libhandlebars\.go$'
-
       # --- svcerr: fixes that would change error classification -----------
       # errorlint wants grpcToLutherError's
       # `fmt.Errorf("%w: %s", context.Canceled, err)` to wrap err with %w as

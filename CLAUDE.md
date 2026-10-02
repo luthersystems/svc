@@ -16,7 +16,7 @@ A modular Go 1.23 service framework for the [Luther Platform](https://luthersyst
 | `grpclogging/` | gRPC unary interceptors, structured logging (logrus), request ID propagation |
 | `midware/` | HTTP middleware framework (`Middleware` interface, `Chain`, trace headers) |
 | `svcerr/` | Centralized error handling, gRPC status code mapping, exception factories |
-| `libhandlebars/` | Handlebars templating engine (Go port via `luthersystems/raymond`) with ELPS integration |
+| `libhandlebars/` | Handlebars templating with ELPS integration: native engine `hbs/`, frozen raymond reference and differential harness under `internal/` |
 | `libdates/` | Civil date difference calculator — O(1) YMD algorithm |
 | `mailer/` | AWS SES email sender with attachment support |
 | `opttrace/` | OpenTelemetry tracer wrapper with OTLP exporter support |

@@ -3,13 +3,23 @@
 Luther's templating library is an extension of [handlebars](https://handlebarsjs.com/) with some additional bulitins. These helper functions make writing complex templates simpler, while striving to maintain the spirit of handlebar's declarative and minimal style.
 
 ## Differences from handlebars
-  - Builds on the [raymond](https://github.com/aymerick/raymond) Go implementation of handlebars, which aims to be feature complete with handlebarsjs v3
+  - Rendered by `hbs`, a native Go engine for the Handlebars 3 dialect that luthersystems/raymond rendered (raymond is kept only as a frozen test reference in `internal/raymondref`)
   - New builtins: eq, len, not, and, or, gt, gte, lt, lte, times, div, mod, plus, minus, select, global
   - log builtin is disabled
   - printing maps is disabled (attempting to print a map will result in the string "UNPRINTABLE")
 
+## ELPS functions
+  - `(handlebars:render tpl ctx)`: renders tpl with ctx. Output is byte-compatible with the raymond-based releases, helper bugs included (`hbs.ModeCompat`). The only changes: `plus`/`minus` add hash values in sorted key order (the old order was random), `{{@this}}` is a render error instead of a crash, and `to-int` of NaN, ±Inf or an out-of-range number is `-9223372036854775808` on every CPU.
+  - `(handlebars:render-fixed tpl ctx)`: renders with the known helper bugs fixed (`hbs.ModeFixed`; the list is in `hbs/helpers_svc.go`). A phylum opts in by calling it; its output can differ from `render`'s.
+  - `(handlebars:must-parse tpl)`: validates tpl without rendering it.
+  - `(handlebars:libname)` returns `"luthersystems/svc/hbs"`, and `(handlebars:version)` returns the engine version (`hbs.Version`). The version changes whenever a release changes any output, error or step charge.
+
+## Limits and steps
+  - Templates are limited to 1 MiB and 256 levels of nesting (`handlebars-parse`), and output to 16 MiB (`handlebars-render`).
+  - Parsing costs 1 ELPS step per started KiB of template on every call (parses are cached, but a cache hit costs the same). Rendering costs 1 step per node evaluated, `#each` iteration and helper call, and 1 per started KiB of output. A render that exhausts the step budget stops early with the budget condition.
+
 ## Errors
-  - Where possible, the builtins will attempt to return a Go error if there was a problem parsing and rendering the template. In some cases it's not possible to distinguish whether the error was in the template itself, or the library.
+  - Template syntax errors and template limits signal `handlebars-parse`; evaluation errors and the output limit signal `handlebars-render`.
 
 ## Builtins
 * *eq*: check equality on strings and numbers.
