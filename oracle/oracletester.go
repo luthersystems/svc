@@ -37,7 +37,7 @@ func (tw testWriter) Write(p []byte) (int, error) {
 		// bytes.Buffer panics on error
 		tw.b.WriteByte(b)
 	}
-	return 0, nil
+	return len(p), nil
 }
 
 // Snapshot takes a snapshot of the current oracle.
