@@ -24,7 +24,7 @@ const (
 	allowlistFile = "testdata/allowed-diffs.txt"
 )
 
-func loadCorpus(t *testing.T) (map[string][]Case, []string) {
+func loadCorpus(t testing.TB) (map[string][]Case, []string) {
 	t.Helper()
 	cases, groups, err := LoadCorpusDir(corpusDir)
 	require.NoError(t, err)
@@ -255,5 +255,41 @@ func TestRefFatal(t *testing.T) {
 		for _, c := range all[g] {
 			require.False(t, RefFatal(c.Template), "%s would crash the reference; move it to ref-fatal.txtar", c.Name)
 		}
+	}
+}
+
+// TestRunCaseRefSkipped checks a RefFatal template never reaches the
+// reference: the candidate runs alone and is still checked for
+// determinism.
+func TestRunCaseRefSkipped(t *testing.T) {
+	cases, err := LoadCorpusFile("testdata/ref-fatal.txtar")
+	require.NoError(t, err)
+	c := cases[0]
+	cr := RunCase(c, 3, nil, nil)
+	require.Equal(t, RefSkipped, cr.Outcome)
+	require.Equal(t, Result{}, cr.Ref)
+
+	want := Result{ErrKind: KindLimit, ErrMsg: "limit"}
+	cr = RunCase(c, 3, func(string, []byte) Result { return want }, nil)
+	require.Equal(t, RefSkipped, cr.Outcome)
+	require.Equal(t, want, cr.Cand)
+	require.Nil(t, cr.Mismatch)
+
+	n := 0
+	cr = RunCase(c, 3, func(string, []byte) Result { n++; return Result{Out: strings.Repeat("x", n%2)} }, nil)
+	require.Equal(t, Diff, cr.Outcome)
+	require.Equal(t, "determinism", cr.Mismatch.Field)
+}
+
+// TestCheckedInAllowlist checks the built-in copy is the file on disk.
+func TestCheckedInAllowlist(t *testing.T) {
+	now := time.Now()
+	built, err := CheckedInAllowlist(now)
+	require.NoError(t, err)
+	file, err := LoadAllowlist(allowlistFile, now)
+	require.NoError(t, err)
+	require.Len(t, built.Entries, len(file.Entries))
+	for i := range file.Entries {
+		require.Equal(t, file.Entries[i].Pattern, built.Entries[i].Pattern)
 	}
 }

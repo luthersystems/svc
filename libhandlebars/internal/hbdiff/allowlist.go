@@ -3,6 +3,7 @@ package hbdiff
 import (
 	"bufio"
 	"bytes"
+	_ "embed" // the checked-in allowlist
 	"fmt"
 	"os"
 	"path"
@@ -42,6 +43,18 @@ type AllowEntry struct {
 
 type cond struct {
 	op, arg string
+}
+
+// allowedDiffs is testdata/allowed-diffs.txt, built in so tools run from
+// any directory honour the checked-in allowlist.
+//
+//go:embed testdata/allowed-diffs.txt
+var allowedDiffs []byte
+
+// CheckedInAllowlist parses the allowlist committed with the harness,
+// testdata/allowed-diffs.txt.
+func CheckedInAllowlist(now time.Time) (*Allowlist, error) {
+	return ParseAllowlist(allowedDiffs, now)
 }
 
 // LoadAllowlist reads an allowlist file. Entries whose expiry is before
@@ -87,7 +100,7 @@ func ParseAllowlist(b []byte, now time.Time) (*Allowlist, error) {
 			part = strings.TrimSpace(part)
 			op, arg, ok := strings.Cut(part, ":")
 			if !ok {
-				return nil, fmt.Errorf("allowlist line %d: condition %q has no op:", n, part)
+				return nil, fmt.Errorf("allowlist line %d: condition %q has no op: prefix", n, part)
 			}
 			switch op {
 			case "case":

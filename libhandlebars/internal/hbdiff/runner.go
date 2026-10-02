@@ -21,6 +21,9 @@ const (
 	RefNondeterministic Outcome = "ref-nondeterministic"
 	// RefOnly: no candidate was configured; the reference ran alone.
 	RefOnly Outcome = "ref-only"
+	// RefSkipped: RefFatal flagged the template, so the reference did not
+	// run (it could kill the process). The candidate ran alone.
+	RefSkipped Outcome = "ref-skipped"
 	// Diff: an unexplained difference, or a nondeterministic candidate.
 	Diff Outcome = "DIFF"
 )
@@ -77,6 +80,9 @@ func Run(cases []Case, opts Options) *Report {
 // RunCase runs one case runs times through each engine.
 func RunCase(c Case, runs int, cand Candidate, allow *Allowlist) CaseReport {
 	cr := CaseReport{Case: c}
+	if RefFatal(c.Template) {
+		return runRefSkipped(cr, runs, cand)
+	}
 	cr.Ref, cr.RefAlt = repeat(runs, func() Result { return Ref(c.Template, c.Context) })
 	if cand == nil {
 		cr.Outcome = RefOnly
@@ -112,6 +118,23 @@ func RunCase(c Case, runs int, cand Candidate, allow *Allowlist) CaseReport {
 	return cr
 }
 
+// runRefSkipped runs only the candidate, for a template the reference
+// cannot survive. A nondeterministic candidate is still a Diff.
+func runRefSkipped(cr CaseReport, runs int, cand Candidate) CaseReport {
+	cr.Outcome = RefSkipped
+	if cand == nil {
+		return cr
+	}
+	var candAlt []Result
+	cr.Cand, candAlt = repeat(runs, func() Result { return cand(cr.Case.Template, cr.Case.Context) })
+	if len(candAlt) > 0 {
+		cr.Outcome = Diff
+		cr.Mismatch = &Mismatch{Field: "determinism",
+			Detail: fmt.Sprintf("candidate gave %d different results; %s", len(candAlt)+1, Compare(cr.Cand, candAlt[0]))}
+	}
+	return cr
+}
+
 // repeat calls f n times and returns the first result and every distinct
 // other result.
 func repeat(n int, f func() Result) (Result, []Result) {
@@ -140,7 +163,7 @@ func repeat(n int, f func() Result) (Result, []Result) {
 func (r *Report) WriteSummary(w io.Writer) error {
 	ew := &errWriter{w: w}
 	ew.printf("%-22s %d\n", "cases", len(r.Cases))
-	for _, o := range []Outcome{Equal, Allowlisted, RefNondeterministic, RefOnly, Diff} {
+	for _, o := range []Outcome{Equal, Allowlisted, RefNondeterministic, RefOnly, RefSkipped, Diff} {
 		ew.printf("%-22s %d\n", o, r.Counts[o])
 	}
 	return ew.err
@@ -166,7 +189,11 @@ func (r *Report) WriteDetails(w io.Writer) error {
 		if cr.AllowedBy != nil {
 			ew.printf("allowed:  %s (%s) %s\n", cr.AllowedBy.Pattern, cr.AllowedBy.Issue, cr.AllowedBy.Reason)
 		}
-		ew.printf("ref:      %s\n", describe(cr.Ref))
+		if cr.Outcome == RefSkipped {
+			ew.printf("ref:      not run (RefFatal)\n")
+		} else {
+			ew.printf("ref:      %s\n", describe(cr.Ref))
+		}
 		for _, a := range cr.RefAlt {
 			ew.printf("ref alt:  %s\n", describe(a))
 		}
