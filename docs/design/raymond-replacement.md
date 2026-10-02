@@ -1,8 +1,41 @@
 # Design: raymond (Handlebars) replacement
 
-Status: draft, for review. Refs luthersystems/svc#106.
+Status: approved for build (option E). Refs luthersystems/svc#106.
 
-## 1. Summary and recommendation
+## 0. Decisions and review (supersedes section 1 where they differ)
+
+An independent adversarial review checked this design against the code and
+against production phylum templates (described here only by shape). After
+the review, the owner chose to build the native engine (option E) now.
+
+| Topic | Decision |
+|---|---|
+| Option | **E: native engine**, `libhandlebars/hbs`. The frozen fork stays as a test-only reference (`libhandlebars/internal/raymondref`). |
+| Bug fixes | **Opt-in fixed mode.** `handlebars:render` keeps byte-identical output (`ModeCompat`), including helper bugs. `ModeFixed` fixes them, and a phylum must ask for it. The one compat exception: `plus`/`minus` use sorted hash-key order, because today's output is not deterministic. |
+| Harness | **Both:** a checked-in corpus (literal cases, shape skeletons of production templates with no production text, grammar fuzzer), and a private mode that reads a phylum folder and context JSON from outside the repo. |
+| `libname` / `version` | **New honest strings**, tied to the engine build. Production writes them into stored document metadata, so the upgrade note must say so. |
+| Rollout | substrate runs as external chaincode, so "coordinated upgrade" is a runbook: roll each peer while it does not endorse, and check `(handlebars:version)` on every peer before it endorses again. No two-engine switch for one channel. |
+
+Review findings that change the design:
+
+| # | Finding | Change |
+|---|---|---|
+| R1 | Some template inputs abort the process instead of failing the call. Templates are user uploads in production, checked by `must-parse` inside a transaction. (Details: private substrate issue.) | Size and nesting caps checked **before** any recursion. Blocker for release. |
+| R2 | A failed parse leaks a goroutine (raymond's lexer goroutine is never drained). | Synchronous lexer. |
+| R3 | Templates stored on the ledger are validated once and rendered forever. | Rollout gate: an operator-run checker compares old and new engines over each channel's stored templates and reports counts only. |
+| R4 | Template number literals are Go `int`; context numbers are `float64`. Helpers behave differently for each (`{{to-str 3}}` gives `3`; `{{to-str n}}` gives `3.000000`). Section 3.2's `to-str` row was wrong. | The engine's value model keeps `int` and `float64` apart. |
+| R5 | More compat traps: a nil argument skips the helper and renders `""`; mustache-style lookup climbs to the parent context inside `#each`; nil hash values are dropped; `round-to-nth` parses as 32-bit float; `{{@this}}` passes `must-parse` and then panics at render. | All are harness cases. `{{@this}}` becomes a render error (an allowed difference). |
+| R6 | D1 can be reached by production templates, but 2-decimal rounding hides it today. | Keep the fix; severity medium. |
+| R7 | More quadratic sites: block sections, `select`, array printing. | One output builder for the whole render. |
+| R8 | Toolchain or dependency bumps (`QueryEscape`, go-humanize, phonenumbers, `FormatFloat`, `AddDate`) can change output without anyone noticing. | Reference golden outputs are committed and re-checked on every bump. |
+
+Revised estimate: about 13-18 agent-days of build (harness first, then parser,
+evaluator and helpers in parallel), about 1.5-2 calendar weeks, plus about one
+engineer-week of human review. Not included: exporting stored templates from
+each channel, the rollout runbook, and product sign-off on each allowed
+difference.
+
+## 1. Summary and recommendation (original, before the review)
 
 | Option | Cost | Risk to tx results | Benefit | Verdict |
 |---|---|---|---|---|
@@ -135,7 +168,7 @@ compatible engine must keep them until a deliberate, coordinated change.
 | `{{> p}}` | render error `Partial not found: p` | No partials exist. |
 | `{{#*inline "p"}}` | parse error | Handlebars 3 grammar. |
 | `{{{{raw}}}}{{x}}{{{{/raw}}}}` | `""` | Raw block calls a helper named `raw`; none exists. |
-| `{{to-str 3}}` | `3.000000` | `%f`. `int8..int32`, `float32` cases return `""` (Go `switch` has no fallthrough). |
+| `{{to-str 3}}` (literal int) and `{{to-str n}}` (context 3) | `3` and `3.000000` | Literal ints vs context float64 (`%f`). `int8..int32`, `float32` cases return `""`. |
 | `{{mod 7 "x"}}` | `NaN` | Guard is `!ok1 && !ok2` (should be `||`). |
 | `{{to-int "3.5"}}` | `0` | |
 | `{{date-add-months "2020-01-31" 1}}` | `2020-03-02` | Go `AddDate` normalisation. |
