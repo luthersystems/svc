@@ -7,7 +7,7 @@ import (
 
 // printVisitor implements the Visitor interface to print a AST.
 type printVisitor struct {
-	buf   string
+	buf   strings.Builder
 	depth int
 
 	original bool
@@ -26,18 +26,17 @@ func Print(node Node) string {
 }
 
 func (v *printVisitor) output() string {
-	return v.buf
+	return v.buf.String()
 }
 
 func (v *printVisitor) indent() {
-	for i := 0; i < v.depth; {
-		v.buf += "  "
-		i++
+	for range v.depth {
+		v.buf.WriteString("  ")
 	}
 }
 
 func (v *printVisitor) str(val string) {
-	v.buf += val
+	v.buf.WriteString(val)
 }
 
 func (v *printVisitor) nl() {
