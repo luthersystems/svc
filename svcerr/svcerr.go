@@ -339,14 +339,14 @@ func AppErrorUnaryInterceptor(log grpclogging.ServiceLogger) func(ctx context.Co
 				log(ctx).Errorf("wrong message type: %T", details)
 				return nil, internalError(ctx)
 			}
-			stat, err := status.New(code, except.GetDescription()).WithDetails(msg)
-			if err == nil {
+			stat, statErr := status.New(code, except.GetDescription()).WithDetails(msg)
+			if statErr == nil {
 				// case 1: we coerced a response with an exception into a proper
 				// gRPC error.
 				return nil, stat.Err()
 			}
 			// an error in the error handling :(
-			log(ctx).WithError(err).Errorf("cannot create error status")
+			log(ctx).WithError(statErr).Errorf("cannot create error status")
 			return nil, internalError(ctx)
 		}
 
@@ -382,14 +382,13 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 			pbErr := &common.ExceptionResponse{
 				Exception: UnexpectedException(ctx, "Internal server error"),
 			}
-			b, err := marshaler.Marshal(pbErr)
-			if err != nil {
-				log(ctx).WithError(err).Errorf("marshal unexpected error")
+			b, marshalErr := marshaler.Marshal(pbErr)
+			if marshalErr != nil {
+				log(ctx).WithError(marshalErr).Errorf("marshal unexpected error")
 				b = []byte(cannedExceptionJSON(ctx))
 			}
-			_, err = w.Write(b)
-			if err != nil {
-				log(ctx).WithError(err).Errorf("write")
+			if _, writeErr := w.Write(b); writeErr != nil {
+				log(ctx).WithError(writeErr).Errorf("write")
 			}
 			incExceptionMetric(pbErr.GetException())
 			return
@@ -399,14 +398,13 @@ func ErrIntercept(log grpclogging.ServiceLogger, handlers ...HTTPErrorHandler) H
 		pbDetail, ok := detail.(*common.Exception)
 		if !ok {
 			// Propagate payload for non-exception detail
-			b, err := marshaler.Marshal(detail)
-			if err != nil {
-				log(ctx).WithError(err).Errorf("marshal detail error")
+			b, marshalErr := marshaler.Marshal(detail)
+			if marshalErr != nil {
+				log(ctx).WithError(marshalErr).Errorf("marshal detail error")
 				b = []byte(cannedExceptionJSON(ctx))
 			}
-			_, err = w.Write(b)
-			if err != nil {
-				log(ctx).WithError(err).Errorf("write")
+			if _, writeErr := w.Write(b); writeErr != nil {
+				log(ctx).WithError(writeErr).Errorf("write")
 			}
 			return
 		}

@@ -26,6 +26,8 @@ import (
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
@@ -181,7 +183,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {
-		err := opt(oracle)
+		err = opt(oracle)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +192,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		if oracle.cfg.GatewayEndpoint == "" {
 			oracle.cfg.GatewayEndpoint = fmt.Sprintf("http://shiroclient_gw_%s:8082", oracle.cfg.PhylumServiceName)
 		}
-		err := withPhylum(oracle.cfg.GatewayEndpoint)(oracle)
+		err = withPhylum(oracle.cfg.GatewayEndpoint)(oracle)
 		if err != nil {
 			return nil, err
 		}
@@ -265,8 +267,45 @@ func (orc *Oracle) getLastPhylumVersion() string {
 	return orc.cachedPhylumVersion
 }
 
+// traceHeaderTransport injects the request context's trace into the
+// outgoing HTTP headers. shiroclient's RPC client injects trace headers on
+// JSON-RPC calls but not on its gateway health_check request, which would
+// otherwise reach the gateway with no trace (luthersystems/svc#55).
+//
+// The oracle uses it only when tracing is configured; with tracing off the
+// health check uses shiroclient's default client and sends no trace headers,
+// as before. It injects whenever the context holds a valid span context,
+// sampled or not, as shiroclient's JSON-RPC path does, so the gateway keeps
+// the caller's sampling decision. The global propagator also forwards the
+// caller's tracestate and baggage, as standard OpenTelemetry instrumentation
+// does.
+type traceHeaderTransport struct {
+	base http.RoundTripper
+}
+
+func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !trace.SpanContextFromContext(req.Context()).IsValid() {
+		return t.base.RoundTrip(req)
+	}
+	req = req.Clone(req.Context())
+	otel.GetTextMapPropagator().Inject(req.Context(), propagation.HeaderCarrier(req.Header))
+	return t.base.RoundTrip(req)
+}
+
+// healthCheckHTTPClient matches shiroclient's default zero-value client, with
+// trace headers added.
+var healthCheckHTTPClient = &http.Client{
+	Transport: traceHeaderTransport{base: http.DefaultTransport},
+}
+
 func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthCheckReport {
-	sopts := orc.txConfigs(ctx)
+	ctx, span := orc.tracer.Span(ctx, "PhylumHealthCheck", trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+	var extra []shiroclient.Config
+	if orc.tracer.Enabled() {
+		extra = append(extra, shiroclient.WithHTTPClient(healthCheckHTTPClient))
+	}
+	sopts := orc.txConfigs(ctx, extra...)
 	ccHealth, err := orc.phylum.GetHealthCheck(ctx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return []*healthcheck.HealthCheckReport{{
@@ -294,7 +333,7 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 // GetHealthCheck checks this service and all dependent services to construct a
 // health report. Returns a grpc error code if a service is down.
 func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealthCheckRequest) (*healthcheck.GetHealthCheckResponse, error) {
-	ctx, span := orc.tracer.Span(ctx, "HealthCheck")
+	ctx, span := orc.tracer.Span(ctx, "HealthCheck", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 	// No ACL: Open to everyone
 	healthy := true

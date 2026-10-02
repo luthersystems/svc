@@ -39,7 +39,7 @@ func TestChain(t *testing.T) {
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
 		assert.Equal(t, []byte("hello"), testRequest(t, server, "GET", "/", nil, nil))
 		assert.Equal(t, []string{"1", "2", "3"},
-			testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Values("X-Test"))
+			testResponseHeaders(t, server, "GET", "/", nil, nil).Values("X-Test"))
 	})
 }
 
@@ -86,7 +86,7 @@ func testServer(t *testing.T, h http.Handler, fn func(t *testing.T, server *http
 
 func testRequest(t *testing.T, server *httptest.Server, method string, rpath string, header http.Header, body io.Reader) []byte {
 	t.Helper()
-	r, err := http.NewRequest(method, serverURL(server, rpath), body)
+	r, err := http.NewRequestWithContext(t.Context(), method, serverURL(server, rpath), body)
 	require.NoError(t, err, "invalid request parameters")
 	for k, v := range header {
 		for i := range v {
@@ -96,8 +96,8 @@ func testRequest(t *testing.T, server *httptest.Server, method string, rpath str
 	resp, err := (&http.Client{}).Do(r)
 	require.NoError(t, err, "request failure")
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			require.NoError(t, err, "close")
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			require.NoError(t, closeErr, "close")
 		}
 	}()
 	b, err := io.ReadAll(resp.Body)
@@ -105,9 +105,9 @@ func testRequest(t *testing.T, server *httptest.Server, method string, rpath str
 	return b
 }
 
-func testResponseHeaders(t *testing.T, server *httptest.Server, method string, rpath string, header http.Header, body io.Reader) *http.Response {
+func testResponseHeaders(t *testing.T, server *httptest.Server, method string, rpath string, header http.Header, body io.Reader) http.Header {
 	t.Helper()
-	r, err := http.NewRequest(method, serverURL(server, rpath), body)
+	r, err := http.NewRequestWithContext(t.Context(), method, serverURL(server, rpath), body)
 	require.NoError(t, err, "invalid request parameters")
 	for k, v := range header {
 		for i := range v {
@@ -117,11 +117,11 @@ func testResponseHeaders(t *testing.T, server *httptest.Server, method string, r
 	resp, err := (&http.Client{}).Do(r)
 	require.NoError(t, err, "request failure")
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			require.NoError(t, err, "close")
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			require.NoError(t, closeErr, "close")
 		}
 	}()
-	return resp
+	return resp.Header
 }
 
 func serverURL(server *httptest.Server, rpath string) string {

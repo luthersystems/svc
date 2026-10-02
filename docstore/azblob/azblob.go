@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -33,7 +35,7 @@ func decodePkcs12(pkcs []byte, password string) (*x509.Certificate, *rsa.Private
 
 	rsaPrivateKey, isRsaKey := privateKey.(*rsa.PrivateKey)
 	if !isRsaKey {
-		return nil, nil, fmt.Errorf("PKCS#12 certificate must contain an RSA private key")
+		return nil, nil, errors.New("PKCS#12 certificate must contain an RSA private key")
 	}
 
 	return certificate, rsaPrivateKey, nil
@@ -69,8 +71,7 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 	}
 
 	credential := azblob.NewTokenCredential(spt.Token().AccessToken, func(tc azblob.TokenCredential) time.Duration {
-		err := spt.Refresh()
-		if err != nil {
+		if refreshErr := spt.Refresh(); refreshErr != nil {
 			// something went wrong, prevent the refresher from being triggered again
 			return 0
 		}
@@ -98,13 +99,13 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 // New constructs a storage blob from an access key.
 func New(prefix, accountName, containerName, accountKey string) (*Store, error) {
 	if len(prefix) == 0 {
-		return nil, fmt.Errorf("missing prefix")
+		return nil, errors.New("missing prefix")
 	}
 	if len(accountName) == 0 {
-		return nil, fmt.Errorf("missing account name")
+		return nil, errors.New("missing account name")
 	}
 	if len(containerName) == 0 {
-		return nil, fmt.Errorf("missing container name")
+		return nil, errors.New("missing container name")
 	}
 	// accountkey?
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -135,8 +136,10 @@ type Store struct {
 func getBufFromBlob(ctx context.Context, blobURL azblob.BlockBlobURL) ([]byte, error) {
 	_, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
-		serr, ok := err.(azblob.StorageError)
-		if ok && serr.Response().StatusCode == 404 {
+		var serr azblob.StorageError
+		// The SDK's validateResponse already read and closed this
+		// response's body before it built the error.
+		if errors.As(err, &serr) && serr.Response().StatusCode == http.StatusNotFound { //nolint:bodyclose // body closed by the SDK (validateResponse)
 			return nil, docstore.ErrRequestNotFound
 		}
 		return nil, err

@@ -41,14 +41,17 @@ func TestOracleDepTx(t *testing.T) {
 	require.NotEmpty(t, httpAddr)
 
 	client := &http.Client{}
-	firstResp, err := client.Post(fmt.Sprintf("http://%s/v1/dep_tx", httpAddr),
-		"application/json",
-		bytes.NewBufferString(`{}`))
+	req1, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		fmt.Sprintf("http://%s/v1/dep_tx", httpAddr), bytes.NewBufferString(`{}`))
+	require.NoError(t, err)
+	req1.Header.Set("Content-Type", "application/json")
 
+	firstResp, err := client.Do(req1)
+	require.NoError(t, err)
 	bodyBytes, _ := io.ReadAll(firstResp.Body)
+	require.NoError(t, firstResp.Body.Close())
 	log.Printf("Raw HTTP Response Body: %s", string(bodyBytes))
 
-	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, firstResp.StatusCode)
 
 	var out1 hellov1.UseDepTxResponse
@@ -71,7 +74,7 @@ func TestOracleDepTx(t *testing.T) {
 	require.NotNil(t, depCookie, "should have a dep-tx cookie")
 	require.Equal(t, out1.GetNewTxId(), depCookie.Value)
 
-	req2, err := http.NewRequest("POST", fmt.Sprintf("http://%s/v1/dep_tx", httpAddr), bytes.NewBufferString(`{}`))
+	req2, err := http.NewRequestWithContext(t.Context(), http.MethodPost, fmt.Sprintf("http://%s/v1/dep_tx", httpAddr), bytes.NewBufferString(`{}`))
 	require.NoError(t, err)
 	req2.AddCookie(depCookie)
 	req2.Header.Set("Content-Type", "application/json")

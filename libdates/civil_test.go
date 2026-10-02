@@ -283,7 +283,7 @@ func TestYMDiff_Invariants(t *testing.T) {
 	for _, startStr := range tests {
 		start := parseDate(startStr)
 		// Test various month offsets
-		for months := 0; months <= 36; months++ {
+		for months := range 37 {
 			end := start.AddDate(0, months, 0)
 			diff, err := DiffYMD(start, end, nil)
 			require.NoError(t, err, "start=%s months=%d", startStr, months)

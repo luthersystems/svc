@@ -4,7 +4,7 @@ package docstore
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"path"
 	"regexp"
 	"strings"
@@ -12,7 +12,7 @@ import (
 
 var (
 	// ErrRequestNotFound is returned when a request is not found
-	ErrRequestNotFound = fmt.Errorf("key not found")
+	ErrRequestNotFound = errors.New("key not found")
 )
 
 // Getter gets documents.
@@ -45,10 +45,10 @@ var validKeyRegexp = regexp.MustCompile(`^[a-zA-Z0-9_./()-]*$`)
 // ValidKey returns an error if the key is invalid.
 func ValidKey(key string) error {
 	if key == "" {
-		return fmt.Errorf("missing key")
+		return errors.New("missing key")
 	}
 	if !validKeyRegexp.MatchString(key) {
-		return fmt.Errorf("invalid key")
+		return errors.New("invalid key")
 	}
 	if key != strings.TrimPrefix(path.Join("/", key), "/") {
 		// *IMPORTANT:* we sanitize the key by first turning it into an
@@ -56,7 +56,7 @@ func ValidKey(key string) error {
 		// If the key is not the same after sanitization then potential
 		// path traversal.
 		// Note path.Join calls Clean on the path.
-		return fmt.Errorf("invalid path")
+		return errors.New("invalid path")
 	}
 	return nil
 }
