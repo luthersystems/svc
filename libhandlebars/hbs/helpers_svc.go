@@ -32,11 +32,13 @@ import (
 //	int parameters       a context number is a type error                     an integral float64 is accepted
 //	(date-add-months)    ("type float64 but it should be int")
 //	if/unless includeZero only the template literal 0                        also a context number 0
-//	to-int               NaN, +-Inf and out-of-range floats convert with      NaN is 0; others saturate to the
-//	                     Go's int(f), which differs between CPU types         int64 range on every CPU
+//	to-int float32       panics in svc: a render error                        converts like a float64
 //
 // Both modes add plus/minus hash values in sorted key order (raymond added
-// them in Go map order, so the result was not deterministic).
+// them in Go map order, so the result was not deterministic). Both modes
+// convert NaN, +-Inf and out-of-range floats in to-int to the amd64 result,
+// math.MinInt64, on every CPU (raymond used Go's int(f), which differs
+// between CPU types); see floatToInt and DETERMINISM.md.
 
 const (
 	layoutISO           = "2006-01-02"
@@ -501,13 +503,10 @@ func (r *renderer) toInt(v any) (int, bool) {
 	case int64:
 		return int(x), true
 	case float64:
-		if r.mode == ModeFixed {
-			return saturateInt(x), true
-		}
-		return int(x), true
+		return floatToInt(x), true
 	case float32:
 		if r.mode == ModeFixed {
-			return saturateInt(float64(x)), true
+			return floatToInt(float64(x)), true
 		}
 		// svc's v.(float64) assertion panics for a float32.
 		r.fail("to-int: float32 value")
@@ -517,16 +516,29 @@ func (r *renderer) toInt(v any) (int, bool) {
 	}
 }
 
-// saturateInt converts f to int the same way on every CPU.
-func saturateInt(f float64) int {
-	switch {
-	case math.IsNaN(f):
-		return 0
-	case f >= math.MaxInt64:
-		return math.MaxInt64
-	case f <= math.MinInt64:
-		return math.MinInt64
-	default:
-		return int(f)
+// floatToInt is Go's int(f) as compiled for amd64, computed the same way on
+// every CPU. It is used in both modes (see DETERMINISM.md).
+//
+// The Go spec leaves a float-to-int conversion implementation-defined when
+// the value does not fit, so svc's int(f) depended on the CPU. amd64 compiles
+// it to CVTTSD2SQ, which truncates toward zero and returns the "integer
+// indefinite" value 0x8000000000000000 (math.MinInt64) for NaN, +-Inf and
+// anything outside [-2^63, 2^63). arm64's FCVTZS saturates instead (+Inf and
+// 1e19 give math.MaxInt64) and gives 0 for NaN. The amd64 results are the
+// pinned ones:
+//
+//	NaN, +Inf, -Inf, 1e19, -1e19, 2^63   -> math.MinInt64
+//	-2^63                                -> math.MinInt64 (in range, exact)
+//	finite f in (-2^63, 2^63)            -> f truncated toward zero
+//
+// Only in-range values reach the hardware conversion, where the result is
+// defined by the spec. A float32 widens to float64 exactly, so the same rule
+// matches amd64's CVTTSS2SQ. On a 32-bit CPU int(int64) wraps, which is
+// deterministic but not the amd64 result (the out-of-range value is
+// math.MinInt32 there); svc does not run there.
+func floatToInt(f float64) int {
+	if f >= -0x1p63 && f < 0x1p63 { // false for NaN
+		return int(int64(f))
 	}
+	return math.MinInt // math.MinInt64 on 64-bit CPUs
 }

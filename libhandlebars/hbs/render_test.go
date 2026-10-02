@@ -2,6 +2,7 @@ package hbs_test
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -32,7 +33,6 @@ func TestModeFixed(t *testing.T) {
 		{`{{mod 7 "x"}}|{{mod "x" 2}}|{{mod 7 3}}`, "NaN|0|1", "0|0|1"},
 		{`{{round-to-nth x 2}}`, "123456792.00", "123456789.12"},
 		{`{{#if zero includeZero=true}}z{{/if}}{{#unless zero includeZero=true}}u{{/unless}}`, "u", "z"},
-		{`{{to-int (div 1 0)}}|{{to-int (times -1 (div 1 0))}}|{{to-int (mod 0 0)}}`, "", "9223372036854775807|-9223372036854775808|0"},
 		{`{{plus a=0.1 b=0.2 c=0.3}}|{{minus 1 c=0.3 a=0.1 b=0.2}}`, "0.6000000000000001|0.39999999999999997", "0.6000000000000001|0.39999999999999997"},
 	}
 	for _, c := range cases {
@@ -55,6 +55,42 @@ func TestModeFixed(t *testing.T) {
 	assert.Equal(t, "2020-05-01", got)
 	_, err = mustParse(t, `{{date-add-months date f}}`).Render(mustCtx(t, quirkCtx), hbs.Options{Mode: hbs.ModeFixed})
 	require.EqualError(t, err, "Evaluation error: Helper date-add-months called with argument 1 with type float64 but it should be int\nCurrent node:\n\tPath{Original:'f', Pos:23}")
+}
+
+// TestToIntPinned: to-int on NaN, +-Inf and floats outside int64 range gives
+// the amd64 result, math.MinInt64, on every CPU and in both modes.
+func TestToIntPinned(t *testing.T) {
+	if math.MaxInt != math.MaxInt64 {
+		t.Skip("int is not 64 bits")
+	}
+	const minInt64 = "-9223372036854775808"
+	ctx := mustCtx(t, `{"big": 1e19, "nbig": -1e19, "p63": 9223372036854775808,
+		"m63": -9223372036854775808, "below": 9223372036854774784, "nbelow": -9223372036854774784,
+		"n": 3.9, "neg": -3.9, "half": -0.5, "zero": 0, "f32": 7}`)
+	cases := []struct{ tpl, want string }{
+		{`{{to-int (div 0 0)}}`, minInt64},            // NaN
+		{`{{to-int (mod 1 0)}}`, minInt64},            // NaN
+		{`{{to-int (div 1 0)}}`, minInt64},            // +Inf
+		{`{{to-int (div -1 0)}}`, minInt64},           // -Inf
+		{`{{to-int (times -1 (div 1 0))}}`, minInt64}, // -Inf
+		{`{{to-int big}}`, minInt64},                  // 1e19
+		{`{{to-int nbig}}`, minInt64},                 // -1e19
+		{`{{to-int p63}}`, minInt64},                  // 2^63
+		{`{{to-int m63}}`, minInt64},                  // -2^63, in range
+		{`{{to-int (times big big)}}`, minInt64},
+		{`{{to-int below}}`, "9223372036854774784"},
+		{`{{to-int nbelow}}`, "-9223372036854774784"},
+		{`{{to-int n}}|{{to-int neg}}|{{to-int half}}|{{to-int zero}}`, "3|-3|0|0"},
+		{`{{to-int (div 7 2)}}|{{to-int (times -2.5 2)}}|{{to-int 12}}`, "3|-5|12"},
+		{`{{to-str (to-int (div 1 0))}}`, minInt64},
+	}
+	for _, mode := range []hbs.Mode{hbs.ModeCompat, hbs.ModeFixed} {
+		for _, c := range cases {
+			got, err := mustParse(t, c.tpl).Render(ctx, hbs.Options{Mode: mode})
+			require.NoError(t, err, c.tpl)
+			assert.Equal(t, c.want, got, "mode %v: %s", mode, c.tpl)
+		}
+	}
 }
 
 // countMeter counts charges and fails past a budget.

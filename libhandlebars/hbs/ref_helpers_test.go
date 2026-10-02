@@ -2,9 +2,10 @@
 package hbs_test
 
 // A copy of svc's addHelpers (libhandlebars.go) on the frozen raymond
-// reference, the pipeline svc's handlebars:render ran. The one change: plus
+// reference, the pipeline svc's handlebars:render ran. The changes: plus
 // and minus add hash values in sorted key order (D1), so the reference is
-// deterministic. Do not edit otherwise.
+// deterministic, and to-int reports CPU-dependent inputs to diff (see
+// refNoteToInt). Do not edit otherwise.
 
 import (
 	"fmt"
@@ -139,6 +140,7 @@ func refAddHelpers(tpl *raymond.Template) {
 	tpl.RegisterHelper("date-add-months", dateAddMonthsHelper)
 
 	tpl.RegisterHelper("to-int", func(v interface{}) int {
+		refNoteToInt(v)
 		v2, ok := toInt(v)
 		if !ok {
 			return 0

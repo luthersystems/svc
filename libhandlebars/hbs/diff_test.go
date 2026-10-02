@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs"
@@ -90,12 +93,21 @@ func candRun(tpl, ctxJSON string, o hbs.Options) outcome {
 // difference, or "". A template on which the candidate reports a depth limit
 // is not run on the reference: raymond overflows the Go stack there, which
 // cannot be recovered.
+//
+// On a CPU other than amd64, a difference is also skipped when the
+// reference's to-int converted a float that is NaN, +-Inf or outside int64
+// range: the reference uses the hardware conversion there, and the engine
+// pins the amd64 result (see refNoteToInt).
 func diff(tpl, ctxJSON string) string {
 	cand := candRun(tpl, ctxJSON, hbs.Options{})
 	if cand.failed && cand.kind == hbs.KindLimit {
 		return ""
 	}
+	before := refToIntUnportable.Load()
 	ref := refRun(tpl, ctxJSON)
+	if refToIntUnportable.Load() != before && runtime.GOARCH != "amd64" {
+		return ""
+	}
 	switch {
 	case ref.panicked:
 		// The allowed difference: a crash becomes a render error.
@@ -116,6 +128,31 @@ func diff(tpl, ctxJSON string) string {
 		}
 	}
 	return fmt.Sprintf("template %q\ncontext  %s\nref:  %s\ncand: %s", tpl, ctxJSON, ref, cand)
+}
+
+// refToIntUnportable counts the reference's to-int calls on a float64 that is
+// NaN, +-Inf or outside [-2^63, 2^63). For those, raymond's int(f) depends on
+// the CPU: amd64 gives math.MinInt64 for all of them; arm64 saturates (+Inf
+// and 1e19 give math.MaxInt64, -Inf and -1e19 give math.MinInt64) and gives 0
+// for NaN. The engine always gives the amd64 result (hbs.floatToInt), so on
+// any other CPU diff does not compare these runs. Allowed differences for
+// testdata/allowed-diffs.txt on non-amd64 reference runs, all "to-int on a
+// non-finite or out-of-range float: the engine pins the amd64 result
+// math.MinInt64":
+//
+//	{{to-int (div 1 0)}}, {{to-int (div -1 0)}}, {{to-int (times -1 (div 1 0))}}
+//	{{to-int (div 0 0)}}, {{to-int (mod 1 0)}} (NaN)
+//	{{to-int x}} where context x is 1e19, -1e19, 2^63 (9223372036854775808)
+//	or any |x| >= 2^63 other than exactly -2^63
+//	any to-int argument computed by times/div/mod/plus/minus that is
+//	non-finite or outside int64 range
+var refToIntUnportable atomic.Int64
+
+// refNoteToInt is called by the reference's to-int helper with its argument.
+func refNoteToInt(v interface{}) {
+	if f, ok := v.(float64); ok && !(f >= -0x1p63 && f < 0x1p63) {
+		refToIntUnportable.Add(1)
+	}
 }
 
 const quirkCtx = `{
@@ -185,6 +222,7 @@ var diffCases = []string{
 	`{{date-add-months date 1}} {{date-add-months baddate 1}} {{date-add-months date -13}}`,
 	`{{date-add-months date n}}`, `{{date-add-months date missing}}`, `{{date-add-months date "1"}}`,
 	`{{to-int "3.5"}} {{to-int "42"}} {{to-int n}} {{to-int f}} {{to-int t}} {{to-int missing}} {{to-int 7}} {{to-int "99999999999999999999"}}`,
+	`{{to-int (div 1 0)}} {{to-int (div -1 0)}} {{to-int (div 0 0)}} {{to-int (mod 1 0)}} {{to-int big}} {{to-int (times big big)}} {{to-int (times -1 big)}}`,
 	`{{plus a=1 b=2.5 c="3" d=missing e="x"}} {{plus}} {{plus a=0.1 b=0.2 c=0.3}}`,
 	`{{minus 10 a=1 b=n}} {{minus "x" a=1}} {{minus missing}} {{minus arr}}`,
 	`{{#select from=items where="tag=x"}}{{name}};{{/select}}`, `{{#select from=items where="qty=2"}}{{name}}{{/select}}`,
@@ -246,6 +284,30 @@ func TestDifferentialContexts(t *testing.T) {
 				t.Error(d)
 			}
 		}
+	}
+}
+
+// TestRefToIntProbe checks the inputs on which diff stops comparing off amd64.
+func TestRefToIntProbe(t *testing.T) {
+	for tpl, unportable := range map[string]bool{
+		`{{to-int (div 1 0)}}`: true, `{{to-int (div -1 0)}}`: true, `{{to-int (div 0 0)}}`: true,
+		`{{to-int big}}`: true, `{{to-int (times -1 big)}}`: true,
+		`{{to-int n}}`: false, `{{to-int f}}`: false, `{{to-int "1e30"}}`: false, `{{to-int 7}}`: false,
+		`{{to-int huge}}`: false, `{{div 1 0}}`: false,
+	} {
+		before := refToIntUnportable.Load()
+		refRun(tpl, quirkCtx)
+		require.Equal(t, unportable, refToIntUnportable.Load() != before, tpl)
+	}
+	for _, f := range []float64{math.Inf(1), math.Inf(-1), math.NaN(), 0x1p63, 1e19, -1e19} {
+		before := refToIntUnportable.Load()
+		refNoteToInt(f)
+		require.NotEqual(t, before, refToIntUnportable.Load(), f)
+	}
+	for _, f := range []float64{-0x1p63, math.Nextafter(0x1p63, 0), 0, -3.5} {
+		before := refToIntUnportable.Load()
+		refNoteToInt(f)
+		require.Equal(t, before, refToIntUnportable.Load(), f)
 	}
 }
 
