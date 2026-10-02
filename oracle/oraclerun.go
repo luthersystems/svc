@@ -221,13 +221,13 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	// Start a grpc server listening on the unix socket at grpcAddr
 	grpcAddr := fmt.Sprintf("/tmp/oracle.grpc.%d.sock", nBig.Int64())
 
-	listener, err := net.Listen("unix", grpcAddr)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "unix", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("grpc listen: %w", err)
 	}
 	defer func() {
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			orc.Log(ctx).WithError(err).Warn("failed to close listener")
+		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			orc.Log(ctx).WithError(closeErr).Warn("failed to close listener")
 		}
 	}()
 

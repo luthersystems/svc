@@ -181,7 +181,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
 	for _, opt := range opts {
-		err := opt(oracle)
+		err = opt(oracle)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +190,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		if oracle.cfg.GatewayEndpoint == "" {
 			oracle.cfg.GatewayEndpoint = fmt.Sprintf("http://shiroclient_gw_%s:8082", oracle.cfg.PhylumServiceName)
 		}
-		err := withPhylum(oracle.cfg.GatewayEndpoint)(oracle)
+		err = withPhylum(oracle.cfg.GatewayEndpoint)(oracle)
 		if err != nil {
 			return nil, err
 		}
