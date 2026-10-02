@@ -1,0 +1,103 @@
+Path resolution: ../ climbs, this, [segment] literals, @data variables,
+the mustache-style parent lookup inside blocks, @root.
+-- climb-quirk.hbs --
+{{#each items}}[{{name}}]{{/each}}
+-- climb-quirk.jsonl --
+{"name":"P","items":[{"name":"a"},{},{"name":null},{"name":""},{"other":1}]}
+{"items":[{"name":"a"},{}]}
+-- climb-quirk-nested-path.hbs --
+{{#each items}}[{{a.b}}]{{/each}}
+-- climb-quirk-nested-path.jsonl --
+{"a":{"b":"P"},"items":[{"a":{"b":"x"}},{"a":{}},{}]}
+-- climb-quirk-with.hbs --
+{{#with o}}[{{name}}|{{this.name}}|{{./name}}]{{/with}}
+-- climb-quirk-with.jsonl --
+{"name":"P","o":{}}
+{"name":"P","o":{"name":"o"}}
+-- dotdot.hbs --
+{{#each items}}{{name}}:{{../title}}:{{../../title}};{{/each}}
+-- dotdot.jsonl --
+{"title":"T","items":[{"name":"a"},{"name":"b","title":"inner"}]}
+-- dotdot-deep.hbs --
+{{#each a}}{{#each b}}{{#each c}}{{v}}{{../v}}{{../../v}}{{../../../v}}|{{/each}}{{/each}}{{/each}}
+-- dotdot-deep.jsonl --
+{"v":0,"a":[{"v":1,"b":[{"v":2,"c":[{"v":3},{}]}]}]}
+-- dotdot-with-if.hbs --
+{{#with o}}{{#if x}}{{../top}}|{{../../top}}{{/if}}{{/with}}
+-- dotdot-with-if.jsonl --
+{"top":"T","o":{"x":1,"top":"o"}}
+-- dotdot-in-param.hbs --
+{{#each xs}}{{eq this ../sel}}{{/each}}
+-- dotdot-in-param.jsonl --
+{"sel":"b","xs":["a","b"]}
+-- this-paths.hbs --
+{{this.a}}|{{./a}}|{{this/a}}|{{a/b}}|{{a.b}}|{{this}}
+-- this-paths.jsonl --
+{"a":{"b":"x"}}
+{"a":"s"}
+-- segment-literals.hbs --
+{{[a b]}}|{{x.[0]}}|{{x.[1].y}}|{{[@weird]}}|{{o.[k.k]}}|{{[true]}}|{{[0]}}
+-- segment-literals.jsonl --
+{"a b":"AB","x":["z",{"y":"Y"}],"@weird":"W","o":{"k.k":"KK"},"true":"T","0":"zero"}
+-- array-index-paths.hbs --
+{{xs.0}}|{{xs.[0]}}|{{xs.[5]}}|{{xs.[-1]}}|{{xs.length}}
+-- array-index-paths.jsonl --
+{"xs":["a","b"]}
+-- data-vars.hbs --
+{{#each xs}}{{@index}}:{{@key}}:{{@first}}:{{@last}}|{{/each}}
+-- data-vars.jsonl --
+{"xs":["a","b","c"]}
+{"xs":{"z":1,"a":2,"m":3}}
+{"xs":["only"]}
+-- data-root.hbs --
+{{#each xs}}{{@root.t}}{{#with this}}{{@root.t}}{{/with}}{{/each}}|{{@root.t}}
+-- data-root.jsonl --
+{"t":"R","xs":[1,2]}
+-- data-outside.hbs --
+[{{@index}}][{{@key}}][{{@first}}][{{@unknown}}]
+-- data-parent-index.hbs --
+{{#each a}}{{#each b}}{{@../index}}.{{@index}} {{/each}}{{/each}}
+-- data-parent-index.jsonl --
+{"a":[{"b":[1,2]},{"b":[3]}]}
+-- data-this-panics.hbs --
+{{@this}}
+-- data-dot-panics.hbs --
+{{@.}}
+-- data-this-in-each.hbs --
+{{#each xs}}{{@this}}{{/each}}
+-- data-this-in-each.jsonl --
+{"xs":[1]}
+-- block-params.hbs --
+{{#each xs as |x i|}}{{i}}={{x}}{{#each ../ys as |y j|}}({{i}}{{j}}{{x}}{{y}}){{/each}};{{/each}}
+-- block-params.jsonl --
+{"xs":["a","b"],"ys":["p","q"]}
+-- block-params-map.hbs --
+{{#each m as |v k|}}{{k}}={{v}};{{/each}}
+-- block-params-map.jsonl --
+{"m":{"b":2,"a":1}}
+-- block-params-with.hbs --
+{{#with o as |obj|}}{{obj.k}}{{k}}{{/with}}
+-- block-params-with.jsonl --
+{"o":{"k":"K"}}
+-- block-param-shadow.hbs --
+{{#each xs as |name|}}{{name}}{{../name}}{{/each}}
+-- block-param-shadow.jsonl --
+{"name":"P","xs":["a"]}
+-- missing-deep.hbs --
+[{{a.b.c.d}}][{{x.y}}][{{../up}}]
+-- missing-deep.jsonl --
+{"a":{"b":null}}
+{"a":"str"}
+{"a":[1]}
+-- path-on-scalar.hbs --
+[{{s.length}}][{{n.x}}][{{b.x}}]
+-- path-on-scalar.jsonl --
+{"s":"abc","n":1,"b":true}
+-- helper-name-as-field.hbs --
+[{{len}}][{{eq}}][{{select}}][{{if}}][{{each}}]
+-- helper-name-as-field.jsonl --
+{"len":"L","eq":"E","select":"S","if":"I","each":"X"}
+-- this-helper-name.hbs --
+[{{this.len}}][{{./eq}}]
+-- this-helper-name.jsonl --
+{"len":"L","eq":"E"}

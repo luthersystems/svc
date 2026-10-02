@@ -3,7 +3,9 @@ package hbdiff
 import (
 	"bytes"
 	"flag"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,13 +38,21 @@ func loadCorpus(t *testing.T) (map[string][]Case, []string) {
 // `go test ./libhandlebars/internal/hbdiff -run TestCorpusGolden -update`.
 func TestCorpusGolden(t *testing.T) {
 	cases, groups := loadCorpus(t)
-	n := *runs
+	n := min(*runs, 5) // TestCorpusDiff does the full determinism check
 	if *update {
 		n = max(n, 100)
 	}
 	total := 0
 	for _, g := range groups {
 		file := filepath.Join(goldenDir, g+".json")
+		if strings.HasSuffix(g, ".arch") {
+			// Architecture-dependent reference output: one golden per GOARCH.
+			file = filepath.Join(goldenDir, g+"."+runtime.GOARCH+".json")
+			if _, err := os.Stat(file); err != nil && !*update {
+				t.Logf("%s: no golden for %s; not checked", g, runtime.GOARCH)
+				continue
+			}
+		}
 		want, err := ReadGoldens(file)
 		require.NoError(t, err)
 		got := map[string]Golden{}
@@ -124,10 +134,10 @@ func TestCorpusParseDiff(t *testing.T) {
 func reportT(t *testing.T, rep *Report) {
 	t.Helper()
 	var sum, det bytes.Buffer
-	rep.WriteSummary(&sum)
+	require.NoError(t, rep.WriteSummary(&sum))
 	t.Logf("\n%s", sum.String())
 	if rep.Failed() || rep.Counts[RefNondeterministic] > 0 || rep.Counts[Allowlisted] > 0 {
-		rep.WriteDetails(&det)
+		require.NoError(t, rep.WriteDetails(&det))
 		t.Logf("\n%s", det.String())
 	}
 	if rep.Failed() {
@@ -202,7 +212,7 @@ func TestCompare(t *testing.T) {
 	require.Nil(t, Compare(Result{Out: "a"}, Result{Out: "a"}))
 	m := Compare(Result{Out: "abc"}, Result{Out: "abd"})
 	require.Equal(t, "out", m.Field)
-	require.True(t, strings.Contains(m.Detail, "byte 2"), m.Detail)
+	require.Contains(t, m.Detail, "byte 2")
 	require.Equal(t, "kind", Compare(Result{}, Result{ErrKind: KindRender}).Field)
 	require.Equal(t, "msg", Compare(Result{ErrKind: KindRender, ErrMsg: "a"}, Result{ErrKind: KindRender, ErrMsg: "b"}).Field)
 }

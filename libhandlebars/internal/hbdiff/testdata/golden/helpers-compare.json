@@ -1,0 +1,2540 @@
+{
+  "helpers-compare/t01#1": {
+    "out": "true"
+  },
+  "helpers-compare/t01#10": {
+    "out": "false"
+  },
+  "helpers-compare/t01#11": {
+    "out": "false"
+  },
+  "helpers-compare/t01#12": {
+    "out": "false"
+  },
+  "helpers-compare/t01#13": {
+    "out": "false"
+  },
+  "helpers-compare/t01#14": {
+    "out": "false"
+  },
+  "helpers-compare/t01#15": {
+    "out": "false"
+  },
+  "helpers-compare/t01#16": {
+    "out": "false"
+  },
+  "helpers-compare/t01#17": {
+    "out": "false"
+  },
+  "helpers-compare/t01#18": {
+    "out": "false"
+  },
+  "helpers-compare/t01#19": {
+    "out": "false"
+  },
+  "helpers-compare/t01#2": {
+    "out": "true"
+  },
+  "helpers-compare/t01#3": {
+    "out": "true"
+  },
+  "helpers-compare/t01#4": {
+    "out": "true"
+  },
+  "helpers-compare/t01#5": {
+    "out": "true"
+  },
+  "helpers-compare/t01#6": {
+    "out": "false"
+  },
+  "helpers-compare/t01#7": {
+    "out": "false"
+  },
+  "helpers-compare/t01#8": {
+    "out": "false"
+  },
+  "helpers-compare/t01#9": {
+    "out": "false"
+  },
+  "helpers-compare/t02#1": {
+    "out": "false"
+  },
+  "helpers-compare/t02#10": {
+    "out": "false"
+  },
+  "helpers-compare/t02#11": {
+    "out": "false"
+  },
+  "helpers-compare/t02#12": {
+    "out": "false"
+  },
+  "helpers-compare/t02#13": {
+    "out": "false"
+  },
+  "helpers-compare/t02#14": {
+    "out": "false"
+  },
+  "helpers-compare/t02#15": {
+    "out": "false"
+  },
+  "helpers-compare/t02#16": {
+    "out": "false"
+  },
+  "helpers-compare/t02#17": {
+    "out": "false"
+  },
+  "helpers-compare/t02#18": {
+    "out": "false"
+  },
+  "helpers-compare/t02#19": {
+    "out": "false"
+  },
+  "helpers-compare/t02#2": {
+    "out": "false"
+  },
+  "helpers-compare/t02#3": {
+    "out": "false"
+  },
+  "helpers-compare/t02#4": {
+    "out": "false"
+  },
+  "helpers-compare/t02#5": {
+    "out": "false"
+  },
+  "helpers-compare/t02#6": {
+    "out": "false"
+  },
+  "helpers-compare/t02#7": {
+    "out": "false"
+  },
+  "helpers-compare/t02#8": {
+    "out": "false"
+  },
+  "helpers-compare/t02#9": {
+    "out": "false"
+  },
+  "helpers-compare/t03#1": {
+    "out": "false"
+  },
+  "helpers-compare/t03#10": {
+    "out": "false"
+  },
+  "helpers-compare/t03#11": {
+    "out": "false"
+  },
+  "helpers-compare/t03#12": {
+    "out": "false"
+  },
+  "helpers-compare/t03#13": {
+    "out": "false"
+  },
+  "helpers-compare/t03#14": {
+    "out": "false"
+  },
+  "helpers-compare/t03#15": {
+    "out": "false"
+  },
+  "helpers-compare/t03#16": {
+    "out": "false"
+  },
+  "helpers-compare/t03#17": {
+    "out": "false"
+  },
+  "helpers-compare/t03#18": {
+    "out": "false"
+  },
+  "helpers-compare/t03#19": {
+    "out": "false"
+  },
+  "helpers-compare/t03#2": {
+    "out": "false"
+  },
+  "helpers-compare/t03#3": {
+    "out": "false"
+  },
+  "helpers-compare/t03#4": {
+    "out": "false"
+  },
+  "helpers-compare/t03#5": {
+    "out": "false"
+  },
+  "helpers-compare/t03#6": {
+    "out": "true"
+  },
+  "helpers-compare/t03#7": {
+    "out": "false"
+  },
+  "helpers-compare/t03#8": {
+    "out": "false"
+  },
+  "helpers-compare/t03#9": {
+    "out": "true"
+  },
+  "helpers-compare/t04#1": {
+    "out": "false"
+  },
+  "helpers-compare/t04#10": {
+    "out": "false"
+  },
+  "helpers-compare/t04#11": {
+    "out": "false"
+  },
+  "helpers-compare/t04#12": {
+    "out": "false"
+  },
+  "helpers-compare/t04#13": {
+    "out": "false"
+  },
+  "helpers-compare/t04#14": {
+    "out": "false"
+  },
+  "helpers-compare/t04#15": {
+    "out": "false"
+  },
+  "helpers-compare/t04#16": {
+    "out": "false"
+  },
+  "helpers-compare/t04#17": {
+    "out": "false"
+  },
+  "helpers-compare/t04#18": {
+    "out": "false"
+  },
+  "helpers-compare/t04#19": {
+    "out": "false"
+  },
+  "helpers-compare/t04#2": {
+    "out": "false"
+  },
+  "helpers-compare/t04#3": {
+    "out": "false"
+  },
+  "helpers-compare/t04#4": {
+    "out": "false"
+  },
+  "helpers-compare/t04#5": {
+    "out": "false"
+  },
+  "helpers-compare/t04#6": {
+    "out": "true"
+  },
+  "helpers-compare/t04#7": {
+    "out": "false"
+  },
+  "helpers-compare/t04#8": {
+    "out": "false"
+  },
+  "helpers-compare/t04#9": {
+    "out": "true"
+  },
+  "helpers-compare/t05#1": {
+    "out": "false"
+  },
+  "helpers-compare/t05#10": {
+    "out": "false"
+  },
+  "helpers-compare/t05#11": {
+    "out": "false"
+  },
+  "helpers-compare/t05#12": {
+    "out": "false"
+  },
+  "helpers-compare/t05#13": {
+    "out": "false"
+  },
+  "helpers-compare/t05#14": {
+    "out": "false"
+  },
+  "helpers-compare/t05#15": {
+    "out": "false"
+  },
+  "helpers-compare/t05#16": {
+    "out": "false"
+  },
+  "helpers-compare/t05#17": {
+    "out": "false"
+  },
+  "helpers-compare/t05#18": {
+    "out": "false"
+  },
+  "helpers-compare/t05#19": {
+    "out": "false"
+  },
+  "helpers-compare/t05#2": {
+    "out": "false"
+  },
+  "helpers-compare/t05#3": {
+    "out": "false"
+  },
+  "helpers-compare/t05#4": {
+    "out": "false"
+  },
+  "helpers-compare/t05#5": {
+    "out": "false"
+  },
+  "helpers-compare/t05#6": {
+    "out": "false"
+  },
+  "helpers-compare/t05#7": {
+    "out": "true"
+  },
+  "helpers-compare/t05#8": {
+    "out": "false"
+  },
+  "helpers-compare/t05#9": {
+    "out": "false"
+  },
+  "helpers-compare/t06#1": {
+    "out": "true"
+  },
+  "helpers-compare/t06#10": {
+    "out": "false"
+  },
+  "helpers-compare/t06#11": {
+    "out": "false"
+  },
+  "helpers-compare/t06#12": {
+    "out": "false"
+  },
+  "helpers-compare/t06#13": {
+    "out": "false"
+  },
+  "helpers-compare/t06#14": {
+    "out": "false"
+  },
+  "helpers-compare/t06#15": {
+    "out": "false"
+  },
+  "helpers-compare/t06#16": {
+    "out": "false"
+  },
+  "helpers-compare/t06#17": {
+    "out": "false"
+  },
+  "helpers-compare/t06#18": {
+    "out": "false"
+  },
+  "helpers-compare/t06#19": {
+    "out": "false"
+  },
+  "helpers-compare/t06#2": {
+    "out": "true"
+  },
+  "helpers-compare/t06#3": {
+    "out": "true"
+  },
+  "helpers-compare/t06#4": {
+    "out": "false"
+  },
+  "helpers-compare/t06#5": {
+    "out": "false"
+  },
+  "helpers-compare/t06#6": {
+    "out": "false"
+  },
+  "helpers-compare/t06#7": {
+    "out": "false"
+  },
+  "helpers-compare/t06#8": {
+    "out": "false"
+  },
+  "helpers-compare/t06#9": {
+    "out": "false"
+  },
+  "helpers-compare/t07#1": {
+    "out": "true"
+  },
+  "helpers-compare/t07#10": {
+    "out": "true"
+  },
+  "helpers-compare/t07#11": {
+    "out": "true"
+  },
+  "helpers-compare/t07#12": {
+    "out": "true"
+  },
+  "helpers-compare/t07#13": {
+    "out": "true"
+  },
+  "helpers-compare/t07#14": {
+    "out": "true"
+  },
+  "helpers-compare/t07#15": {
+    "out": "true"
+  },
+  "helpers-compare/t07#16": {
+    "out": "true"
+  },
+  "helpers-compare/t07#17": {
+    "out": "true"
+  },
+  "helpers-compare/t07#18": {
+    "out": "true"
+  },
+  "helpers-compare/t07#19": {
+    "out": "true"
+  },
+  "helpers-compare/t07#2": {
+    "out": "true"
+  },
+  "helpers-compare/t07#3": {
+    "out": "true"
+  },
+  "helpers-compare/t07#4": {
+    "out": "true"
+  },
+  "helpers-compare/t07#5": {
+    "out": "true"
+  },
+  "helpers-compare/t07#6": {
+    "out": "true"
+  },
+  "helpers-compare/t07#7": {
+    "out": "true"
+  },
+  "helpers-compare/t07#8": {
+    "out": "true"
+  },
+  "helpers-compare/t07#9": {
+    "out": "true"
+  },
+  "helpers-compare/t08#1": {
+    "out": "true"
+  },
+  "helpers-compare/t08#10": {
+    "out": "true"
+  },
+  "helpers-compare/t08#11": {
+    "out": "true"
+  },
+  "helpers-compare/t08#12": {
+    "out": "true"
+  },
+  "helpers-compare/t08#13": {
+    "out": "true"
+  },
+  "helpers-compare/t08#14": {
+    "out": "true"
+  },
+  "helpers-compare/t08#15": {
+    "out": "true"
+  },
+  "helpers-compare/t08#16": {
+    "out": "true"
+  },
+  "helpers-compare/t08#17": {
+    "out": "true"
+  },
+  "helpers-compare/t08#18": {
+    "out": "true"
+  },
+  "helpers-compare/t08#19": {
+    "out": "true"
+  },
+  "helpers-compare/t08#2": {
+    "out": "true"
+  },
+  "helpers-compare/t08#3": {
+    "out": "true"
+  },
+  "helpers-compare/t08#4": {
+    "out": "true"
+  },
+  "helpers-compare/t08#5": {
+    "out": "true"
+  },
+  "helpers-compare/t08#6": {
+    "out": "true"
+  },
+  "helpers-compare/t08#7": {
+    "out": "true"
+  },
+  "helpers-compare/t08#8": {
+    "out": "true"
+  },
+  "helpers-compare/t08#9": {
+    "out": "true"
+  },
+  "helpers-compare/t09#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t09#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:5}"
+  },
+  "helpers-compare/t10#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t10#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'eq' called with wrong number of arguments, needed 2 but got 3\nCurrent node:\n\tPath{Original:'c', Pos:9}"
+  },
+  "helpers-compare/t11#1": {
+    "out": "Y"
+  },
+  "helpers-compare/t11#10": {
+    "out": "N"
+  },
+  "helpers-compare/t11#11": {
+    "out": "N"
+  },
+  "helpers-compare/t11#12": {
+    "out": "N"
+  },
+  "helpers-compare/t11#13": {
+    "out": "N"
+  },
+  "helpers-compare/t11#14": {
+    "out": "N"
+  },
+  "helpers-compare/t11#15": {
+    "out": "N"
+  },
+  "helpers-compare/t11#16": {
+    "out": "N"
+  },
+  "helpers-compare/t11#17": {
+    "out": "N"
+  },
+  "helpers-compare/t11#18": {
+    "out": "N"
+  },
+  "helpers-compare/t11#19": {
+    "out": "N"
+  },
+  "helpers-compare/t11#2": {
+    "out": "Y"
+  },
+  "helpers-compare/t11#3": {
+    "out": "Y"
+  },
+  "helpers-compare/t11#4": {
+    "out": "Y"
+  },
+  "helpers-compare/t11#5": {
+    "out": "Y"
+  },
+  "helpers-compare/t11#6": {
+    "out": "N"
+  },
+  "helpers-compare/t11#7": {
+    "out": "N"
+  },
+  "helpers-compare/t11#8": {
+    "out": "N"
+  },
+  "helpers-compare/t11#9": {
+    "out": "N"
+  },
+  "helpers-compare/t12#1": {
+    "out": "false"
+  },
+  "helpers-compare/t12#10": {
+    "out": "false"
+  },
+  "helpers-compare/t12#11": {
+    "out": "false"
+  },
+  "helpers-compare/t12#12": {
+    "out": "false"
+  },
+  "helpers-compare/t12#13": {
+    "out": "false"
+  },
+  "helpers-compare/t12#14": {
+    "out": "true"
+  },
+  "helpers-compare/t12#15": {
+    "out": "true"
+  },
+  "helpers-compare/t12#16": {
+    "out": "false"
+  },
+  "helpers-compare/t12#17": {
+    "out": "false"
+  },
+  "helpers-compare/t12#18": {
+    "out": "false"
+  },
+  "helpers-compare/t12#19": {
+    "out": "false"
+  },
+  "helpers-compare/t12#2": {
+    "out": "false"
+  },
+  "helpers-compare/t12#3": {
+    "out": "false"
+  },
+  "helpers-compare/t12#4": {
+    "out": "false"
+  },
+  "helpers-compare/t12#5": {
+    "out": "false"
+  },
+  "helpers-compare/t12#6": {
+    "out": "true"
+  },
+  "helpers-compare/t12#7": {
+    "out": "true"
+  },
+  "helpers-compare/t12#8": {
+    "out": "false"
+  },
+  "helpers-compare/t12#9": {
+    "out": "true"
+  },
+  "helpers-compare/t13#1": {
+    "out": "false"
+  },
+  "helpers-compare/t13#10": {
+    "out": "true"
+  },
+  "helpers-compare/t13#11": {
+    "out": "false"
+  },
+  "helpers-compare/t13#12": {
+    "out": "false"
+  },
+  "helpers-compare/t13#13": {
+    "out": "true"
+  },
+  "helpers-compare/t13#14": {
+    "out": "true"
+  },
+  "helpers-compare/t13#15": {
+    "out": "true"
+  },
+  "helpers-compare/t13#16": {
+    "out": "false"
+  },
+  "helpers-compare/t13#17": {
+    "out": "false"
+  },
+  "helpers-compare/t13#18": {
+    "out": "false"
+  },
+  "helpers-compare/t13#19": {
+    "out": "true"
+  },
+  "helpers-compare/t13#2": {
+    "out": "false"
+  },
+  "helpers-compare/t13#3": {
+    "out": "false"
+  },
+  "helpers-compare/t13#4": {
+    "out": "false"
+  },
+  "helpers-compare/t13#5": {
+    "out": "false"
+  },
+  "helpers-compare/t13#6": {
+    "out": "true"
+  },
+  "helpers-compare/t13#7": {
+    "out": "true"
+  },
+  "helpers-compare/t13#8": {
+    "out": "false"
+  },
+  "helpers-compare/t13#9": {
+    "out": "true"
+  },
+  "helpers-compare/t14#1": {
+    "out": "false"
+  },
+  "helpers-compare/t14#10": {
+    "out": "false"
+  },
+  "helpers-compare/t14#11": {
+    "out": "false"
+  },
+  "helpers-compare/t14#12": {
+    "out": "false"
+  },
+  "helpers-compare/t14#13": {
+    "out": "false"
+  },
+  "helpers-compare/t14#14": {
+    "out": "true"
+  },
+  "helpers-compare/t14#15": {
+    "out": "true"
+  },
+  "helpers-compare/t14#16": {
+    "out": "false"
+  },
+  "helpers-compare/t14#17": {
+    "out": "false"
+  },
+  "helpers-compare/t14#18": {
+    "out": "false"
+  },
+  "helpers-compare/t14#19": {
+    "out": "false"
+  },
+  "helpers-compare/t14#2": {
+    "out": "false"
+  },
+  "helpers-compare/t14#3": {
+    "out": "false"
+  },
+  "helpers-compare/t14#4": {
+    "out": "true"
+  },
+  "helpers-compare/t14#5": {
+    "out": "true"
+  },
+  "helpers-compare/t14#6": {
+    "out": "true"
+  },
+  "helpers-compare/t14#7": {
+    "out": "true"
+  },
+  "helpers-compare/t14#8": {
+    "out": "true"
+  },
+  "helpers-compare/t14#9": {
+    "out": "true"
+  },
+  "helpers-compare/t15#1": {
+    "out": "false"
+  },
+  "helpers-compare/t15#10": {
+    "out": "false"
+  },
+  "helpers-compare/t15#11": {
+    "out": "false"
+  },
+  "helpers-compare/t15#12": {
+    "out": "false"
+  },
+  "helpers-compare/t15#13": {
+    "out": "false"
+  },
+  "helpers-compare/t15#14": {
+    "out": "true"
+  },
+  "helpers-compare/t15#15": {
+    "out": "true"
+  },
+  "helpers-compare/t15#16": {
+    "out": "false"
+  },
+  "helpers-compare/t15#17": {
+    "out": "false"
+  },
+  "helpers-compare/t15#18": {
+    "out": "false"
+  },
+  "helpers-compare/t15#19": {
+    "out": "false"
+  },
+  "helpers-compare/t15#2": {
+    "out": "false"
+  },
+  "helpers-compare/t15#3": {
+    "out": "false"
+  },
+  "helpers-compare/t15#4": {
+    "out": "true"
+  },
+  "helpers-compare/t15#5": {
+    "out": "true"
+  },
+  "helpers-compare/t15#6": {
+    "out": "true"
+  },
+  "helpers-compare/t15#7": {
+    "out": "true"
+  },
+  "helpers-compare/t15#8": {
+    "out": "false"
+  },
+  "helpers-compare/t15#9": {
+    "out": "true"
+  },
+  "helpers-compare/t16#1": {
+    "out": "false"
+  },
+  "helpers-compare/t16#10": {
+    "out": "true"
+  },
+  "helpers-compare/t16#11": {
+    "out": "false"
+  },
+  "helpers-compare/t16#12": {
+    "out": "false"
+  },
+  "helpers-compare/t16#13": {
+    "out": "true"
+  },
+  "helpers-compare/t16#14": {
+    "out": "true"
+  },
+  "helpers-compare/t16#15": {
+    "out": "true"
+  },
+  "helpers-compare/t16#16": {
+    "out": "false"
+  },
+  "helpers-compare/t16#17": {
+    "out": "false"
+  },
+  "helpers-compare/t16#18": {
+    "out": "false"
+  },
+  "helpers-compare/t16#19": {
+    "out": "true"
+  },
+  "helpers-compare/t16#2": {
+    "out": "false"
+  },
+  "helpers-compare/t16#3": {
+    "out": "false"
+  },
+  "helpers-compare/t16#4": {
+    "out": "false"
+  },
+  "helpers-compare/t16#5": {
+    "out": "false"
+  },
+  "helpers-compare/t16#6": {
+    "out": "true"
+  },
+  "helpers-compare/t16#7": {
+    "out": "true"
+  },
+  "helpers-compare/t16#8": {
+    "out": "false"
+  },
+  "helpers-compare/t16#9": {
+    "out": "true"
+  },
+  "helpers-compare/t17#1": {
+    "out": "false"
+  },
+  "helpers-compare/t17#10": {
+    "out": "false"
+  },
+  "helpers-compare/t17#11": {
+    "out": "false"
+  },
+  "helpers-compare/t17#12": {
+    "out": "false"
+  },
+  "helpers-compare/t17#13": {
+    "out": "false"
+  },
+  "helpers-compare/t17#14": {
+    "out": "false"
+  },
+  "helpers-compare/t17#15": {
+    "out": "false"
+  },
+  "helpers-compare/t17#16": {
+    "out": "false"
+  },
+  "helpers-compare/t17#17": {
+    "out": "false"
+  },
+  "helpers-compare/t17#18": {
+    "out": "false"
+  },
+  "helpers-compare/t17#19": {
+    "out": "true"
+  },
+  "helpers-compare/t17#2": {
+    "out": "false"
+  },
+  "helpers-compare/t17#3": {
+    "out": "false"
+  },
+  "helpers-compare/t17#4": {
+    "out": "false"
+  },
+  "helpers-compare/t17#5": {
+    "out": "false"
+  },
+  "helpers-compare/t17#6": {
+    "out": "false"
+  },
+  "helpers-compare/t17#7": {
+    "out": "false"
+  },
+  "helpers-compare/t17#8": {
+    "out": "true"
+  },
+  "helpers-compare/t17#9": {
+    "out": "false"
+  },
+  "helpers-compare/t18#1": {
+    "out": "false"
+  },
+  "helpers-compare/t18#10": {
+    "out": "false"
+  },
+  "helpers-compare/t18#11": {
+    "out": "false"
+  },
+  "helpers-compare/t18#12": {
+    "out": "false"
+  },
+  "helpers-compare/t18#13": {
+    "out": "false"
+  },
+  "helpers-compare/t18#14": {
+    "out": "false"
+  },
+  "helpers-compare/t18#15": {
+    "out": "false"
+  },
+  "helpers-compare/t18#16": {
+    "out": "false"
+  },
+  "helpers-compare/t18#17": {
+    "out": "false"
+  },
+  "helpers-compare/t18#18": {
+    "out": "false"
+  },
+  "helpers-compare/t18#19": {
+    "out": "false"
+  },
+  "helpers-compare/t18#2": {
+    "out": "false"
+  },
+  "helpers-compare/t18#3": {
+    "out": "false"
+  },
+  "helpers-compare/t18#4": {
+    "out": "true"
+  },
+  "helpers-compare/t18#5": {
+    "out": "true"
+  },
+  "helpers-compare/t18#6": {
+    "out": "false"
+  },
+  "helpers-compare/t18#7": {
+    "out": "false"
+  },
+  "helpers-compare/t18#8": {
+    "out": "true"
+  },
+  "helpers-compare/t18#9": {
+    "out": "false"
+  },
+  "helpers-compare/t19#1": {
+    "out": "false"
+  },
+  "helpers-compare/t19#10": {
+    "out": "false"
+  },
+  "helpers-compare/t19#11": {
+    "out": "false"
+  },
+  "helpers-compare/t19#12": {
+    "out": "false"
+  },
+  "helpers-compare/t19#13": {
+    "out": "false"
+  },
+  "helpers-compare/t19#14": {
+    "out": "false"
+  },
+  "helpers-compare/t19#15": {
+    "out": "false"
+  },
+  "helpers-compare/t19#16": {
+    "out": "false"
+  },
+  "helpers-compare/t19#17": {
+    "out": "false"
+  },
+  "helpers-compare/t19#18": {
+    "out": "false"
+  },
+  "helpers-compare/t19#19": {
+    "out": "true"
+  },
+  "helpers-compare/t19#2": {
+    "out": "false"
+  },
+  "helpers-compare/t19#3": {
+    "out": "false"
+  },
+  "helpers-compare/t19#4": {
+    "out": "true"
+  },
+  "helpers-compare/t19#5": {
+    "out": "true"
+  },
+  "helpers-compare/t19#6": {
+    "out": "false"
+  },
+  "helpers-compare/t19#7": {
+    "out": "false"
+  },
+  "helpers-compare/t19#8": {
+    "out": "true"
+  },
+  "helpers-compare/t19#9": {
+    "out": "false"
+  },
+  "helpers-compare/t20#1": {
+    "out": "false"
+  },
+  "helpers-compare/t20#10": {
+    "out": "true"
+  },
+  "helpers-compare/t20#11": {
+    "out": "false"
+  },
+  "helpers-compare/t20#12": {
+    "out": "false"
+  },
+  "helpers-compare/t20#13": {
+    "out": "false"
+  },
+  "helpers-compare/t20#14": {
+    "out": "false"
+  },
+  "helpers-compare/t20#15": {
+    "out": "false"
+  },
+  "helpers-compare/t20#16": {
+    "out": "false"
+  },
+  "helpers-compare/t20#17": {
+    "out": "false"
+  },
+  "helpers-compare/t20#18": {
+    "out": "false"
+  },
+  "helpers-compare/t20#19": {
+    "out": "false"
+  },
+  "helpers-compare/t20#2": {
+    "out": "false"
+  },
+  "helpers-compare/t20#3": {
+    "out": "false"
+  },
+  "helpers-compare/t20#4": {
+    "out": "true"
+  },
+  "helpers-compare/t20#5": {
+    "out": "true"
+  },
+  "helpers-compare/t20#6": {
+    "out": "true"
+  },
+  "helpers-compare/t20#7": {
+    "out": "true"
+  },
+  "helpers-compare/t20#8": {
+    "out": "true"
+  },
+  "helpers-compare/t20#9": {
+    "out": "true"
+  },
+  "helpers-compare/t21#1": {
+    "out": "N"
+  },
+  "helpers-compare/t21#10": {
+    "out": "N"
+  },
+  "helpers-compare/t21#11": {
+    "out": "N"
+  },
+  "helpers-compare/t21#12": {
+    "out": "N"
+  },
+  "helpers-compare/t21#13": {
+    "out": "N"
+  },
+  "helpers-compare/t21#14": {
+    "out": "Y"
+  },
+  "helpers-compare/t21#15": {
+    "out": "Y"
+  },
+  "helpers-compare/t21#16": {
+    "out": "N"
+  },
+  "helpers-compare/t21#17": {
+    "out": "N"
+  },
+  "helpers-compare/t21#18": {
+    "out": "N"
+  },
+  "helpers-compare/t21#19": {
+    "out": "N"
+  },
+  "helpers-compare/t21#2": {
+    "out": "N"
+  },
+  "helpers-compare/t21#3": {
+    "out": "N"
+  },
+  "helpers-compare/t21#4": {
+    "out": "N"
+  },
+  "helpers-compare/t21#5": {
+    "out": "N"
+  },
+  "helpers-compare/t21#6": {
+    "out": "Y"
+  },
+  "helpers-compare/t21#7": {
+    "out": "Y"
+  },
+  "helpers-compare/t21#8": {
+    "out": "N"
+  },
+  "helpers-compare/t21#9": {
+    "out": "Y"
+  },
+  "helpers-compare/t22#1": {
+    "out": "false"
+  },
+  "helpers-compare/t22#10": {
+    "out": "true"
+  },
+  "helpers-compare/t22#11": {
+    "out": "false"
+  },
+  "helpers-compare/t22#12": {
+    "out": "false"
+  },
+  "helpers-compare/t22#13": {
+    "out": "true"
+  },
+  "helpers-compare/t22#14": {
+    "out": "false"
+  },
+  "helpers-compare/t22#15": {
+    "out": "false"
+  },
+  "helpers-compare/t22#16": {
+    "out": "false"
+  },
+  "helpers-compare/t22#17": {
+    "out": "false"
+  },
+  "helpers-compare/t22#18": {
+    "out": "false"
+  },
+  "helpers-compare/t22#19": {
+    "out": "false"
+  },
+  "helpers-compare/t22#2": {
+    "out": "false"
+  },
+  "helpers-compare/t22#3": {
+    "out": "false"
+  },
+  "helpers-compare/t22#4": {
+    "out": "true"
+  },
+  "helpers-compare/t22#5": {
+    "out": "true"
+  },
+  "helpers-compare/t22#6": {
+    "out": "true"
+  },
+  "helpers-compare/t22#7": {
+    "out": "true"
+  },
+  "helpers-compare/t22#8": {
+    "out": "true"
+  },
+  "helpers-compare/t22#9": {
+    "out": "true"
+  },
+  "helpers-compare/t23#1": {
+    "out": ""
+  },
+  "helpers-compare/t23#10": {
+    "out": "false"
+  },
+  "helpers-compare/t23#11": {
+    "out": "false"
+  },
+  "helpers-compare/t23#12": {
+    "out": "false"
+  },
+  "helpers-compare/t23#13": {
+    "out": "false"
+  },
+  "helpers-compare/t23#14": {
+    "out": "false"
+  },
+  "helpers-compare/t23#15": {
+    "out": "false"
+  },
+  "helpers-compare/t23#16": {
+    "out": "false"
+  },
+  "helpers-compare/t23#17": {
+    "out": "false"
+  },
+  "helpers-compare/t23#18": {
+    "out": "false"
+  },
+  "helpers-compare/t23#19": {
+    "out": "false"
+  },
+  "helpers-compare/t23#2": {
+    "out": ""
+  },
+  "helpers-compare/t23#3": {
+    "out": "true"
+  },
+  "helpers-compare/t23#4": {
+    "out": "true"
+  },
+  "helpers-compare/t23#5": {
+    "out": "false"
+  },
+  "helpers-compare/t23#6": {
+    "out": "false"
+  },
+  "helpers-compare/t23#7": {
+    "out": "false"
+  },
+  "helpers-compare/t23#8": {
+    "out": "false"
+  },
+  "helpers-compare/t23#9": {
+    "out": "false"
+  },
+  "helpers-compare/t24#1": {
+    "out": ""
+  },
+  "helpers-compare/t24#10": {
+    "out": "false"
+  },
+  "helpers-compare/t24#11": {
+    "out": "false"
+  },
+  "helpers-compare/t24#12": {
+    "out": "true"
+  },
+  "helpers-compare/t24#13": {
+    "out": "false"
+  },
+  "helpers-compare/t24#14": {
+    "out": "false"
+  },
+  "helpers-compare/t24#15": {
+    "out": "false"
+  },
+  "helpers-compare/t24#16": {
+    "out": "false"
+  },
+  "helpers-compare/t24#17": {
+    "out": "false"
+  },
+  "helpers-compare/t24#18": {
+    "out": "false"
+  },
+  "helpers-compare/t24#19": {
+    "out": "false"
+  },
+  "helpers-compare/t24#2": {
+    "out": ""
+  },
+  "helpers-compare/t24#3": {
+    "out": "true"
+  },
+  "helpers-compare/t24#4": {
+    "out": "true"
+  },
+  "helpers-compare/t24#5": {
+    "out": "false"
+  },
+  "helpers-compare/t24#6": {
+    "out": "false"
+  },
+  "helpers-compare/t24#7": {
+    "out": "false"
+  },
+  "helpers-compare/t24#8": {
+    "out": "false"
+  },
+  "helpers-compare/t24#9": {
+    "out": "false"
+  },
+  "helpers-compare/t25#1": {
+    "out": "false"
+  },
+  "helpers-compare/t25#10": {
+    "out": "false"
+  },
+  "helpers-compare/t25#11": {
+    "out": "false"
+  },
+  "helpers-compare/t25#12": {
+    "out": "false"
+  },
+  "helpers-compare/t25#13": {
+    "out": "false"
+  },
+  "helpers-compare/t25#14": {
+    "out": "false"
+  },
+  "helpers-compare/t25#15": {
+    "out": "false"
+  },
+  "helpers-compare/t25#16": {
+    "out": "false"
+  },
+  "helpers-compare/t25#17": {
+    "out": "false"
+  },
+  "helpers-compare/t25#18": {
+    "out": "false"
+  },
+  "helpers-compare/t25#19": {
+    "out": "false"
+  },
+  "helpers-compare/t25#2": {
+    "out": "false"
+  },
+  "helpers-compare/t25#3": {
+    "out": "false"
+  },
+  "helpers-compare/t25#4": {
+    "out": "false"
+  },
+  "helpers-compare/t25#5": {
+    "out": "false"
+  },
+  "helpers-compare/t25#6": {
+    "out": "false"
+  },
+  "helpers-compare/t25#7": {
+    "out": "false"
+  },
+  "helpers-compare/t25#8": {
+    "out": "false"
+  },
+  "helpers-compare/t25#9": {
+    "out": "false"
+  },
+  "helpers-compare/t26#1": {
+    "out": "true"
+  },
+  "helpers-compare/t26#10": {
+    "out": "true"
+  },
+  "helpers-compare/t26#11": {
+    "out": "true"
+  },
+  "helpers-compare/t26#12": {
+    "out": "true"
+  },
+  "helpers-compare/t26#13": {
+    "out": "true"
+  },
+  "helpers-compare/t26#14": {
+    "out": "true"
+  },
+  "helpers-compare/t26#15": {
+    "out": "true"
+  },
+  "helpers-compare/t26#16": {
+    "out": "true"
+  },
+  "helpers-compare/t26#17": {
+    "out": "true"
+  },
+  "helpers-compare/t26#18": {
+    "out": "true"
+  },
+  "helpers-compare/t26#19": {
+    "out": "true"
+  },
+  "helpers-compare/t26#2": {
+    "out": "true"
+  },
+  "helpers-compare/t26#3": {
+    "out": "true"
+  },
+  "helpers-compare/t26#4": {
+    "out": "true"
+  },
+  "helpers-compare/t26#5": {
+    "out": "true"
+  },
+  "helpers-compare/t26#6": {
+    "out": "true"
+  },
+  "helpers-compare/t26#7": {
+    "out": "true"
+  },
+  "helpers-compare/t26#8": {
+    "out": "true"
+  },
+  "helpers-compare/t26#9": {
+    "out": "true"
+  },
+  "helpers-compare/t27#1": {
+    "out": "true"
+  },
+  "helpers-compare/t27#10": {
+    "out": "true"
+  },
+  "helpers-compare/t27#11": {
+    "out": "true"
+  },
+  "helpers-compare/t27#12": {
+    "out": "true"
+  },
+  "helpers-compare/t27#13": {
+    "out": "true"
+  },
+  "helpers-compare/t27#14": {
+    "out": "true"
+  },
+  "helpers-compare/t27#15": {
+    "out": "true"
+  },
+  "helpers-compare/t27#16": {
+    "out": "true"
+  },
+  "helpers-compare/t27#17": {
+    "out": "true"
+  },
+  "helpers-compare/t27#18": {
+    "out": "true"
+  },
+  "helpers-compare/t27#19": {
+    "out": "true"
+  },
+  "helpers-compare/t27#2": {
+    "out": "true"
+  },
+  "helpers-compare/t27#3": {
+    "out": "true"
+  },
+  "helpers-compare/t27#4": {
+    "out": "true"
+  },
+  "helpers-compare/t27#5": {
+    "out": "true"
+  },
+  "helpers-compare/t27#6": {
+    "out": "true"
+  },
+  "helpers-compare/t27#7": {
+    "out": "true"
+  },
+  "helpers-compare/t27#8": {
+    "out": "true"
+  },
+  "helpers-compare/t27#9": {
+    "out": "true"
+  },
+  "helpers-compare/t28#1": {
+    "out": "N"
+  },
+  "helpers-compare/t28#10": {
+    "out": "N"
+  },
+  "helpers-compare/t28#11": {
+    "out": "N"
+  },
+  "helpers-compare/t28#12": {
+    "out": "N"
+  },
+  "helpers-compare/t28#13": {
+    "out": "N"
+  },
+  "helpers-compare/t28#14": {
+    "out": "N"
+  },
+  "helpers-compare/t28#15": {
+    "out": "N"
+  },
+  "helpers-compare/t28#16": {
+    "out": "N"
+  },
+  "helpers-compare/t28#17": {
+    "out": "N"
+  },
+  "helpers-compare/t28#18": {
+    "out": "N"
+  },
+  "helpers-compare/t28#19": {
+    "out": "N"
+  },
+  "helpers-compare/t28#2": {
+    "out": "N"
+  },
+  "helpers-compare/t28#3": {
+    "out": "Y"
+  },
+  "helpers-compare/t28#4": {
+    "out": "Y"
+  },
+  "helpers-compare/t28#5": {
+    "out": "N"
+  },
+  "helpers-compare/t28#6": {
+    "out": "N"
+  },
+  "helpers-compare/t28#7": {
+    "out": "N"
+  },
+  "helpers-compare/t28#8": {
+    "out": "N"
+  },
+  "helpers-compare/t28#9": {
+    "out": "N"
+  },
+  "helpers-compare/t29#1": {
+    "out": "true"
+  },
+  "helpers-compare/t29#10": {
+    "out": "true"
+  },
+  "helpers-compare/t29#11": {
+    "out": "true"
+  },
+  "helpers-compare/t29#12": {
+    "out": "true"
+  },
+  "helpers-compare/t29#13": {
+    "out": "true"
+  },
+  "helpers-compare/t29#14": {
+    "out": "true"
+  },
+  "helpers-compare/t29#15": {
+    "out": "true"
+  },
+  "helpers-compare/t29#16": {
+    "out": "true"
+  },
+  "helpers-compare/t29#17": {
+    "out": "true"
+  },
+  "helpers-compare/t29#18": {
+    "out": "true"
+  },
+  "helpers-compare/t29#19": {
+    "out": "true"
+  },
+  "helpers-compare/t29#2": {
+    "out": "true"
+  },
+  "helpers-compare/t29#3": {
+    "out": "false"
+  },
+  "helpers-compare/t29#4": {
+    "out": "false"
+  },
+  "helpers-compare/t29#5": {
+    "out": "true"
+  },
+  "helpers-compare/t29#6": {
+    "out": "true"
+  },
+  "helpers-compare/t29#7": {
+    "out": "true"
+  },
+  "helpers-compare/t29#8": {
+    "out": "true"
+  },
+  "helpers-compare/t29#9": {
+    "out": "true"
+  },
+  "helpers-compare/t30#1": {
+    "out": "0"
+  },
+  "helpers-compare/t30#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type bool but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#13": {
+    "out": "2"
+  },
+  "helpers-compare/t30#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#2": {
+    "out": "0"
+  },
+  "helpers-compare/t30#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t30#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t31#1": {
+    "out": "0"
+  },
+  "helpers-compare/t31#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type bool but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type map[string]interface {} but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#2": {
+    "out": "0"
+  },
+  "helpers-compare/t31#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t31#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'b', Pos:6}"
+  },
+  "helpers-compare/t32#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t32#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type int but it should be []interface {}\nCurrent node:\n\tNumber{Value:1, Pos:6}"
+  },
+  "helpers-compare/t33#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t33#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tString{Value:'abc', Pos:7}"
+  },
+  "helpers-compare/t34#1": {
+    "out": "N"
+  },
+  "helpers-compare/t34#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type bool but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#13": {
+    "out": "Y"
+  },
+  "helpers-compare/t34#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#2": {
+    "out": "N"
+  },
+  "helpers-compare/t34#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type float64 but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t34#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper len called with argument 0 with type string but it should be []interface {}\nCurrent node:\n\tPath{Original:'a', Pos:11}"
+  },
+  "helpers-compare/t35#1": {
+    "out": "true"
+  },
+  "helpers-compare/t35#10": {
+    "out": "true"
+  },
+  "helpers-compare/t35#11": {
+    "out": "true"
+  },
+  "helpers-compare/t35#12": {
+    "out": "false"
+  },
+  "helpers-compare/t35#13": {
+    "out": "true"
+  },
+  "helpers-compare/t35#14": {
+    "out": "true"
+  },
+  "helpers-compare/t35#15": {
+    "out": "true"
+  },
+  "helpers-compare/t35#16": {
+    "out": "true"
+  },
+  "helpers-compare/t35#17": {
+    "out": "true"
+  },
+  "helpers-compare/t35#18": {
+    "out": "true"
+  },
+  "helpers-compare/t35#19": {
+    "out": "true"
+  },
+  "helpers-compare/t35#2": {
+    "out": "true"
+  },
+  "helpers-compare/t35#3": {
+    "out": "false"
+  },
+  "helpers-compare/t35#4": {
+    "out": "false"
+  },
+  "helpers-compare/t35#5": {
+    "out": "true"
+  },
+  "helpers-compare/t35#6": {
+    "out": "true"
+  },
+  "helpers-compare/t35#7": {
+    "out": "true"
+  },
+  "helpers-compare/t35#8": {
+    "out": "true"
+  },
+  "helpers-compare/t35#9": {
+    "out": "true"
+  },
+  "helpers-compare/t36#1": {
+    "out": "false"
+  },
+  "helpers-compare/t36#10": {
+    "out": "true"
+  },
+  "helpers-compare/t36#11": {
+    "out": "true"
+  },
+  "helpers-compare/t36#12": {
+    "out": "true"
+  },
+  "helpers-compare/t36#13": {
+    "out": "true"
+  },
+  "helpers-compare/t36#14": {
+    "out": "true"
+  },
+  "helpers-compare/t36#15": {
+    "out": "true"
+  },
+  "helpers-compare/t36#16": {
+    "out": "true"
+  },
+  "helpers-compare/t36#17": {
+    "out": "true"
+  },
+  "helpers-compare/t36#18": {
+    "out": "true"
+  },
+  "helpers-compare/t36#19": {
+    "out": "true"
+  },
+  "helpers-compare/t36#2": {
+    "out": "false"
+  },
+  "helpers-compare/t36#3": {
+    "out": "false"
+  },
+  "helpers-compare/t36#4": {
+    "out": "false"
+  },
+  "helpers-compare/t36#5": {
+    "out": "true"
+  },
+  "helpers-compare/t36#6": {
+    "out": "true"
+  },
+  "helpers-compare/t36#7": {
+    "out": "true"
+  },
+  "helpers-compare/t36#8": {
+    "out": "true"
+  },
+  "helpers-compare/t36#9": {
+    "out": "true"
+  },
+  "helpers-compare/t37#1": {
+    "out": "true"
+  },
+  "helpers-compare/t37#10": {
+    "out": "true"
+  },
+  "helpers-compare/t37#11": {
+    "out": "true"
+  },
+  "helpers-compare/t37#12": {
+    "out": "true"
+  },
+  "helpers-compare/t37#13": {
+    "out": "true"
+  },
+  "helpers-compare/t37#14": {
+    "out": "true"
+  },
+  "helpers-compare/t37#15": {
+    "out": "true"
+  },
+  "helpers-compare/t37#16": {
+    "out": "true"
+  },
+  "helpers-compare/t37#17": {
+    "out": "true"
+  },
+  "helpers-compare/t37#18": {
+    "out": "true"
+  },
+  "helpers-compare/t37#19": {
+    "out": "true"
+  },
+  "helpers-compare/t37#2": {
+    "out": "true"
+  },
+  "helpers-compare/t37#3": {
+    "out": "true"
+  },
+  "helpers-compare/t37#4": {
+    "out": "true"
+  },
+  "helpers-compare/t37#5": {
+    "out": "true"
+  },
+  "helpers-compare/t37#6": {
+    "out": "true"
+  },
+  "helpers-compare/t37#7": {
+    "out": "true"
+  },
+  "helpers-compare/t37#8": {
+    "out": "true"
+  },
+  "helpers-compare/t37#9": {
+    "out": "true"
+  },
+  "helpers-compare/t38#1": {
+    "out": "false"
+  },
+  "helpers-compare/t38#10": {
+    "out": "false"
+  },
+  "helpers-compare/t38#11": {
+    "out": "false"
+  },
+  "helpers-compare/t38#12": {
+    "out": "false"
+  },
+  "helpers-compare/t38#13": {
+    "out": "false"
+  },
+  "helpers-compare/t38#14": {
+    "out": "false"
+  },
+  "helpers-compare/t38#15": {
+    "out": "false"
+  },
+  "helpers-compare/t38#16": {
+    "out": "false"
+  },
+  "helpers-compare/t38#17": {
+    "out": "false"
+  },
+  "helpers-compare/t38#18": {
+    "out": "false"
+  },
+  "helpers-compare/t38#19": {
+    "out": "false"
+  },
+  "helpers-compare/t38#2": {
+    "out": "false"
+  },
+  "helpers-compare/t38#3": {
+    "out": "false"
+  },
+  "helpers-compare/t38#4": {
+    "out": "false"
+  },
+  "helpers-compare/t38#5": {
+    "out": "false"
+  },
+  "helpers-compare/t38#6": {
+    "out": "false"
+  },
+  "helpers-compare/t38#7": {
+    "out": "false"
+  },
+  "helpers-compare/t38#8": {
+    "out": "false"
+  },
+  "helpers-compare/t38#9": {
+    "out": "false"
+  },
+  "helpers-compare/t39#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#10": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#11": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#12": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#13": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#14": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#15": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#16": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#17": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#18": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#19": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#2": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#3": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#4": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#5": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#6": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#7": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#8": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t39#9": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'and' called with wrong number of arguments, needed 0 but got 1\nCurrent node:\n\tPath{Original:'a', Pos:6}"
+  },
+  "helpers-compare/t40#1": {
+    "out": "true"
+  },
+  "helpers-compare/t40#10": {
+    "out": "true"
+  },
+  "helpers-compare/t40#11": {
+    "out": "true"
+  },
+  "helpers-compare/t40#12": {
+    "out": "true"
+  },
+  "helpers-compare/t40#13": {
+    "out": "true"
+  },
+  "helpers-compare/t40#14": {
+    "out": "true"
+  },
+  "helpers-compare/t40#15": {
+    "out": "true"
+  },
+  "helpers-compare/t40#16": {
+    "out": "true"
+  },
+  "helpers-compare/t40#17": {
+    "out": "true"
+  },
+  "helpers-compare/t40#18": {
+    "out": "true"
+  },
+  "helpers-compare/t40#19": {
+    "out": "true"
+  },
+  "helpers-compare/t40#2": {
+    "out": "true"
+  },
+  "helpers-compare/t40#3": {
+    "out": "false"
+  },
+  "helpers-compare/t40#4": {
+    "out": "false"
+  },
+  "helpers-compare/t40#5": {
+    "out": "true"
+  },
+  "helpers-compare/t40#6": {
+    "out": "true"
+  },
+  "helpers-compare/t40#7": {
+    "out": "true"
+  },
+  "helpers-compare/t40#8": {
+    "out": "true"
+  },
+  "helpers-compare/t40#9": {
+    "out": "true"
+  },
+  "helpers-compare/t41#1": {
+    "out": "false"
+  },
+  "helpers-compare/t41#10": {
+    "out": "true"
+  },
+  "helpers-compare/t41#11": {
+    "out": "true"
+  },
+  "helpers-compare/t41#12": {
+    "out": "true"
+  },
+  "helpers-compare/t41#13": {
+    "out": "true"
+  },
+  "helpers-compare/t41#14": {
+    "out": "true"
+  },
+  "helpers-compare/t41#15": {
+    "out": "true"
+  },
+  "helpers-compare/t41#16": {
+    "out": "true"
+  },
+  "helpers-compare/t41#17": {
+    "out": "true"
+  },
+  "helpers-compare/t41#18": {
+    "out": "true"
+  },
+  "helpers-compare/t41#19": {
+    "out": "true"
+  },
+  "helpers-compare/t41#2": {
+    "out": "false"
+  },
+  "helpers-compare/t41#3": {
+    "out": "false"
+  },
+  "helpers-compare/t41#4": {
+    "out": "false"
+  },
+  "helpers-compare/t41#5": {
+    "out": "true"
+  },
+  "helpers-compare/t41#6": {
+    "out": "true"
+  },
+  "helpers-compare/t41#7": {
+    "out": "true"
+  },
+  "helpers-compare/t41#8": {
+    "out": "true"
+  },
+  "helpers-compare/t41#9": {
+    "out": "true"
+  },
+  "helpers-compare/t42#1": {
+    "out": "N"
+  },
+  "helpers-compare/t42#10": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#11": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#12": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#13": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#14": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#15": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#16": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#17": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#18": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#19": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#2": {
+    "out": "N"
+  },
+  "helpers-compare/t42#3": {
+    "out": "N"
+  },
+  "helpers-compare/t42#4": {
+    "out": "N"
+  },
+  "helpers-compare/t42#5": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#6": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#7": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#8": {
+    "out": "Y"
+  },
+  "helpers-compare/t42#9": {
+    "out": "Y"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "blocks/block-return-bool-string#1": {
+    "out": "[true][Jo's]"
+  },
+  "blocks/decorator": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: '*'\"}"
+  },
+  "blocks/decorator-mustache": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: '*'\"}"
+  },
+  "blocks/deep-nesting-50#1": {
+    "out": "deep"
+  },
+  "blocks/deep-nesting-50#2": {
+    "out": ""
+  },
+  "blocks/helper-block-form#1": {
+    "out": "[true][false][1]"
+  },
+  "blocks/helper-block-form#2": {
+    "out": "[false][true][2.000000]"
+  },
+  "blocks/helper-block-not#1": {
+    "out": "[false]"
+  },
+  "blocks/helper-block-not#2": {
+    "out": "[true]"
+  },
+  "blocks/helper-block-not#3": {
+    "out": "[]"
+  },
+  "blocks/if-params": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'if' called with wrong number of arguments, needed 1 but got 0\nCurrent node:\n\tExpr{Path:Path{Original:'if', Pos:3}, Pos:0}"
+  },
+  "blocks/if-subexpr#1": {
+    "out": "big"
+  },
+  "blocks/if-subexpr#2": {
+    "out": "small"
+  },
+  "blocks/if-subexpr#3": {
+    "out": "small"
+  },
+  "blocks/if-two-params#1": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Helper 'if' called with wrong number of arguments, needed 1 but got 2\nCurrent node:\n\tPath{Original:'b', Pos:8}"
+  },
+  "blocks/partial": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Partial not found: p\nCurrent node:\n\tPartial{Name:Path{Original:'p', Pos:5}, Pos:1}"
+  },
+  "blocks/partial-block": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unexpected character in expression: '>'\"}"
+  },
+  "blocks/partial-dynamic": {
+    "kind": "render",
+    "msg": "error while rendering template: Evaluation error: Unexpected partial name: \"Sexp{Path:Path{Original:'whichPartial', Pos:5}, Pos:4}\"\nCurrent node:\n\tPath{Original:'whichPartial', Pos:5}"
+  },
+  "blocks/raw-block#1": {
+    "out": "|"
+  },
+  "blocks/raw-block-mismatch": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nraw doesn't match other\nNode: Path{Original:'other', Pos:17}"
+  },
+  "blocks/raw-block-unclosed": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nLexer error\nToken: Error{\"Unclosed raw block\"}"
+  },
+  "blocks/section-else#1": {
+    "out": "Y"
+  },
+  "blocks/section-else#2": {
+    "out": "N"
+  },
+  "blocks/section-values#1": {
+    "out": "[]"
+  },
+  "blocks/section-values#10": {
+    "out": "[]"
+  },
+  "blocks/section-values#2": {
+    "out": "[<true>]"
+  },
+  "blocks/section-values#3": {
+    "out": "[]"
+  },
+  "blocks/section-values#4": {
+    "out": "[<s>]"
+  },
+  "blocks/section-values#5": {
+    "out": "[]"
+  },
+  "blocks/section-values#6": {
+    "out": "[<1>]"
+  },
+  "blocks/section-values#7": {
+    "out": "[]"
+  },
+  "blocks/section-values#8": {
+    "out": "[<1><2>]"
+  },
+  "blocks/section-values#9": {
+    "out": "[<UNPRINTABLE>]"
+  },
+  "blocks/subexpr-depth": {
+    "out": "1.000000"
+  },
+  "blocks/subexpr-literal-path": {
+    "kind": "parse",
+    "msg": "error parsing template: Parse error on line 1:\nExpecting ID, got: 'OpenSexpr{\"(\"}'"
+  },
+  "blocks/unknown-block#1": {
+    "out": "[y]"
+  },
+  "blocks/unknown-block#2": {
+    "out": "[y]"
+  },
+  "blocks/unknown-mustache-params#1": {
+    "out": "[N][N][N]"
+  },
+  "blocks/unknown-mustache-params#2": {
+    "out": "[][][]"
+  },
+  "blocks/unknown-subexpr#1": {
+    "out": "[true][]"
+  },
+  "blocks/unless-else#1": {
+    "out": "not-a"
+  },
+  "blocks/unless-else#2": {
+    "out": "a"
+  },
+  "blocks/with-else#1": {
+    "out": "B"
+  },
+  "blocks/with-else#2": {
+    "out": "none"
+  },
+  "blocks/with-else#3": {
+    "out": "none"
+  },
+  "blocks/with-else#4": {
+    "out": "none"
+  },
+  "blocks/with-scalar#1": {
+    "out": "str|"
+  },
+  "blocks/with-scalar#2": {
+    "out": "5|"
+  }
+}

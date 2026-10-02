@@ -1,0 +1,128 @@
+times, div, mod, plus, minus, to-int, to-str, round-to-nth, prettyp-num-en.
+Hash sums use two terms here so the order cannot change the result.
+-- t01.hbs --
+{{times a b}}
+-- t02.hbs --
+{{times a 2}}
+-- t03.hbs --
+{{times a 1.5}}
+-- t04.hbs --
+{{times "2" b}}
+-- t05.hbs --
+{{div a b}}
+-- t06.hbs --
+{{div a 0}}
+-- t07.hbs --
+{{div 0 0}}
+-- t08.hbs --
+{{div a 3}}
+-- t09.hbs --
+{{mod a b}}
+-- t10.hbs --
+{{mod a 2}}
+-- t11.hbs --
+{{mod a 0}}
+-- t12.hbs --
+{{mod "x" "y"}}
+-- t13.hbs --
+{{mod a "y"}}
+-- t14.hbs --
+{{plus x=a}}
+-- t15.hbs --
+{{plus x=a y=b}}
+-- t16.hbs --
+{{plus x=a y=1}}
+-- t17.hbs --
+{{plus}}
+-- t18.hbs --
+{{plus a}}
+-- t19.hbs --
+{{minus a}}
+-- t20.hbs --
+{{minus a x=b}}
+-- t21.hbs --
+{{minus a x=1.5}}
+-- t22.hbs --
+{{minus "10" x=a}}
+-- t23.hbs --
+{{to-int a}}
+-- t24.hbs --
+{{to-int b}}
+-- t25.hbs --
+{{to-int "3.5"}}
+-- t26.hbs --
+{{to-int 3.9}}
+-- t27.hbs --
+{{to-int -2}}
+-- t28.hbs --
+{{to-int "-7"}}
+-- t29.hbs --
+{{to-int true}}
+-- t30.hbs --
+{{to-str a}}
+-- t31.hbs --
+{{to-str b}}
+-- t32.hbs --
+{{to-str 3}}
+-- t33.hbs --
+{{to-str 3.0}}
+-- t34.hbs --
+{{to-str -0.5}}
+-- t35.hbs --
+{{to-str "s"}}
+-- t36.hbs --
+{{to-str (times a b)}}
+-- t37.hbs --
+{{to-str (len a)}}
+-- t38.hbs --
+{{to-str (to-int a)}}
+-- t39.hbs --
+{{round-to-nth a b}}
+-- t40.hbs --
+{{round-to-nth a 2}}
+-- t41.hbs --
+{{round-to-nth a "2"}}
+-- t42.hbs --
+{{round-to-nth "123456789.12" "2"}}
+-- t43.hbs --
+{{round-to-nth "1.005" "2"}}
+-- t44.hbs --
+{{round-to-nth 1.005 2}}
+-- t45.hbs --
+{{round-to-nth "2.5" "0"}}
+-- t46.hbs --
+{{round-to-nth a "-1"}}
+-- t47.hbs --
+{{prettyp-num-en a}}
+-- t48.hbs --
+{{prettyp-num-en b}}
+-- t49.hbs --
+{{prettyp-num-en 1234567.885}}
+-- t50.hbs --
+{{prettyp-num-en -0.004}}
+-- t51.hbs --
+{{prettyp-num-en "abc"}}
+-- t52.hbs --
+{{{prettyp-num-en a}}}
+-- t53.hbs --
+{{prettyp-num-en (div a b)}}
+-- _.jsonl --
+{}
+{"a":null,"b":null}
+{"a":"","b":""}
+{"a":0,"b":0}
+{"a":"0","b":"0"}
+{"a":3,"b":2}
+{"a":3.5,"b":2.25}
+{"a":-1.25,"b":0.1}
+{"a":"3","b":"2"}
+{"a":"3.50","b":" 2"}
+{"a":"x","b":"y"}
+{"a":true,"b":false}
+{"a":[1,"2"],"b":{"k":1}}
+{"a":9007199254740993,"b":-9007199254740993}
+{"a":4.5e15,"b":1e-7}
+{"a":"2020-01-31","b":"2019-12-31"}
+{"a":"2020-02-29","b":"2021-02-28"}
+{"a":"<&>\"'","b":"é😀"}
+{"a":12345.675,"b":"1234567.885"}

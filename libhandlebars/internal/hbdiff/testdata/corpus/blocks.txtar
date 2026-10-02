@@ -1,0 +1,105 @@
+Block helpers and sections: if, unless, with, mustache-style sections
+over values, unknown block helpers, subexpressions, hash arguments.
+-- section-values.hbs --
+[{{#v}}<{{this}}>{{/v}}]
+-- section-values.jsonl --
+{}
+{"v":true}
+{"v":false}
+{"v":"s"}
+{"v":0}
+{"v":1}
+{"v":[]}
+{"v":[1,2]}
+{"v":{"k":1}}
+{"v":{}}
+-- section-else.hbs --
+{{#v}}Y{{else}}N{{/v}}
+-- section-else.jsonl --
+{"v":1}
+{}
+-- if-params.hbs --
+{{#if}}x{{/if}}
+-- if-two-params.hbs --
+{{#if a b}}x{{/if}}
+-- if-two-params.jsonl --
+{"a":1,"b":1}
+-- if-subexpr.hbs --
+{{#if (gt (plus a=x b=y) 10)}}big{{else}}small{{/if}}
+-- if-subexpr.jsonl --
+{"x":5,"y":6}
+{"x":"5","y":"5"}
+{}
+-- unless-else.hbs --
+{{#unless a}}not-a{{else}}a{{/unless}}
+-- unless-else.jsonl --
+{"a":0}
+{"a":1}
+-- with-else.hbs --
+{{#with a}}{{b}}{{else}}none{{/with}}
+-- with-else.jsonl --
+{"a":{"b":"B"}}
+{"a":null}
+{"a":false}
+{}
+-- with-scalar.hbs --
+{{#with a}}{{this}}|{{length}}{{/with}}
+-- with-scalar.jsonl --
+{"a":"str"}
+{"a":5}
+-- unknown-block.hbs --
+[{{#nosuch a}}x{{else}}y{{/nosuch}}]
+-- unknown-block.jsonl --
+{"a":1}
+{}
+-- unknown-mustache-params.hbs --
+[{{nosuch a b}}][{{nosuch k=1}}][{{nosuch}}]
+-- unknown-mustache-params.jsonl --
+{"a":1,"b":2,"nosuch":"N"}
+{}
+-- unknown-subexpr.hbs --
+[{{eq (nosuch a) ""}}][{{to-str (nosuch)}}]
+-- unknown-subexpr.jsonl --
+{"a":1}
+-- subexpr-depth.hbs --
+{{to-str (plus a=(plus a=(plus a=(plus a=(plus a=(plus a=(plus a=(plus a=1)))))))) }}
+-- subexpr-literal-path.hbs --
+{{("a")}}|{{(1)}}
+-- helper-block-form.hbs --
+[{{#eq a b}}Y{{else}}N{{/eq}}][{{#gt a 1}}Y{{/gt}}][{{#to-str a}}Y{{/to-str}}]
+-- helper-block-form.jsonl --
+{"a":"1","b":"1"}
+{"a":2,"b":1}
+-- helper-block-not.hbs --
+[{{#not a}}Y{{else}}N{{/not}}]
+-- helper-block-not.jsonl --
+{"a":true}
+{"a":false}
+{}
+-- block-return-bool-string.hbs --
+[{{#and p=a}}inner{{/and}}][{{#possessive n}}x{{/possessive}}]
+-- block-return-bool-string.jsonl --
+{"a":1,"n":"Jo"}
+-- raw-block.hbs --
+{{{{raw}}}}{{x}}{{{{/raw}}}}|{{{{raw}}}} {{#if}} {{{{/raw}}}}
+-- raw-block.jsonl --
+{"x":"X"}
+-- raw-block-mismatch.hbs --
+{{{{raw}}}}x{{{{/other}}}}
+-- raw-block-unclosed.hbs --
+{{{{raw}}}}x
+-- partial.hbs --
+a{{> p}}b
+-- partial-dynamic.hbs --
+{{> (whichPartial) }}
+-- partial-block.hbs --
+{{#> layout}}x{{/layout}}
+-- decorator.hbs --
+{{#*inline "p"}}x{{/inline}}
+-- decorator-mustache.hbs --
+{{* deco}}
+-- deep-nesting-50.hbs --
+{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}{{#if a}}deep{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}
+-- deep-nesting-50.jsonl --
+{"a":1}
+{}

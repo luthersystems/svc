@@ -6,16 +6,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"unicode/utf8"
 )
 
 // Golden is the recorded reference result of one case. A nondeterministic
 // reference case records only that fact.
 type Golden struct {
 	Out    *string `json:"out,omitempty"`
-	SHA256 string  `json:"sha256,omitempty"` // instead of Out, for large outputs
+	OutB64 []byte  `json:"out_base64,omitempty"` // instead of Out, when not valid UTF-8
+	SHA256 string  `json:"sha256,omitempty"`     // instead of Out, for large outputs
 	Len    int     `json:"len,omitempty"`
 	Kind   ErrKind `json:"kind,omitempty"`
 	Msg    string  `json:"msg,omitempty"`
+	MsgB64 []byte  `json:"msg_base64,omitempty"` // instead of Msg, when not valid UTF-8
 	Nondet bool    `json:"nondeterministic,omitempty"`
 }
 
@@ -26,12 +29,18 @@ func GoldenOf(r Result, alt []Result, hashOut bool) Golden {
 		return Golden{Nondet: true}
 	}
 	g := Golden{Kind: r.ErrKind, Msg: r.ErrMsg}
+	if !utf8.ValidString(r.ErrMsg) {
+		g.Msg, g.MsgB64 = "", []byte(r.ErrMsg)
+	}
 	if r.ErrKind != KindNone {
 		return g
 	}
-	if hashOut {
+	switch {
+	case hashOut:
 		g.SHA256, g.Len = hashString(r.Out), len(r.Out)
-	} else {
+	case !utf8.ValidString(r.Out):
+		g.OutB64 = []byte(r.Out)
+	default:
 		out := r.Out
 		g.Out = &out
 	}
@@ -49,7 +58,11 @@ func (g Golden) Matches(r Result) bool {
 	if g.Nondet {
 		return true
 	}
-	if r.ErrKind != g.Kind || r.ErrMsg != g.Msg {
+	msg := g.Msg
+	if g.MsgB64 != nil {
+		msg = string(g.MsgB64)
+	}
+	if r.ErrKind != g.Kind || r.ErrMsg != msg {
 		return false
 	}
 	if r.ErrKind != KindNone {
@@ -57,6 +70,9 @@ func (g Golden) Matches(r Result) bool {
 	}
 	if g.Out != nil {
 		return *g.Out == r.Out
+	}
+	if g.OutB64 != nil {
+		return string(g.OutB64) == r.Out
 	}
 	return g.SHA256 == hashString(r.Out) && g.Len == len(r.Out)
 }

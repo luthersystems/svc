@@ -1,0 +1,147 @@
+How context values print. Context numbers are float64 printed with
+FormatFloat('f', -1, 64); maps print UNPRINTABLE; arrays concatenate
+their elements; null and missing print nothing.
+-- print.hbs --
+[{{v}}]
+-- print.jsonl --
+{}
+{"v":null}
+{"v":""}
+{"v":0}
+{"v":-0}
+{"v":"0"}
+{"v":1}
+{"v":1.5}
+{"v":0.1}
+{"v":100}
+{"v":1e21}
+{"v":1e-7}
+{"v":123456789012345678}
+{"v":9007199254740993}
+{"v":9007199254740991}
+{"v":-9007199254740993}
+{"v":2.675}
+{"v":1.10}
+{"v":true}
+{"v":false}
+{"v":[]}
+{"v":[1,2,3]}
+{"v":["a",["b","c"],null,true,1.5]}
+{"v":[{"k":1}]}
+{"v":{}}
+{"v":{"k":"v"}}
+{"v":"é😀\u0000\t"}
+{"v":"  "}
+{"v":"line1\nline2"}
+{"v":1.7976931348623157e308}
+{"v":5e-324}
+{"v":0.30000000000000004}
+-- print-triple.hbs --
+[{{{v}}}]
+-- print-triple.jsonl --
+{"v":"<b>&amp;\"'`="}
+{"v":["<",">"]}
+{"v":{"k":"<"}}
+{"v":1e21}
+-- print-amp.hbs --
+[{{&v}}]
+-- print-amp.jsonl --
+{"v":"<b>&amp;\"'`="}
+-- this-root.hbs --
+[{{this}}][{{.}}]
+-- this-root.jsonl --
+{}
+{"a":1}
+null
+-- if-truthiness.hbs --
+{{#if v}}T{{else}}F{{/if}}
+-- if-truthiness.jsonl --
+{}
+{"v":null}
+{"v":""}
+{"v":" "}
+{"v":0}
+{"v":"0"}
+{"v":0.0}
+{"v":-0}
+{"v":1}
+{"v":"false"}
+{"v":false}
+{"v":true}
+{"v":[]}
+{"v":[0]}
+{"v":{}}
+{"v":{"k":null}}
+-- if-includezero.hbs --
+{{#if v includeZero=true}}T{{else}}F{{/if}}|{{#if 0 includeZero=true}}T{{else}}F{{/if}}|{{#if v includeZero=z}}T{{else}}F{{/if}}
+-- if-includezero.jsonl --
+{"v":0}
+{"v":0,"z":true}
+{"v":"0"}
+{"v":null}
+-- unless-truthiness.hbs --
+{{#unless v}}U{{else}}E{{/unless}}
+-- unless-truthiness.jsonl --
+{}
+{"v":0}
+{"v":[]}
+{"v":{}}
+{"v":"x"}
+-- with-values.hbs --
+{{#with v}}[{{this}}|{{k}}]{{else}}none{{/with}}
+-- with-values.jsonl --
+{}
+{"v":null}
+{"v":{}}
+{"v":{"k":"x"}}
+{"v":[]}
+{"v":[1]}
+{"v":"s"}
+{"v":0}
+{"v":false}
+-- number-literals.hbs --
+{{to-str 1}}|{{to-str -1}}|{{to-str 1.0}}|{{to-str 1.5e3}}|{{to-str 007}}|{{to-str 1e2}}|{{to-str -0}}|{{to-str +5}}
+-- literal-print.hbs --
+{{1}}|{{1.50}}|{{-2}}|{{1e3}}|{{"s"}}|{{true}}|{{false}}|{{'q'}}
+-- string-literal-escapes.hbs --
+{{to-str "a\"b"}}|{{to-str 'a\'b'}}|{{to-str "a\\b"}}|{{to-str "<&>"}}|{{{to-str "<&>"}}}
+-- top-level-array.hbs --
+x{{a}}
+-- top-level-array.json --
+[{"a":1}]
+-- top-level-string.hbs --
+x
+-- top-level-string.json --
+"str"
+-- top-level-number.hbs --
+x
+-- top-level-number.json --
+42
+-- top-level-invalid.hbs --
+x
+-- top-level-invalid.json --
+{"a":
+-- top-level-trailing.hbs --
+x
+-- top-level-trailing.json --
+{"a":1} {"b":2}
+-- top-level-empty.hbs --
+x
+-- top-level-empty.json --
+
+-- top-level-true.hbs --
+x
+-- top-level-true.json --
+true
+-- dup-keys.hbs --
+{{a}}
+-- dup-keys.json --
+{"a":1,"a":2}
+-- bad-utf8-escape.hbs --
+{{a}}
+-- bad-utf8-escape.json --
+{"a":"\ud800x"}
+-- big-exponent.hbs --
+{{a}}
+-- big-exponent.json --
+{"a":1e400}

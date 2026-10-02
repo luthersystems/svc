@@ -1,0 +1,164 @@
+{
+  "whitespace/caret-inverse#1": {
+    "out": "Y"
+  },
+  "whitespace/caret-inverse#2": {
+    "out": "N"
+  },
+  "whitespace/else-chain-each#1": {
+    "out": "1"
+  },
+  "whitespace/else-chain-each#2": {
+    "out": "B"
+  },
+  "whitespace/else-chain-each#3": {
+    "out": "E"
+  },
+  "whitespace/else-chain-helper#1": {
+    "out": "X"
+  },
+  "whitespace/else-chain-helper#2": {
+    "out": "GT"
+  },
+  "whitespace/else-chain-helper#3": {
+    "out": "AND"
+  },
+  "whitespace/else-chain-helper#4": {
+    "out": "AND"
+  },
+  "whitespace/else-chain-nested#1": {
+    "out": "AB"
+  },
+  "whitespace/else-chain-nested#2": {
+    "out": "AC"
+  },
+  "whitespace/else-chain-nested#3": {
+    "out": "A"
+  },
+  "whitespace/else-chain-nested#4": {
+    "out": "12"
+  },
+  "whitespace/else-chain-nested#5": {
+    "out": "D0"
+  },
+  "whitespace/else-chain-nested#6": {
+    "out": "N"
+  },
+  "whitespace/else-chain-unless#1": {
+    "out": "NA"
+  },
+  "whitespace/else-chain-unless#2": {
+    "out": "E"
+  },
+  "whitespace/else-chain-unless#3": {
+    "out": "B"
+  },
+  "whitespace/else-chain-with#1": {
+    "out": "O"
+  },
+  "whitespace/else-chain-with#2": {
+    "out": "P"
+  },
+  "whitespace/else-chain-with#3": {
+    "out": "E"
+  },
+  "whitespace/inverse-section#1": {
+    "out": "none"
+  },
+  "whitespace/inverse-section#2": {
+    "out": "none"
+  },
+  "whitespace/inverse-section#3": {
+    "out": ""
+  },
+  "whitespace/inverse-section#4": {
+    "out": "none"
+  },
+  "whitespace/inverse-section#5": {
+    "out": ""
+  },
+  "whitespace/leading-trailing-whitespace#1": {
+    "out": "   \n\tx\t\n   \n"
+  },
+  "whitespace/multiline-mustache#1": {
+    "out": "A|y"
+  },
+  "whitespace/not-standalone#1": {
+    "out": "x \ny z"
+  },
+  "whitespace/not-standalone#2": {
+    "out": "x  z"
+  },
+  "whitespace/standalone-at-eof#1": {
+    "out": "a\nb\n"
+  },
+  "whitespace/standalone-comment": {
+    "out": "a\nb\nc"
+  },
+  "whitespace/standalone-crlf#1": {
+    "out": "a\r\nb\r\nc\r\n"
+  },
+  "whitespace/standalone-each#1": {
+    "out": "<ul>\n    <li>1</li>\n    <li>2</li>\n</ul>"
+  },
+  "whitespace/standalone-each#2": {
+    "out": "<ul>\n</ul>"
+  },
+  "whitespace/standalone-else-chain#1": {
+    "out": "A\n"
+  },
+  "whitespace/standalone-else-chain#2": {
+    "out": "B\n"
+  },
+  "whitespace/standalone-else-chain#3": {
+    "out": "C\n"
+  },
+  "whitespace/standalone-else-chain#4": {
+    "out": "D\n"
+  },
+  "whitespace/standalone-if#1": {
+    "out": "<ul>\n  <li>yes</li>\n</ul>\n"
+  },
+  "whitespace/standalone-if#2": {
+    "out": "<ul>\n  <li>no</li>\n</ul>\n"
+  },
+  "whitespace/tab-indent-standalone#1": {
+    "out": "\t- 1\n\t- 2\n"
+  },
+  "whitespace/tilde-basic#1": {
+    "out": "aXb"
+  },
+  "whitespace/tilde-block#1": {
+    "out": "<p>yes</p>"
+  },
+  "whitespace/tilde-block#2": {
+    "out": "<p>no</p>"
+  },
+  "whitespace/tilde-comment": {
+    "out": "abc"
+  },
+  "whitespace/tilde-each#1": {
+    "out": "a,b,c,"
+  },
+  "whitespace/tilde-else-if#1": {
+    "out": "[A ]"
+  },
+  "whitespace/tilde-else-if#2": {
+    "out": "[B]"
+  },
+  "whitespace/tilde-else-if#3": {
+    "out": "[C]"
+  },
+  "whitespace/tilde-inverse#1": {
+    "out": "aNb"
+  },
+  "whitespace/tilde-inverse#2": {
+    "out": "ab"
+  },
+  "whitespace/tilde-left-only#1": {
+    "out": "aX  \n  b"
+  },
+  "whitespace/tilde-triple#1": {
+    "out": "a<b"
+  }
+}

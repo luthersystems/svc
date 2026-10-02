@@ -1,0 +1,178 @@
+Standalone lines, ~ stripping, else and else-if chains, comments.
+-- standalone-if.hbs --
+<ul>
+  {{#if a}}
+  <li>yes</li>
+  {{else}}
+  <li>no</li>
+  {{/if}}
+</ul>
+
+-- standalone-if.jsonl --
+{"a":true}
+{"a":false}
+-- standalone-each.hbs --
+<ul>
+  {{#each xs}}
+    <li>{{this}}</li>
+  {{/each}}
+</ul>
+-- standalone-each.jsonl --
+{"xs":[1,2]}
+{"xs":[]}
+-- standalone-crlf.hbs --
+a
+  {{#if a}}  
+b
+  {{/if}}
+c
+
+-- standalone-crlf.jsonl --
+{"a":true}
+-- not-standalone.hbs --
+x {{#if a}}
+y{{/if}} z
+-- not-standalone.jsonl --
+{"a":true}
+{"a":false}
+-- standalone-comment.hbs --
+a
+  {{! comment }}
+b
+  {{!-- long }} comment --}}
+c
+-- standalone-else-chain.hbs --
+{{#if a}}
+A
+{{else if b}}
+B
+{{else if c}}
+C
+{{else}}
+D
+{{/if}}
+-- standalone-else-chain.jsonl --
+{"a":1}
+{"b":1}
+{"c":1}
+{}
+-- tilde-basic.hbs --
+a   {{~v~}}   b
+-- tilde-basic.jsonl --
+{"v":"X"}
+-- tilde-left-only.hbs --
+a
+  {{~v}}  
+  b
+-- tilde-left-only.jsonl --
+{"v":"X"}
+-- tilde-block.hbs --
+<p>
+  {{~#if a~}}
+    yes
+  {{~else~}}
+    no
+  {{~/if~}}
+</p>
+-- tilde-block.jsonl --
+{"a":true}
+{"a":false}
+-- tilde-else-if.hbs --
+[ {{~#if a~}} A {{~else if b~}} B {{~else~}} C {{~/if~}} ]
+-- tilde-else-if.jsonl --
+{"a":1}
+{"b":1}
+{}
+-- tilde-each.hbs --
+{{#each xs~}}
+  {{this}},
+{{~/each}}
+-- tilde-each.jsonl --
+{"xs":["a","b","c"]}
+-- tilde-triple.hbs --
+a  {{~{v}~}}  b
+-- tilde-triple.jsonl --
+{"v":"<"}
+-- tilde-comment.hbs --
+a  {{~! c ~}}  b {{~!-- c --~}} c
+-- tilde-inverse.hbs --
+a {{~^a~}} N {{~/a~}} b
+-- tilde-inverse.jsonl --
+{}
+{"a":1}
+-- else-chain-unless.hbs --
+{{#unless a}}NA{{else if b}}B{{else}}E{{/unless}}
+-- else-chain-unless.jsonl --
+{}
+{"a":1}
+{"a":1,"b":1}
+-- else-chain-each.hbs --
+{{#each xs}}{{this}}{{else if b}}B{{else}}E{{/each}}
+-- else-chain-each.jsonl --
+{"xs":[1]}
+{"b":1}
+{}
+-- else-chain-with.hbs --
+{{#with o}}{{k}}{{else with p}}{{k}}{{else}}E{{/with}}
+-- else-chain-with.jsonl --
+{"o":{"k":"O"}}
+{"p":{"k":"P"}}
+{}
+-- else-chain-nested.hbs --
+{{#if a}}{{#if b}}AB{{else if c}}AC{{else}}A{{/if}}{{else if d}}{{#each xs}}{{.}}{{else}}D0{{/each}}{{else}}N{{/if}}
+-- else-chain-nested.jsonl --
+{"a":1,"b":1}
+{"a":1,"c":1}
+{"a":1}
+{"d":1,"xs":[1,2]}
+{"d":1}
+{}
+-- else-chain-helper.hbs --
+{{#if (eq a "x")}}X{{else if (gt n 2)}}GT{{else if (and p=a q=n)}}AND{{else}}E{{/if}}
+-- else-chain-helper.jsonl --
+{"a":"x"}
+{"n":3}
+{"a":"y","n":1}
+{}
+-- caret-inverse.hbs --
+{{#if a}}Y{{^}}N{{/if}}
+-- caret-inverse.jsonl --
+{"a":1}
+{}
+-- inverse-section.hbs --
+{{^a}}none{{/a}}
+-- inverse-section.jsonl --
+{}
+{"a":[]}
+{"a":[1]}
+{"a":0}
+{"a":true}
+-- leading-trailing-whitespace.hbs --
+   
+	{{a}}	
+   
+
+-- leading-trailing-whitespace.jsonl --
+{"a":"x"}
+-- standalone-at-eof.hbs --
+a
+{{#if t}}
+b
+{{/if}}
+-- standalone-at-eof.jsonl --
+{"t":1}
+-- tab-indent-standalone.hbs --
+	{{#each xs}}
+	- {{.}}
+	{{/each}}
+-- tab-indent-standalone.jsonl --
+{"xs":[1,2]}
+-- multiline-mustache.hbs --
+{{
+  a
+}}|{{#if
+  a
+}}y{{/if
+}}
+-- multiline-mustache.jsonl --
+{"a":"A"}

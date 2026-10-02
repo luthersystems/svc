@@ -99,16 +99,15 @@ func RunCase(c Case, runs int, cand Candidate, allow *Allowlist) CaseReport {
 		return cr
 	}
 	cr.Mismatch = Compare(cr.Ref, cr.Cand)
-	switch {
-	case cr.Mismatch == nil:
+	if cr.Mismatch == nil {
 		cr.Outcome = Equal
-	default:
-		if e := allow.Match(c, cr.Ref, cr.Cand); e != nil {
-			cr.Outcome = Allowlisted
-			cr.AllowedBy = e
-		} else {
-			cr.Outcome = Diff
-		}
+		return cr
+	}
+	if e := allow.Match(c, cr.Ref, cr.Cand); e != nil {
+		cr.Outcome = Allowlisted
+		cr.AllowedBy = e
+	} else {
+		cr.Outcome = Diff
 	}
 	return cr
 }
@@ -138,15 +137,17 @@ func repeat(n int, f func() Result) (Result, []Result) {
 }
 
 // WriteSummary prints a one-table summary.
-func (r *Report) WriteSummary(w io.Writer) {
-	fmt.Fprintf(w, "%-22s %d\n", "cases", len(r.Cases))
+func (r *Report) WriteSummary(w io.Writer) error {
+	ew := &errWriter{w: w}
+	ew.printf("%-22s %d\n", "cases", len(r.Cases))
 	for _, o := range []Outcome{Equal, Allowlisted, RefNondeterministic, RefOnly, Diff} {
-		fmt.Fprintf(w, "%-22s %d\n", o, r.Counts[o])
+		ew.printf("%-22s %d\n", o, r.Counts[o])
 	}
+	return ew.err
 }
 
 // WriteDetails prints every case whose outcome is not Equal or RefOnly.
-func (r *Report) WriteDetails(w io.Writer) {
+func (r *Report) WriteDetails(w io.Writer) error {
 	reps := make([]CaseReport, 0, len(r.Cases))
 	for _, cr := range r.Cases {
 		if cr.Outcome != Equal && cr.Outcome != RefOnly {
@@ -154,24 +155,38 @@ func (r *Report) WriteDetails(w io.Writer) {
 		}
 	}
 	sort.SliceStable(reps, func(i, j int) bool { return reps[i].Outcome < reps[j].Outcome })
+	ew := &errWriter{w: w}
 	for _, cr := range reps {
-		fmt.Fprintf(w, "=== %s %s\n", cr.Outcome, cr.Case.Name)
-		fmt.Fprintf(w, "template: %q\n", clip(cr.Case.Template, 400))
-		fmt.Fprintf(w, "context:  %s\n", clip(string(cr.Case.Context), 400))
+		ew.printf("=== %s %s\n", cr.Outcome, cr.Case.Name)
+		ew.printf("template: %q\n", clip(cr.Case.Template, 400))
+		ew.printf("context:  %s\n", clip(string(cr.Case.Context), 400))
 		if cr.Mismatch != nil {
-			fmt.Fprintf(w, "mismatch: %s\n", cr.Mismatch)
+			ew.printf("mismatch: %s\n", cr.Mismatch)
 		}
 		if cr.AllowedBy != nil {
-			fmt.Fprintf(w, "allowed:  %s (%s) %s\n", cr.AllowedBy.Pattern, cr.AllowedBy.Issue, cr.AllowedBy.Reason)
+			ew.printf("allowed:  %s (%s) %s\n", cr.AllowedBy.Pattern, cr.AllowedBy.Issue, cr.AllowedBy.Reason)
 		}
-		fmt.Fprintf(w, "ref:      %s\n", describe(cr.Ref))
+		ew.printf("ref:      %s\n", describe(cr.Ref))
 		for _, a := range cr.RefAlt {
-			fmt.Fprintf(w, "ref alt:  %s\n", describe(a))
+			ew.printf("ref alt:  %s\n", describe(a))
 		}
 		if cr.Outcome != RefNondeterministic || cr.Cand != (Result{}) {
-			fmt.Fprintf(w, "cand:     %s\n", describe(cr.Cand))
+			ew.printf("cand:     %s\n", describe(cr.Cand))
 		}
-		fmt.Fprintln(w)
+		ew.printf("\n")
+	}
+	return ew.err
+}
+
+// errWriter keeps the first write error.
+type errWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (e *errWriter) printf(format string, args ...any) {
+	if e.err == nil {
+		_, e.err = fmt.Fprintf(e.w, format, args...)
 	}
 }
 

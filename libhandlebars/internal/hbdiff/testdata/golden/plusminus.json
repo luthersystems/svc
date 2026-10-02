@@ -1,0 +1,32 @@
+{
+  "plusminus/hash-nil-dropped": {
+    "out": "1|true|false"
+  },
+  "plusminus/order-and-or#1": {
+    "out": "false|true"
+  },
+  "plusminus/order-minus-floats#1": {
+    "nondeterministic": true
+  },
+  "plusminus/order-minus-skip#1": {
+    "out": "4"
+  },
+  "plusminus/order-minus-skip#2": {
+    "out": "-1"
+  },
+  "plusminus/order-minus-skip#3": {
+    "out": "-1"
+  },
+  "plusminus/order-plus-floats#1": {
+    "nondeterministic": true
+  },
+  "plusminus/order-plus-floats#2": {
+    "nondeterministic": true
+  },
+  "plusminus/order-plus-ints": {
+    "out": "45"
+  },
+  "plusminus/order-plus-mixed-skip#1": {
+    "out": "3"
+  }
+}
