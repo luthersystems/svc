@@ -5,6 +5,7 @@ package oracle
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,10 +14,14 @@ import (
 
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
 	"github.com/luthersystems/svc/opttrace"
+	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // fakeGateway stands in for the shiroclient gateway's health_check endpoint
@@ -147,4 +152,84 @@ func TestHealthCheckHandlerContinuesIncomingTrace(t *testing.T) {
 	hc := findSpan(t, exp.GetSpans(), "HealthCheck")
 	require.Equal(t, remote.TraceID(), hc.SpanContext.TraceID())
 	require.Equal(t, remote.SpanID(), hc.Parent.SpanID())
+}
+
+// traceCaptureHello records the span context its handler runs under.
+type traceCaptureHello struct {
+	hellov1.UnimplementedHelloServiceServer
+
+	got chan trace.SpanContext
+}
+
+func (s *traceCaptureHello) SayHello(ctx context.Context, req *hellov1.HelloRequest) (*hellov1.HelloResponse, error) {
+	s.got <- trace.SpanContextFromContext(ctx)
+	return &hellov1.HelloResponse{Greeting: "Hello, " + req.GetName()}, nil
+}
+
+// TestGRPCEndpointContinuesIncomingTrace checks that, with tracing
+// configured, the oracle's grpc server continues a trace whose context
+// arrives in the request metadata. This needs the global propagator that
+// opttrace installs: the otel default propagates nothing.
+func TestGRPCEndpointContinuesIncomingTrace(t *testing.T) {
+	orc, exp, _ := newTracedGatewayOracle(t)
+
+	srv := &traceCaptureHello{got: make(chan trace.SpanContext, 1)}
+	grpcServer := orc.newGRPCServer()
+	hellov1.RegisterHelloServiceServer(grpcServer, srv)
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = grpcServer.Serve(lis) }()
+	t.Cleanup(grpcServer.Stop)
+
+	conn, err := grpc.NewClient(lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	remote := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0xd, 0xe, 0xf},
+		SpanID:     trace.SpanID{0x4, 0x5, 0x6},
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	})
+	md := metadata.MD{}
+	propagation.TraceContext{}.Inject(
+		trace.ContextWithSpanContext(context.Background(), remote),
+		metadataCarrier(md))
+	ctx := metadata.NewOutgoingContext(t.Context(), md)
+
+	_, err = hellov1.NewHelloServiceClient(conn).SayHello(ctx, &hellov1.HelloRequest{Name: "trace"})
+	require.NoError(t, err)
+
+	handlerSpan := <-srv.got
+	require.Equal(t, remote.TraceID(), handlerSpan.TraceID())
+
+	var server tracetest.SpanStub
+	for _, s := range exp.GetSpans() {
+		if s.SpanContext.SpanID() == handlerSpan.SpanID() {
+			server = s
+		}
+	}
+	require.True(t, server.SpanContext.IsValid(), "no recorded span for the grpc handler")
+	require.Equal(t, remote.SpanID(), server.Parent.SpanID())
+}
+
+// metadataCarrier adapts grpc metadata to a propagation.TextMapCarrier.
+type metadataCarrier metadata.MD
+
+func (c metadataCarrier) Get(key string) string {
+	if v := metadata.MD(c).Get(key); len(v) > 0 {
+		return v[0]
+	}
+	return ""
+}
+
+func (c metadataCarrier) Set(key, value string) { metadata.MD(c).Set(key, value) }
+
+func (c metadataCarrier) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
 }

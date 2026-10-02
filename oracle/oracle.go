@@ -26,6 +26,7 @@ import (
 	"github.com/luthersystems/svc/opttrace"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
@@ -276,7 +277,7 @@ type traceHeaderTransport struct {
 
 func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
-	tracePropagator.Inject(req.Context(), propagation.HeaderCarrier(req.Header))
+	otel.GetTextMapPropagator().Inject(req.Context(), propagation.HeaderCarrier(req.Header))
 	return t.base.RoundTrip(req)
 }
 
@@ -285,9 +286,6 @@ func (t traceHeaderTransport) RoundTrip(req *http.Request) (*http.Response, erro
 var healthCheckHTTPClient = &http.Client{
 	Transport: traceHeaderTransport{base: http.DefaultTransport},
 }
-
-// tracePropagator matches the W3C trace context propagator shiroclient uses.
-var tracePropagator = propagation.TraceContext{}
 
 func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthCheckReport {
 	ctx, span := orc.tracer.Span(ctx, "PhylumHealthCheck", trace.WithSpanKind(trace.SpanKindClient))
