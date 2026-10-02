@@ -72,18 +72,18 @@ func TestPathOverrides(t *testing.T) {
 func TestServerResponseHeader(t *testing.T) {
 	h := ServerResponseHeader(ServerFixed("testsvc", "")).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Values("Server"), 1)
-		assert.Equal(t, "testsvc", testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get("Server"))
+		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Values("Server"), 1)
+		assert.Equal(t, "testsvc", testResponseHeaders(t, server, "GET", "/", nil, nil).Get("Server"))
 	})
 	h = ServerResponseHeader(ServerFixed("testsvc", "1.0")).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Values("Server"), 1)
-		assert.Equal(t, "testsvc/1.0", testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get("Server"))
+		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Values("Server"), 1)
+		assert.Equal(t, "testsvc/1.0", testResponseHeaders(t, server, "GET", "/", nil, nil).Get("Server"))
 	})
 	h = ServerResponseHeader(ServerFixed("testsvc", "1.0"), ServerFixedFunc("downstreamsvc", "")).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Values("Server"), 1)
-		assert.Equal(t, "testsvc/1.0 downstreamsvc", testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get("Server"))
+		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Values("Server"), 1)
+		assert.Equal(t, "testsvc/1.0 downstreamsvc", testResponseHeaders(t, server, "GET", "/", nil, nil).Get("Server"))
 	})
 
 	assert.Panics(t, func() { ServerResponseHeader("") })
@@ -91,44 +91,44 @@ func TestServerResponseHeader(t *testing.T) {
 
 	h = &serverListHandler{next: basicHandler} // not a valid construction
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Values("Server"), 1)
-		assert.NotEmpty(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get("Server"))
+		assert.Len(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Values("Server"), 1)
+		assert.NotEmpty(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Get("Server"))
 	})
 }
 
 func TestTraceHeaders(t *testing.T) {
 	h := TraceHeaders("", false).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.NotEqual(t, "", testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get(DefaultTraceHeader))
-		reqid1 := testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get(DefaultTraceHeader)
-		reqid2 := testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get(DefaultTraceHeader)
+		assert.NotEmpty(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Get(DefaultTraceHeader))
+		reqid1 := testResponseHeaders(t, server, "GET", "/", nil, nil).Get(DefaultTraceHeader)
+		reqid2 := testResponseHeaders(t, server, "GET", "/", nil, nil).Get(DefaultTraceHeader)
 		assert.NotEqual(t, reqid1, reqid2)
-		resp := testResponseHeaders(t, server, "GET", "/", nil, nil)
-		if assert.Len(t, resp.Header[DefaultTraceHeader], 1) {
-			assert.Equal(t, resp.Header.Get(DefaultTraceHeader), resp.Header[DefaultTraceHeader][0])
+		header := testResponseHeaders(t, server, "GET", "/", nil, nil)
+		if assert.Len(t, header[DefaultTraceHeader], 1) {
+			assert.Equal(t, header.Get(DefaultTraceHeader), header[DefaultTraceHeader][0])
 		}
 		badid := "no"
-		assert.NotEqual(t, badid, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{badid}}, nil).Header.Get(DefaultTraceHeader))
+		assert.NotEqual(t, badid, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{badid}}, nil).Get(DefaultTraceHeader))
 	})
 	h = TraceHeaders("", true).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
-		assert.NotEqual(t, "", testResponseHeaders(t, server, "GET", "/", nil, nil).Header.Get(DefaultTraceHeader))
+		assert.NotEmpty(t, testResponseHeaders(t, server, "GET", "/", nil, nil).Get(DefaultTraceHeader))
 		fixed := "yes"
-		assert.Equal(t, fixed, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{fixed}}, nil).Header.Get(DefaultTraceHeader))
+		assert.Equal(t, fixed, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{fixed}}, nil).Get(DefaultTraceHeader))
 	})
 	h = TraceHeaders(DefaultAzureHeader, true).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
 		traceId1 := "ee59e664-dda3-4cea-b9e2-17ff84770814"
-		assert.Equal(t, traceId1, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{traceId1}}, nil).Header.Get(DefaultTraceHeader))
+		assert.Equal(t, traceId1, testResponseHeaders(t, server, "GET", "/", http.Header{DefaultTraceHeader: []string{traceId1}}, nil).Get(DefaultTraceHeader))
 
 		traceId2 := "585d8935-11bd-4c7e-a428-9a9094adf28b"
 		assert.Equal(t, traceId2, testResponseHeaders(t, server, "GET", "/", http.Header{
 			DefaultAWSHeader:   []string{traceId1},
 			DefaultAzureHeader: []string{traceId2},
-		}, nil).Header.Get(DefaultAzureHeader))
-		assert.Equal(t, "", testResponseHeaders(t, server, "GET", "/", http.Header{
+		}, nil).Get(DefaultAzureHeader))
+		assert.Empty(t, testResponseHeaders(t, server, "GET", "/", http.Header{
 			DefaultAWSHeader:   []string{traceId1},
 			DefaultAzureHeader: []string{traceId2},
-		}, nil).Header.Get(DefaultAWSHeader))
+		}, nil).Get(DefaultAWSHeader))
 	})
 }
