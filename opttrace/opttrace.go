@@ -116,7 +116,7 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 		resource.WithHost(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("resource lookup: %v", err)
+		return nil, fmt.Errorf("resource lookup: %w", err)
 	}
 	tpOpts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(resources),
@@ -138,7 +138,7 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, error) {
 	u, err := url.Parse(traceURI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid profiler endpoint URI: %v", err)
+		return nil, fmt.Errorf("invalid profiler endpoint URI: %w", err)
 	}
 	otlpOpts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(u.Host),
