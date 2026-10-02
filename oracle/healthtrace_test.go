@@ -228,13 +228,18 @@ func TestGRPCEndpointContinuesIncomingTrace(t *testing.T) {
 	handlerSpan := <-srv.got
 	require.Equal(t, remote.TraceID(), handlerSpan.TraceID())
 
+	// The server span ends in the stats handler after the response is
+	// written, so the client can return before it is recorded.
 	var server tracetest.SpanStub
-	for _, s := range exp.GetSpans() {
-		if s.SpanContext.SpanID() == handlerSpan.SpanID() {
-			server = s
+	require.Eventually(t, func() bool {
+		for _, s := range exp.GetSpans() {
+			if s.SpanContext.SpanID() == handlerSpan.SpanID() {
+				server = s
+				return true
+			}
 		}
-	}
-	require.True(t, server.SpanContext.IsValid(), "no recorded span for the grpc handler")
+		return false
+	}, 5*time.Second, 5*time.Millisecond, "no recorded span for the grpc handler")
 	require.Equal(t, remote.SpanID(), server.Parent.SpanID())
 }
 
