@@ -853,6 +853,18 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if e := m.Entries(buf); e.Type == lisp.LError {
 			return true, nil
 		}
+		// Sorting compared the keys by their bytes, here and again in the
+		// encoder: charge that before any value is walked, so a value that
+		// fails the encode does not leave the keys uncharged.
+		if lerr := w.env.ChargeSteps(keySortCost(buf)); lerr.Type == lisp.LError {
+			return true, lerr
+		}
+		// The encoder refuses an int key spelling a string key's name
+		// before it encodes any value: stop here, so its error is the one
+		// reported (not a native's below).
+		if intKeyCollision(buf) {
+			return true, nil
+		}
 		for _, entry := range buf {
 			if entry != nil && len(entry.Cells) == 2 {
 				children = append(children, entry.Cells[0], entry.Cells[1])
@@ -886,6 +898,50 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		}
 	}
 	return false, nil
+}
+
+// keySortCost is the steps of sorting a map's entries twice (the walk's
+// Entries and the encoder's): each key compared log2(n) times, a step per
+// started 256 bytes of it.
+func keySortCost(entries []*lisp.LVal) int64 {
+	logn := int64(1 + bits.Len(uint(len(entries))))
+	var n int64
+	for _, e := range entries {
+		if e == nil || len(e.Cells) != 2 {
+			continue
+		}
+		n += 1 + int64(len(e.Cells[0].Str)/256)
+	}
+	return 2 * n * logn
+}
+
+// intKeyCollision reports what libjson's checkIntKeyCollisions refuses: an
+// int key whose decimal spelling is also a string or symbol key.
+func intKeyCollision(entries []*lisp.LVal) bool {
+	var ints []int
+	for _, e := range entries {
+		if e != nil && len(e.Cells) == 2 && e.Cells[0].Type == lisp.LInt {
+			ints = append(ints, e.Cells[0].Int)
+		}
+	}
+	if len(ints) == 0 {
+		return false
+	}
+	names := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e == nil || len(e.Cells) != 2 {
+			continue
+		}
+		if k := e.Cells[0]; k.Type == lisp.LString || k.Type == lisp.LSymbol {
+			names[k.Str] = true
+		}
+	}
+	for _, i := range ints {
+		if names[strconv.Itoa(i)] {
+			return true
+		}
+	}
+	return false
 }
 
 // encodeValueCost is the steps encoding one value costs beyond its bytes:

@@ -209,12 +209,12 @@ func structEmbeds(t reflect.Type) *embedInfo {
 }
 
 // embedCost is the steps of looking at a struct type's fields: its list
-// (a step per 4 fields: reflection builds each, about 40 ns), 3 for each
+// (a step per 2 fields: reflection builds each, 40-80 ns cold), 3 for each
 // embedded field bringing MarshalJSON, and the method lookups computing
 // the type's embedInfo took (work), charged on every visit, so a visit
 // costs the same whether the cache was cold or warm.
 func embedCost(e *embedInfo) int64 {
-	return 1 + int64(e.numField/4) + 3*int64(len(e.fields)) + e.work
+	return 1 + int64(e.numField/2) + 3*int64(len(e.fields)) + e.work
 }
 
 // embeddedRaw finds the RawMessage a Marshaler value's MarshalJSON would
@@ -327,7 +327,7 @@ func declaresMarshalJSON(t reflect.Type, work *int64) bool {
 	if st.Kind() != reflect.Struct {
 		return true
 	}
-	*work += int64(st.NumField() / 4)
+	*work += int64(st.NumField() / 2)
 	for i := range st.NumField() {
 		if f := st.Field(i); f.Anonymous && hasMarshalJSON(f.Type, work) {
 			return false

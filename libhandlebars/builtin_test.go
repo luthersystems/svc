@@ -1219,3 +1219,38 @@ func TestNativeColdMarshalerChain(t *testing.T) {
 	t.Logf("cold one-level x20000 marshaler: %.0f ns/step", per)
 	require.False(t, ceilingFails(t, per), "%.0f ns/step", per)
 }
+
+// TestEncodeMapKeysChargedBeforeValues: sorting a map's long keys is
+// charged before its values are walked, so a value that fails the encode
+// (a native chan, first) does not leave the keys uncharged.
+func TestEncodeMapKeysChargedBeforeValues(t *testing.T) {
+	prefix := strings.Repeat("p", 256<<10)
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString(prefix+"0000", lisp.Native(make(chan int)))
+	for i := 1; i < 256; i++ {
+		ctx.MapSetString(prefix+fmt.Sprintf("%04d", i), lisp.Int(i))
+	}
+	env.Put(lisp.Symbol("ctx"), ctx)
+	res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "unsupported type: chan int")
+	require.GreaterOrEqual(t, steps, int64(256*(256<<10)/256*9), "every key's bytes, log2(256) times")
+}
+
+// TestEncodeKeyCollisionBeforeNatives: libjson refuses an int key spelling
+// a string key before it encodes any value, so that is the error even when
+// a value is a native the encoder would fail on.
+func TestEncodeKeyCollisionBeforeNatives(t *testing.T) {
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetLVal(lisp.Int(1), lisp.Native(make(chan int)))
+	ctx.MapSetString("1", lisp.Int(2))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+	require.Equal(t, lisp.LError, dump.Type)
+	res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Equal(t, `error while serializing: map int key 1 collides with string key "1"`, res.Cells[0].Str)
+	require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
+}
