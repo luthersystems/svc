@@ -5,7 +5,10 @@ package libhandlebars_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
+	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"strings"
@@ -686,4 +689,77 @@ func allocDuringGo(f func()) uint64 {
 	f()
 	runtime.ReadMemStats(&after)
 	return after.TotalAlloc - before.TotalAlloc
+}
+
+type rnode struct{ I any }
+
+// skey prints as "k0" whatever it holds: fmt calls String, but its key
+// sort still compares the whole value.
+type skey struct {
+	I   any
+	Tag int
+}
+
+func (skey) String() string { return "k0" }
+
+func rchain(n int, leaf any) any {
+	v := leaf
+	for range n {
+		v = rnode{v}
+	}
+	return v
+}
+
+// TestGoContextMethodKeysDeep: a map key deeper than MaxDepth behind a
+// String method (where the size walk stops) is a depth error when fmt
+// would sort it, as fmt compares keys all the way down: the same error
+// on every run, for NaNs below the depth bound too, and before fmt runs.
+func TestGoContextMethodKeysDeep(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en o}}`)
+	require.NoError(t, err)
+	nanKeys := map[skey]int{{rchain(300, math.NaN()), 0}: 1, {rchain(300, math.NaN()), 0}: 2}
+	for range 20 {
+		_, err = libhandlebars.Render(tpl, map[string]any{"o": nanKeys})
+		require.ErrorContains(t, err, "maximum depth")
+	}
+	shallowNaNs := map[skey]int{{rchain(5, math.NaN()), 0}: 1, {rchain(5, math.NaN()), 0}: 2}
+	_, err = libhandlebars.Render(tpl, map[string]any{"o": shallowNaNs})
+	require.ErrorContains(t, err, "more than one NaN key")
+
+	c := rchain(20_000, 1)
+	shared := make(map[skey]int, 200)
+	for i := range 200 {
+		shared[skey{c, i}] = i
+	}
+	start := time.Now()
+	_, err = libhandlebars.Render(tpl, map[string]any{"o": shared})
+	require.ErrorContains(t, err, "maximum depth")
+	require.Less(t, time.Since(start), time.Second, "fails before fmt sorts")
+
+	one := map[skey]int{{c, 0}: 0} // one key: fmt compares nothing
+	_, err = libhandlebars.Render(tpl, map[string]any{"o": one})
+	require.ErrorContains(t, err, "map[k0:0]")
+}
+
+// TestGoContextMethodKeysNoCrash: two keys sharing a 1.5M-deep chain
+// behind a String method fail with the depth error; fmt's sort, which
+// compares them all the way down, would overflow the stack.
+func TestGoContextMethodKeysNoCrash(t *testing.T) {
+	if os.Getenv("HBS_KEYS_CHILD") == "1" {
+		c := rchain(1_500_000, 1)
+		tpl, err := libhandlebars.Parse(`{{prettyp-num-en o}}`)
+		require.NoError(t, err)
+		_, err = libhandlebars.Render(tpl, map[string]any{"o": map[skey]int{{c, 0}: 0, {c, 1}: 1}})
+		require.ErrorContains(t, err, "maximum depth")
+		fmt.Println("KEYS-OK")
+		return
+	}
+	if testing.Short() {
+		t.Skip("slow: skipped under -short")
+	}
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestGoContextMethodKeysNoCrash$") //nolint:gosec // this test binary
+	cmd.Env = append(os.Environ(), "HBS_KEYS_CHILD=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), "KEYS-OK")
 }

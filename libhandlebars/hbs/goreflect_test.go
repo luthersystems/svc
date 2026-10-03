@@ -150,9 +150,20 @@ func TestMapKeyWalksBounded(t *testing.T) {
 		return reflect.ValueOf(v)
 	}
 	nan := math.NaN()
-	require.True(t, holdsNaN(deep(5, nan), 0, 100))
-	require.False(t, holdsNaN(deep(5, 1.0), 0, 100))
-	require.False(t, holdsNaN(deep(1000, nan), 0, 100), "past MaxDepth: not followed")
-	require.True(t, holdsNaN(reflect.ValueOf([2]complex128{0, complex(math.Inf(1), nan)}), 0, 100))
-	require.Equal(t, keyCmp(deep(100, 1.0), 1<<40, 0, 100), keyCmp(deep(100_000, 1.0), 1<<40, 0, 100), "past MaxDepth: not followed")
+	walk := func() *keyWalk { return &keyWalk{limit: 1 << 40, maxDepth: 100} }
+	kw := walk()
+	require.True(t, kw.nan(deep(5, nan), 0))
+	require.False(t, kw.nan(deep(5, 1.0), 0))
+	require.False(t, kw.deep)
+	kw = walk()
+	require.False(t, kw.nan(deep(1000, nan), 0), "past MaxDepth: not followed")
+	require.True(t, kw.deep, "and recorded")
+	require.True(t, walk().nan(reflect.ValueOf([2]complex128{0, complex(math.Inf(1), nan)}), 0))
+	// Each level is two: the struct, then its interface field.
+	cut, deeper := walk(), walk()
+	require.Equal(t, cut.cmp(deep(60, 1.0), 0), deeper.cmp(deep(100_000, 1.0), 0), "past MaxDepth: not followed")
+	require.True(t, deeper.deep)
+	shallow := walk()
+	shallow.cmp(deep(40, 1.0), 0)
+	require.False(t, shallow.deep)
 }

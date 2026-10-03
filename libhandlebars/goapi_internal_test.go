@@ -499,3 +499,39 @@ func TestEscapedFieldNameSized(t *testing.T) {
 	require.Greater(t, bud.size, int64(5*len(name)), "the name at its escaped length")
 	require.GreaterOrEqual(t, bud.used, int64(6*len(name)/16), "the cold field list at the escaped length")
 }
+
+// TestGoJSONCostMemoContainerDepth: with a container depth bound, a shared
+// subtree's memo entry is keyed on the container depth it starts at (fixed
+// arrays and structs count, pointers do not), so the bound holds whatever
+// the field order: here p is reached at depth 1 and under 900 arrays.
+func TestGoJSONCostMemoContainerDepth(t *testing.T) {
+	var inner any = 1
+	for range 200 {
+		inner = []any{inner}
+	}
+	p := &inner
+	arr := reflect.TypeFor[*any]()
+	for range 900 {
+		arr = reflect.ArrayOf(1, arr)
+	}
+	nested := reflect.New(arr).Elem()
+	for x := nested; ; x = x.Index(0) {
+		if x.Kind() != reflect.Array {
+			x.Set(reflect.ValueOf(p))
+			break
+		}
+	}
+	for _, directFirst := range []bool{true, false} {
+		direct := reflect.StructField{Name: "Direct", Type: reflect.TypeFor[*any]()}
+		deep := reflect.StructField{Name: "Deep", Type: arr}
+		fields := []reflect.StructField{direct, deep}
+		if !directFirst {
+			fields = []reflect.StructField{deep, direct}
+		}
+		v := reflect.New(reflect.StructOf(fields)).Elem()
+		v.FieldByName("Direct").Set(reflect.ValueOf(p))
+		v.FieldByName("Deep").Set(nested)
+		err := goJSONCost(&goBudget{max: 1 << 40}, v, jsonGoMaxDepth)
+		require.ErrorContains(t, err, "nests deeper than 1024", "direct first %v", directFirst)
+	}
+}

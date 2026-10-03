@@ -225,7 +225,7 @@ type jsonMemo struct {
 type jsonMemoKey struct {
 	t      reflect.Type
 	p      any
-	depth  int  // with a depth bound, a subtree's outcome depends on where it starts
+	depth  int  // with a depth bound, a subtree's outcome depends on the container depth it starts at
 	quoted bool // a ",string" field's pointer writes its string doubly escaped
 }
 
@@ -277,15 +277,18 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 	}
 	// No defer: a deferred call per level makes each stack growth of a
 	// deep walk adjust them all.
+	var deep int64
 	if w.levels >= deepLevel {
 		if err := w.c.steps(deepLevelCost); err != nil {
-			return jsonTotals{}, err
+			return jsonTotals{steps: deepLevelCost}, err
 		}
+		deep = deepLevelCost
 	}
 	w.levels++
 	w.peak = max(w.peak, w.levels)
 	tot, err := w.encode(v, t, allowAddr, depth)
 	w.levels--
+	tot.steps += deep // in a memo entry too
 	return tot, err
 }
 
@@ -393,7 +396,7 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 		return w.pointerLike(v, struct {
 			p any
 			n int
-		}{v.UnsafePointer(), v.Len()}, func() (jsonTotals, error) { return w.array(v, t, depth) })
+		}{v.UnsafePointer(), v.Len()}, depth, func() (jsonTotals, error) { return w.array(v, t, depth) })
 	case reflect.Array:
 		return w.array(v, t, depth)
 	case reflect.Pointer:
@@ -406,7 +409,7 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 		return w.pointerLike(v, struct {
 			t reflect.Type
 			p any
-		}{t, v.UnsafePointer()}, func() (jsonTotals, error) {
+		}{t, v.UnsafePointer()}, depth, func() (jsonTotals, error) {
 			if err := w.c.steps(hopCost); err != nil {
 				return jsonTotals{steps: hopCost}, err
 			}
@@ -420,7 +423,7 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 // pointerLike walks a pointer, map or slice: a cycle back to a value on the
 // path is the error encoding/json reports, and a value walked before (not
 // on the path) is charged from the memo.
-func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTotals, error)) (jsonTotals, error) {
+func (w *jsonWalker) pointerLike(v reflect.Value, key any, depth int, walk func() (jsonTotals, error)) (jsonTotals, error) {
 	if start, ok := w.path[key]; ok {
 		// encoding/json starts recording the path once its pointer level
 		// passes 1000 (the value at index 1000) and reports the first
@@ -433,7 +436,7 @@ func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTota
 	}
 	mk := jsonMemoKey{t: v.Type(), p: key, quoted: w.quoted}
 	if w.maxDepth > 0 {
-		mk.depth = len(w.pathType) + 1
+		mk.depth = depth // the container depth nest checks
 	}
 	if m, ok := w.memo[mk]; ok {
 		// Walked from here, the subtree would reach w.levels+m.height.
@@ -498,7 +501,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 	if v.IsNil() {
 		return w.leaf(4)
 	}
-	return w.pointerLike(v, v.UnsafePointer(), func() (jsonTotals, error) {
+	return w.pointerLike(v, v.UnsafePointer(), depth, func() (jsonTotals, error) {
 		if err := w.nest(depth); err != nil {
 			return jsonTotals{}, err
 		}

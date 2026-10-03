@@ -600,18 +600,25 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		z.steps += int64(v.Len()) * units(int(min(v.Type().Key().Size()+v.Type().Elem().Size(), 1<<40)), boxUnit)
 		n := 5
 		nans := 0
+		kw := &keyWalk{limit: z.limit, maxDepth: z.r.maxDepth}
 		it := v.MapRange()
 		for it.Next() && !z.over() {
 			k := it.Key()
-			// Both stop at MaxDepth, where z.size reports the key too deep.
-			if holdsNaN(k, depth+1, z.r.maxDepth) {
+			if kw.nan(k, depth+1) {
 				nans++
 			}
-			z.steps += logn * keyCmp(k, z.limit, depth+1, z.r.maxDepth)
+			z.steps += logn * kw.cmp(k, depth+1)
 			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
 		if nans > 1 {
 			z.nanKeys = true
+		}
+		// fmt compares keys by reflection all the way down, past any
+		// String or Error method (where z.size stops), so a key deeper
+		// than MaxDepth is a depth error before fmt runs, as the size
+		// walk's own.
+		if kw.deep && v.Len() > 1 {
+			z.deep = true
 		}
 		return n
 	case reflect.Struct:
@@ -629,13 +636,30 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 // them covers (memory compared at a few GB/s).
 const cmpUnit = 256
 
-// keyCmp is the steps fmtsort takes comparing k with another key, by k's
+// keyWalk walks map keys as fmt's sort compares them (internal/fmtsort,
+// which follows interfaces, arrays and structs whatever methods they
+// have), stopping at maxDepth and recording that it did.
+type keyWalk struct {
+	limit    int64 // stop counting past it
+	maxDepth int
+	deep     bool // a key goes past maxDepth
+}
+
+// past reports whether depth is past maxDepth, recording it.
+func (kw *keyWalk) past(depth int) bool {
+	if depth > kw.maxDepth {
+		kw.deep = true
+		return true
+	}
+	return false
+}
+
+// cmp is the steps fmtsort takes comparing k with another key, by k's
 // length: a string by its bytes, an array or struct element by element
 // (each a reflection call, a quarter step for a scalar), an interface or
-// float by its slower path. It stops counting past limit, and below
-// maxDepth.
-func keyCmp(k reflect.Value, limit int64, depth, maxDepth int) int64 {
-	if depth > maxDepth {
+// float by its slower path.
+func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
+	if kw.past(depth) {
 		return 1
 	}
 	switch k.Kind() {
@@ -647,22 +671,22 @@ func keyCmp(k reflect.Value, limit int64, depth, maxDepth int) int64 {
 		if k.IsNil() {
 			return 4
 		}
-		return 4 + keyCmp(k.Elem(), limit, depth+1, maxDepth)
+		return 4 + kw.cmp(k.Elem(), depth+1)
 	case reflect.Array:
 		switch k.Type().Elem().Kind() {
 		case reflect.String, reflect.Interface, reflect.Array, reflect.Struct:
 		default: // elements of one fixed cost, about 5 ns each
-			return 1 + int64(k.Len())*keyCmp(reflect.Zero(k.Type().Elem()), limit, depth+1, maxDepth)/4
+			return 1 + int64(k.Len())*kw.cmp(reflect.Zero(k.Type().Elem()), depth+1)/4
 		}
 		n := int64(1)
-		for i := 0; i < k.Len() && n <= limit; i++ {
-			n += keyCmp(k.Index(i), limit, depth+1, maxDepth)
+		for i := 0; i < k.Len() && n <= kw.limit; i++ {
+			n += kw.cmp(k.Index(i), depth+1)
 		}
 		return n
 	case reflect.Struct:
 		n := int64(1)
-		for i := 0; i < k.NumField() && n <= limit; i++ {
-			n += keyCmp(k.Field(i), limit, depth+1, maxDepth)
+		for i := 0; i < k.NumField() && n <= kw.limit; i++ {
+			n += kw.cmp(k.Field(i), depth+1)
 		}
 		return n
 	default:
@@ -670,11 +694,11 @@ func keyCmp(k reflect.Value, limit int64, depth, maxDepth int) int64 {
 	}
 }
 
-// holdsNaN reports whether map key k is unequal to itself (k.Equal(k) is
+// nan reports whether map key k is unequal to itself (k.Equal(k) is
 // false): a NaN, or an array, struct or interface holding one. Unlike
-// Value.Equal, it stops below maxDepth.
-func holdsNaN(k reflect.Value, depth, maxDepth int) bool {
-	if depth > maxDepth {
+// Value.Equal, it stops past maxDepth.
+func (kw *keyWalk) nan(k reflect.Value, depth int) bool {
+	if kw.past(depth) {
 		return false
 	}
 	switch k.Kind() {
@@ -684,7 +708,7 @@ func holdsNaN(k reflect.Value, depth, maxDepth int) bool {
 		c := k.Complex()
 		return math.IsNaN(real(c)) || math.IsNaN(imag(c))
 	case reflect.Interface:
-		return !k.IsNil() && holdsNaN(k.Elem(), depth+1, maxDepth)
+		return !k.IsNil() && kw.nan(k.Elem(), depth+1)
 	case reflect.Array:
 		switch k.Type().Elem().Kind() {
 		case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
@@ -693,14 +717,14 @@ func holdsNaN(k reflect.Value, depth, maxDepth int) bool {
 			return false
 		}
 		for i := range k.Len() {
-			if holdsNaN(k.Index(i), depth+1, maxDepth) {
+			if kw.nan(k.Index(i), depth+1) {
 				return true
 			}
 		}
 		return false
 	case reflect.Struct:
 		for i := range k.NumField() {
-			if holdsNaN(k.Field(i), depth+1, maxDepth) {
+			if kw.nan(k.Field(i), depth+1) {
 				return true
 			}
 		}
