@@ -79,6 +79,15 @@ type jsonWalker struct {
 	pathType []reflect.Type        // the types of the pointer-like values on the path
 	skipped  []skippedMarshaler    // methods passed over, in encoding/json's order
 	maxDepth int                   // container nesting allowed (0: none, as encoding/json)
+	quoted   bool                  // the value is a ",string" field's: a scalar is written as a JSON string
+}
+
+// q is 2 when the scalar being sized is written quoted (",string").
+func (w *jsonWalker) q() int64 {
+	if w.quoted {
+		return 2
+	}
+	return 0
 }
 
 // skippedMarshaler is a MarshalJSON or MarshalText the walk did not call.
@@ -90,7 +99,9 @@ type skippedMarshaler struct {
 // marshalerLeaf records a Marshaler or TextMarshaler value encoding/json
 // would call (a nil pointer it writes as null, without calling).
 func (w *jsonWalker) marshalerLeaf(v reflect.Value, text bool) (jsonTotals, error) {
-	if v.Kind() != reflect.Pointer || !v.IsNil() {
+	// encoding/json writes a nil pointer or a nil interface as null,
+	// without calling.
+	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		w.skipped = append(w.skipped, skippedMarshaler{v, text})
 	}
 	return w.leaf(1) // its output is not known here: at least a byte
@@ -182,23 +193,28 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 	// Leaves are sized at the bytes encoding/json surely writes (exact, or
 	// a lower bound for a float), so a sum past the allocation cap means
 	// the encoder would pass it too.
+	switch k := t.Kind(); k {
+	case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+		w.quoted = false // ",string" applies to scalars only
+	default:
+	}
 	switch t.Kind() {
 	case reflect.Bool:
 		if v.Bool() {
-			return w.leaf(4)
+			return w.leaf(4 + w.q())
 		}
-		return w.leaf(5)
+		return w.leaf(5 + w.q())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		var buf [24]byte
-		return w.leaf(int64(len(strconv.AppendInt(buf[:0], v.Int(), 10))))
+		return w.leaf(int64(len(strconv.AppendInt(buf[:0], v.Int(), 10))) + w.q())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		var buf [24]byte
-		return w.leaf(int64(len(strconv.AppendUint(buf[:0], v.Uint(), 10))))
+		return w.leaf(int64(len(strconv.AppendUint(buf[:0], v.Uint(), 10))) + w.q())
 	case reflect.Float32, reflect.Float64:
 		if f := v.Float(); math.IsInf(f, 0) || math.IsNaN(f) {
 			return jsonTotals{}, &jsonFailure{"json: unsupported value: " + strconv.FormatFloat(f, 'g', -1, t.Bits())}
 		}
-		return w.leaf(1)
+		return w.leaf(1 + w.q())
 	case reflect.String:
 		s := v.String()
 		if t == jsonNumberType {
@@ -209,7 +225,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 			if !validNumber(num) {
 				return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: invalid number literal %q", num)}
 			}
-			return w.leaf(int64(len(num))) // written unquoted
+			return w.leaf(int64(len(num)) + w.q()) // written unquoted, unless ",string"
 		}
 		scan := int64(0)
 		if len(s) > 0 {
@@ -218,7 +234,11 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 				return jsonTotals{}, err
 			}
 		}
-		tot, err := w.leaf(jsonStringLen(s))
+		n := jsonStringLen(s)
+		if w.quoted {
+			n = jsonQuotedStringLen(s)
+		}
+		tot, err := w.leaf(n)
 		tot.steps += scan
 		return tot, err
 	case reflect.Interface:
@@ -358,13 +378,23 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			v  reflect.Value
 		}
 		kvs := make([]kv, 0, n)
+		var keyErr string
 		it := v.MapRange()
 		for it.Next() {
 			ks, err := mapKeyString(it.Key())
 			if err != nil {
-				return tot, w.fail("json: encoding error for type ", strconv.Quote(t.String()), ": ", strconv.Quote(err.Error()))
+				// encoding/json reports the first failing key in Go's map
+				// order; resolve them all and report the least error text,
+				// so the error does not vary by run.
+				if e := err.Error(); keyErr == "" || e < keyErr {
+					keyErr = e
+				}
+				continue
 			}
 			kvs = append(kvs, kv{ks, it.Value()})
+		}
+		if keyErr != "" {
+			return tot, w.fail("json: encoding error for type ", strconv.Quote(t.String()), ": ", strconv.Quote(keyErr))
 		}
 		slices.SortFunc(kvs, func(a, b kv) int { return strings.Compare(a.ks, b.ks) })
 		for i := 1; i < len(kvs); i++ {
@@ -427,7 +457,7 @@ FieldLoop:
 		// Every field costs a visit and its index hops, skipped or not:
 		// encoding/json follows f.index and tests omitempty for each (and
 		// the walk did too): about 2 ns a hop in all.
-		visit := 1 + int64(len(f.index)/4)
+		visit := 1 + int64((len(f.index)+3)/4)
 		tot.steps += visit
 		if err := w.c.steps(visit); err != nil {
 			return tot, err
@@ -450,7 +480,9 @@ FieldLoop:
 		if err != nil {
 			return tot, err
 		}
+		w.quoted = f.quoted
 		sub, err = w.typed(fv, fv.Type(), true, depth+1)
+		w.quoted = false
 		tot.add(sub)
 		if err != nil {
 			return tot, err
@@ -469,27 +501,28 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 		}
 		w.typed1[t] = true
 		var n int64
-		var count func(t reflect.Type, seen map[reflect.Type]bool)
-		count = func(t reflect.Type, seen map[reflect.Type]bool) {
+		var count func(t reflect.Type, seen map[reflect.Type]bool, depth int)
+		count = func(t reflect.Type, seen map[reflect.Type]bool, depth int) {
 			if seen[t] {
 				return
 			}
 			seen[t] = true
 			for i := range t.NumField() {
 				f := t.Field(i)
-				n += 12 + int64((len(f.Tag)+15)/16)
+				// A field's index path, copied at its embedding depth.
+				n += 12 + int64(depth) + int64((len(f.Tag)+15)/16)
 				if f.Anonymous {
 					ft := f.Type
 					if ft.Kind() == reflect.Pointer {
 						ft = ft.Elem()
 					}
 					if ft.Kind() == reflect.Struct {
-						count(ft, seen)
+						count(ft, seen, depth+1)
 					}
 				}
 			}
 		}
-		count(t, map[reflect.Type]bool{})
+		count(t, map[reflect.Type]bool{}, 0)
 		if err := w.c.steps(n); err != nil {
 			return nil, err
 		}
@@ -548,10 +581,10 @@ func validNumber(s string) bool {
 
 // jsonField is a struct field encoding/json encodes.
 type jsonField struct {
-	name                string
-	index               []int
-	tag                 bool
-	omitEmpty, omitZero bool
+	name                        string
+	index                       []int
+	tag                         bool
+	omitEmpty, omitZero, quoted bool
 }
 
 var jsonFieldCache sync.Map // reflect.Type -> []jsonField
@@ -612,7 +645,19 @@ func jsonFields(t reflect.Type) []jsonField {
 					if name == "" {
 						name = sf.Name
 					}
-					field := jsonField{name: name, tag: tagged, index: index,
+					quoted := false
+					if hasOpt(opts, "string") {
+						switch ft.Kind() {
+						case reflect.Bool,
+							reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+							reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+							reflect.Float32, reflect.Float64,
+							reflect.String:
+							quoted = true
+						default:
+						}
+					}
+					field := jsonField{name: name, tag: tagged, index: index, quoted: quoted,
 						omitEmpty: hasOpt(opts, "omitempty"), omitZero: hasOpt(opts, "omitzero")}
 					fields = append(fields, field)
 					if count[f.typ] > 1 {

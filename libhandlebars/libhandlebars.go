@@ -629,6 +629,40 @@ func jsonStringLen(s string) int64 {
 	return n
 }
 
+// jsonQuotedStringLen is the length encoding/json writes for a ",string"
+// string field: s as a JSON string, written again as a JSON string (that
+// second time without HTML escaping), so each " and \ of the first form
+// is escaped once more. Computed without building either.
+func jsonQuotedStringLen(s string) int64 {
+	inner, special := int64(2), int64(2) // the inner quotes
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < utf8.RuneSelf {
+			switch {
+			case c == '\\' || c == '"':
+				inner, special = inner+2, special+2
+			case c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t':
+				inner, special = inner+2, special+1
+			case c < 0x20 || c == '<' || c == '>' || c == '&':
+				inner, special = inner+6, special+1
+			default:
+				inner++
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1, r == '\u2028', r == '\u2029':
+			inner, special = inner+6, special+1
+		default:
+			inner += int64(size)
+		}
+		i += size
+	}
+	return 2 + inner + special
+}
+
 // walk charges x and its contents. It reports true where the encoder
 // fails, and the budget error if the budget runs out.
 func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {

@@ -631,3 +631,22 @@ func TestGoContextTypeErrorText(t *testing.T) {
 		require.GreaterOrEqual(t, m.n, int64(4<<20)/16, "%s: the type name is charged", src)
 	}
 }
+
+// TestJSONContextNilMarshaler: a nil json.Marshaler interface is written as
+// null, as encoding/json writes it, and the error is the later NaN's; a
+// panic in the caller's methods is an error, not a crash.
+func TestJSONContextNilMarshaler(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`x`)
+	require.NoError(t, err)
+	_, err = libhandlebars.RenderWith(tpl, struct {
+		J json.Marshaler
+		F float64
+	}{F: math.NaN()}, libhandlebars.WithJSONContext())
+	require.EqualError(t, err, "json: unsupported value: NaN")
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"p": panicMarshaler{}}, libhandlebars.WithJSONContext())
+	require.ErrorContains(t, err, "render panicked")
+}
+
+type panicMarshaler struct{}
+
+func (panicMarshaler) MarshalJSON() ([]byte, error) { panic("boom") }

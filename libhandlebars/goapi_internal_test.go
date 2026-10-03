@@ -5,11 +5,13 @@ package libhandlebars
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 	"math"
 	"math/big"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,6 +185,17 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 			B jsBadText
 			C *jsCycle
 		}{C: cyc},
+		"nil Marshaler interface then NaN": struct {
+			J json.Marshaler
+			F float64
+		}{F: math.NaN()},
+		"string option": struct {
+			S string      `json:",string"`
+			N int         `json:",string"`
+			B *bool       `json:",string"`
+			F float64     `json:",string"`
+			X json.Number `json:",string"`
+		}{S: `a"b\c<>`, N: 7, F: 1.5, X: "12"},
 		"good marshalers then NaN": struct {
 			T time.Time
 			R json.RawMessage
@@ -239,5 +252,83 @@ func TestGoJSONCostDuplicateKeys(t *testing.T) {
 	for range 10 {
 		err := goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(m), 0)
 		require.EqualError(t, err, `json: map map[*big.Int]string has two keys that encode as "1"`)
+	}
+}
+
+type jsFailKey int
+
+func (k jsFailKey) MarshalText() ([]byte, error) {
+	return nil, fmt.Errorf("key %d fails", int(k))
+}
+
+// TestGoJSONCostKeyErrors: when several map keys fail to encode, the walk
+// reports the least error text, whatever Go's map order (encoding/json
+// reports whichever it meets first).
+func TestGoJSONCostKeyErrors(t *testing.T) {
+	m := map[jsFailKey]int{3: 3, 1: 1, 2: 2, 4: 4}
+	for range 50 {
+		err := goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(m), 0)
+		require.EqualError(t, err, `json: encoding error for type "map[libhandlebars.jsFailKey]int": "key 1 fails"`)
+	}
+}
+
+// TestGoJSONCostStringOption: a ",string" field's size is a lower bound of
+// what encoding/json writes, and close to it.
+func TestGoJSONCostStringOption(t *testing.T) {
+	v := struct {
+		S string `json:",string"`
+		N int    `json:",string"`
+	}{S: strings.Repeat(`"`, 1<<16), N: 12345}
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	bud := &goBudget{max: 1 << 40}
+	require.NoError(t, goJSONCost(bud, reflect.ValueOf(v), 0))
+	require.LessOrEqual(t, bud.size, int64(len(b)))
+	require.Greater(t, bud.size, int64(len(b))*9/10)
+}
+
+// TestEncodingJSONTexts pins the encoding/json error texts goJSONCost
+// reproduces. If a Go release (or GOEXPERIMENT=jsonv2) changes them, this
+// fails, and jsongo.go must follow.
+func TestEncodingJSONTexts(t *testing.T) {
+	cyc := &jsCycle{}
+	cyc.Self = cyc
+	for _, c := range []struct {
+		v    any
+		want string
+	}{
+		{make(chan int), "json: unsupported type: chan int"},
+		{math.NaN(), "json: unsupported value: NaN"},
+		{json.Number("x"), `json: invalid number literal "x"`},
+		{cyc, "json: unsupported value: encountered a cycle via *libhandlebars.jsCycle"},
+		{map[jsFailKey]int{1: 1}, `json: encoding error for type "map[libhandlebars.jsFailKey]int": "key 1 fails"`},
+		{struct{ R json.RawMessage }{R: []byte("{")}, "json: error calling MarshalJSON for type json.RawMessage: unexpected end of JSON input"},
+		{struct{ B jsBadText }{}, "json: error calling MarshalText for type libhandlebars.jsBadText: no text"},
+	} {
+		_, err := json.Marshal(c.v)
+		require.EqualError(t, err, c.want, "encoding/json's text changed: update jsongo.go")
+		// The callers' flow: the walk fails first, or json.Marshal does
+		// (a failing method with nothing failing after it).
+		werr := goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(c.v), 0)
+		if werr == nil {
+			_, werr = json.Marshal(c.v)
+		}
+		require.EqualError(t, werr, c.want)
+	}
+}
+
+// TestJSONQuotedStringLen: the ",string" length is what encoding/json
+// writes, for every byte.
+func TestJSONQuotedStringLen(t *testing.T) {
+	ins := []string{"", "plain", `a"b\c`, "\b\f\n\r\t", "<>&", "  ", "é漢🙂", "\xff", "x\x00y"}
+	for b := range 256 {
+		ins = append(ins, string([]byte{byte(b)}), "a"+string([]byte{byte(b)})+"é")
+	}
+	for _, s := range ins {
+		got, err := json.Marshal(struct {
+			S string `json:",string"`
+		}{s})
+		require.NoError(t, err)
+		require.Equal(t, int64(len(got)-len(`{"S":}`)), jsonQuotedStringLen(s), "%q", s)
 	}
 }

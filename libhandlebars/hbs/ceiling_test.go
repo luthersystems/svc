@@ -189,8 +189,9 @@ func TestCostCeiling(t *testing.T) {
 		if best > ceilingNs {
 			// Over the ceiling: fail only if the machine was not slow at
 			// the time too (other packages' tests run in parallel), judged
-			// by the plain evaluator measured now.
-			if base := baselineNs(t); best > baselineFactor*base {
+			// by the plain evaluator measured now; twice the ceiling fails
+			// however slow the machine seems.
+			if base := baselineNs(t); best > 2*ceilingNs || best > baselineFactor*base {
 				t.Errorf("%s: %.0f ns per charged step, want at most %d (baseline %.0f)", c.name, best, ceilingNs, base)
 			} else {
 				t.Logf("%s: %.0f ns/step over the ceiling, but the baseline is %.0f ns/step: contention", c.name, best, base)

@@ -650,3 +650,62 @@ func TestEncodeNativesBounded(t *testing.T) {
 		require.GreaterOrEqual(t, steps, int64(1<<16), "the 1 MiB name is charged")
 	})
 }
+
+// TestEncodeNativesStringOption: a ",string" field, written escaped twice,
+// is sized as such, so a native over the allocation cap fails before it is
+// marshalled; a nil Marshaler interface is null, not a panic.
+func TestEncodeNativesStringOption(t *testing.T) {
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("a", lisp.Native(struct {
+		S string `json:",string"`
+	}{S: strings.Repeat(`"`, 4<<20)}))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+	require.Equal(t, lisp.LError, dump.Type)
+	var res *lisp.LVal
+	alloc := allocDuring(func() { res, _ = eval(t, env, `(handlebars:render "" ctx)`) })
+	require.Equal(t, lisp.LError, res.Type)
+	require.Equal(t, dump.Cells[0].Str, res.Cells[0].Str)
+	require.Less(t, alloc, uint64(8<<20), "not marshalled")
+
+	ctx = lisp.SortedMap()
+	ctx.MapSetString("a", lisp.Native(struct {
+		J json.Marshaler
+		F float64
+	}{F: math.NaN()}))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	res, _ = eval(t, env, `(handlebars:render "" ctx)`)
+	require.Equal(t, lisp.LError, res.Type)
+	require.Equal(t, "error while serializing: json: unsupported value: NaN", res.Cells[0].Str)
+}
+
+// TestNativeColdEmbedding: the first use of a deeply embedded struct type
+// in a native is charged by depth, before encoding/json builds its fields.
+func TestNativeColdEmbedding(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	worst := 0.0
+	for run := range 3 {
+		chain := embedChain(1000)
+		// A field unique to this run makes a type no one has built.
+		cold := reflect.StructOf([]reflect.StructField{
+			{Name: "C", Type: chain, Anonymous: true},
+			{Name: "Run" + strconv.Itoa(run+100*int(time.Now().UnixNano()%1000)), Type: reflect.TypeFor[int]()},
+		})
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(reflect.New(cold).Elem().Interface()))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		start := time.Now()
+		res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		per := float64(time.Since(start).Nanoseconds()) / float64(steps)
+		t.Logf("cold 1000-level embedding: %d steps, %.0f ns/step", steps, per)
+		if run > 0 {
+			worst = max(worst, per)
+		}
+	}
+	require.Less(t, worst, 200.0)
+}

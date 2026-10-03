@@ -4,6 +4,7 @@ package libhandlebars
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"sync"
@@ -90,7 +91,18 @@ func jsonGoContextSetting(v string, ok bool, log logrus.FieldLogger) bool {
 // determinism: prettyp-num-en's error text prints a value with fmt's %v,
 // which calls its String or Error method, as raymond did, and JSON mode
 // calls MarshalJSON and MarshalText methods.
-func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
+func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (out string, err error) { //nolint:nonamedreturns // set by the recover below
+	// A panic from the caller's own methods (MarshalJSON, String) or a
+	// bug becomes an error, as the ELPS path's does, not a crash.
+	defer func() {
+		if p := recover(); p != nil {
+			out, err = "", fmt.Errorf("libhandlebars: render panicked: %v", p)
+		}
+	}()
+	return renderWith(tpl, ctx, opts...)
+}
+
+func renderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
 	cfg := renderConfig{json: jsonGoContextDefault()}
 	for _, o := range opts {
 		o(&cfg)
