@@ -130,3 +130,25 @@ func TestCacheSkipsOversizedEntry(t *testing.T) {
 	n, _ := c.stats()
 	require.Equal(t, 1, n)
 }
+
+// limitMeter fails every charge with an *Error, as a caller's own budget
+// might.
+type limitMeter struct{}
+
+func (limitMeter) Charge(int64) error {
+	return &Error{Kind: KindLimit, Msg: "caller budget exhausted"}
+}
+
+// TestParseCachedMeterFailureNotCached: a parse the Meter stopped is the
+// caller's budget, not the template's verdict, even when the Meter returns
+// an *Error: a later parse with no Meter (or a fresh budget) succeeds.
+func TestParseCachedMeterFailureNotCached(t *testing.T) {
+	src := "{{x}} " + t.Name() // not in the process-wide cache yet
+	_, err := ParseCachedMetered(src, DefaultLimits(), limitMeter{})
+	require.EqualError(t, err, "caller budget exhausted")
+	p, err := ParseCached(src, DefaultLimits())
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	_, err = ParseCachedMetered(src, DefaultLimits(), limitMeter{})
+	require.EqualError(t, err, "caller budget exhausted", "a hit is charged too")
+}

@@ -705,3 +705,30 @@ func TestRawMessageSearchFailsClosed(t *testing.T) {
 	_ = goJSONCost(bud, wide, 0)
 	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "17,000 fields: found and charged")
 }
+
+// TestRawMessageTiedEmbedding: reflect.StructOf promotes only its first
+// embedded field's methods, so struct{ json.RawMessage; json.Marshaler }
+// built by it is a Marshaler calling the RawMessage's, though Go's rules
+// call the two tied. Tied fields are each followed and their RawMessages
+// charged.
+func TestRawMessageTiedEmbedding(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
+	typ := reflect.StructOf([]reflect.StructField{
+		{Name: "RawMessage", Type: rawMessageType, Anonymous: true},
+		{Name: "Marshaler", Type: reflect.TypeFor[json.Marshaler](), Anonymous: true},
+	})
+	require.True(t, typ.Implements(marshalerType))
+	v := reflect.New(typ).Elem()
+	v.Field(0).Set(reflect.ValueOf(raw))
+	v.Field(1).Set(reflect.ValueOf(json.RawMessage(`1`)))
+	_, merr := json.Marshal(v.Interface())
+	require.Error(t, merr)
+	bud := &goBudget{max: 1 << 40}
+	if err := goJSONCost(bud, v, 0); err != nil {
+		require.EqualError(t, err, merr.Error())
+	}
+	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16))
+	n, _, found := embeddedRaw(v)
+	require.Equal(t, embedFound, found)
+	require.Equal(t, int64(len(raw)+1), n, "both tied RawMessages, summed")
+}

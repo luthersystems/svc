@@ -1254,3 +1254,19 @@ func TestEncodeKeyCollisionBeforeNatives(t *testing.T) {
 	require.Equal(t, `error while serializing: map int key 1 collides with string key "1"`, res.Cells[0].Str)
 	require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
 }
+
+// TestParseBudgetFailureNotCached: a render whose step budget runs out
+// while its template is parsed leaves no verdict behind: the same template
+// renders in a later evaluation with an ample budget.
+func TestParseBudgetFailureNotCached(t *testing.T) {
+	tpl := "{{x}} " + t.Name() // not in the process-wide cache yet
+	call := `(handlebars:render ` + strconv.Quote(tpl) + ` (sorted-map "x" 1))`
+	env := newEnv(t)
+	env.Runtime.SetStepBudget(1)
+	res := env.LoadStringContext(t.Context(), "test", call)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	env = newEnv(t)
+	res, _ = eval(t, env, call)
+	require.Equal(t, lisp.LString, res.Type, "%v", res)
+	require.Equal(t, "1 "+t.Name(), res.Str)
+}

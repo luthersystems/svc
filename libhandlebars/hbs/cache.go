@@ -69,7 +69,8 @@ func ParseCached(src string, lim Limits) (*Program, error) {
 
 // ParseCachedMetered is ParseCached charging ParseCost to m on every call,
 // cache hit or miss alike: a hit charges the token count the miss
-// measured. A Meter error is returned unchanged.
+// measured. A Meter error is returned unchanged, and a parse it stopped
+// is not cached (it is the caller's budget, not the template's verdict).
 func ParseCachedMetered(src string, lim Limits, m Meter) (*Program, error) {
 	return defaultCache.parse(src, lim, m)
 }
@@ -90,10 +91,18 @@ func (c *parseCache) parse(src string, lim Limits, m Meter) (*Program, error) {
 		return e.result()
 	}
 
-	prog, cost, err := parseMetered(src, lim, m)
+	// A failure the Meter returned is the caller's budget, not the
+	// template's verdict, whatever its type (a Meter may return an *Error):
+	// it must not be cached, or a later caller with a fresh budget would
+	// get it.
+	rm := &recordingMeter{m: m}
+	prog, cost, err := parseMetered(src, lim, rm)
+	if rm.failed {
+		return nil, err
+	}
 	var he *Error
 	if err != nil && !errors.As(err, &he) {
-		return nil, err // a Meter error: nothing to cache
+		return nil, err // not a parse verdict: nothing to cache
 	}
 	e := &cacheEntry{key: key, prog: prog, charge: cost}
 	if err == nil {
@@ -110,6 +119,24 @@ func (c *parseCache) parse(src string, lim Limits, m Meter) (*Program, error) {
 	c.put(e)
 
 	return prog, err
+}
+
+// recordingMeter passes charges to m (none when m is nil) and records
+// whether m failed one.
+type recordingMeter struct {
+	m      Meter
+	failed bool
+}
+
+func (r *recordingMeter) Charge(n int64) error {
+	if r.m == nil {
+		return nil
+	}
+	err := r.m.Charge(n)
+	if err != nil {
+		r.failed = true
+	}
+	return err
 }
 
 // result returns the entry's verdict as Parse would.

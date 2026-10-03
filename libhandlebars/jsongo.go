@@ -130,9 +130,9 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 			// A struct embedding a RawMessage (perhaps its MarshalJSON):
 			// encoding/json checks and compacts whatever the method
 			// returns, so the bytes are charged here, method or not.
-			raw, charge, found := embeddedRaw(v)
+			rawLen, charge, found := embeddedRaw(v)
 			if found == embedFound {
-				charge += 2 * units64(int64(len(raw)), 16)
+				charge += 2 * units64(rawLen, 16)
 			}
 			if err := w.c.steps(charge); err != nil {
 				return jsonTotals{steps: charge}, err
@@ -218,51 +218,67 @@ func embedCost(e *embedInfo) int64 {
 }
 
 // embeddedRaw finds the RawMessage a Marshaler value's MarshalJSON would
-// reach by embedding. It works on the value, not on how its method was
-// compiled (so a type from reflect.StructOf is treated as a declared one,
-// in any build), resolving MarshalJSON by Go's selector rules: the
+// reach by embedding, and returns its length, the search's cost (see
+// embedCost) and the outcome. It works on the value, not on how its method
+// was compiled (so a type from reflect.StructOf is treated as a declared
+// one, in any build), resolving MarshalJSON by Go's selector rules: the
 // shallowest embedded field whose type has the method and declares it
-// wins, and two at that depth are ambiguous (none). Under these rules a
-// struct declares MarshalJSON only if none of its embedded fields brings
-// one; a RawMessage and an interface declare it, and an interface is
-// followed to its dynamic value. Whether a struct also declares its own
-// MarshalJSON is not asked: the bytes are charged either way. cost is the
-// steps of the search (see embedCost).
-func embeddedRaw(v reflect.Value) (json.RawMessage, int64, embedResult) {
-	var cost, scanned int64
-	for hop := 0; ; hop++ {
+// wins; where several tie, each is followed (see embedSearch.find). Under
+// these rules a struct declares MarshalJSON only if none of its embedded
+// fields brings one; a RawMessage and an interface declare it, and an
+// interface is followed to its dynamic value. Whether a struct also
+// declares its own MarshalJSON is not asked: the bytes are charged either
+// way.
+func embeddedRaw(v reflect.Value) (int64, int64, embedResult) {
+	s := &embedSearch{}
+	n, res := s.find(v, 0)
+	return n, s.cost, res
+}
+
+// embedSearch is one embeddedRaw search: its cost so far, and the
+// embedded fields it has looked at, which bound it.
+type embedSearch struct {
+	cost, scanned int64
+}
+
+// find returns the bytes of the RawMessage v's MarshalJSON reaches, from
+// hop hops through interfaces. Where several fields tie at the shallowest
+// depth, Go's rules have no MarshalJSON, but reflect.StructOf promotes its
+// first embedded field's: so each tied field is followed, and the bytes of
+// every RawMessage they reach are summed (an overcharge where none is
+// called, never a miss).
+func (s *embedSearch) find(v reflect.Value, hop int) (int64, embedResult) {
+	for ; ; hop++ {
 		if hop >= maxEmbedRaw {
-			return nil, cost, embedTooDeep
+			return 0, embedTooDeep
 		}
 		var ok bool
 		if v, ok = derefValue(v); !ok {
-			return nil, cost, embedNone
+			return 0, embedNone
 		}
 		if v.Type() == rawMessageType {
-			return json.RawMessage(v.Bytes()), cost, embedFound
+			return int64(v.Len()), embedFound
 		}
 		if v.Kind() != reflect.Struct {
-			return nil, cost, embedNone
+			return 0, embedNone
 		}
-		var pick reflect.Value
-		picks := 0
+		var picks []reflect.Value
 		level := []reflect.Value{v}
-		for depth := 0; len(level) > 0 && picks == 0; depth++ {
+		for depth := 0; len(level) > 0 && len(picks) == 0; depth++ {
 			if depth >= maxEmbedRaw {
-				return nil, cost, embedTooDeep
+				return 0, embedTooDeep
 			}
 			var next []reflect.Value
 			for _, sv := range level {
 				e := structEmbeds(sv.Type())
-				cost += embedCost(e)
-				if scanned += int64(len(e.fields)); scanned > maxEmbedScan {
-					return nil, cost, embedTooDeep
+				s.cost += embedCost(e)
+				if s.scanned += int64(len(e.fields)); s.scanned > maxEmbedScan {
+					return 0, embedTooDeep
 				}
 				for _, f := range e.fields {
 					fv := sv.Field(f.index)
 					if f.declares {
-						picks++
-						pick = fv
+						picks = append(picks, fv)
 						continue
 					}
 					// A struct bringing MarshalJSON from its own embedding:
@@ -275,12 +291,27 @@ func embeddedRaw(v reflect.Value) (json.RawMessage, int64, embedResult) {
 			}
 			level = next
 		}
-		if picks != 1 {
-			return nil, cost, embedNone
+		switch len(picks) {
+		case 0:
+			return 0, embedNone
+		case 1:
+		default:
+			var total int64
+			res := embedNone
+			for _, p := range picks {
+				n, r := s.find(p, hop+1)
+				if r == embedTooDeep {
+					return 0, embedTooDeep
+				}
+				if r == embedFound {
+					total, res = total+n, embedFound
+				}
+			}
+			return total, res
 		}
-		v = pick // a RawMessage, an interface, or a struct declaring its own
+		v = picks[0] // a RawMessage, an interface, or a struct declaring its own
 		if t := v.Type(); t.Kind() == reflect.Struct || (t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct) {
-			return nil, cost, embedNone
+			return 0, embedNone
 		}
 	}
 }
