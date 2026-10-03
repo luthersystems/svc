@@ -1160,3 +1160,62 @@ func TestNativeMarshalerChainFailsClosed(t *testing.T) {
 		require.ErrorContains(t, err, "json: Marshaler embedding nests deeper than 64", "Go API, %d wrappers", n)
 	}
 }
+
+// marshalerChain is a Marshaler (time.Time's, embedded) that also embeds a fresh reflect.StructOf chain, levels deep
+// with width plain fields a level, whose type name spells out every level
+// below: the embedding search looks up methods on it.
+func marshalerChain(levels, width int, tag string) any {
+	plain := func(i int) []reflect.StructField {
+		fs := make([]reflect.StructField, width)
+		for j := range fs {
+			fs[j] = reflect.StructField{Name: "F" + tag + "_" + strconv.Itoa(i) + "_" + strconv.Itoa(j), Type: reflect.TypeFor[int]()}
+		}
+		return fs
+	}
+	chain := reflect.StructOf(plain(0))
+	for i := 1; i < levels; i++ {
+		chain = reflect.StructOf(append([]reflect.StructField{{Name: "E" + strconv.Itoa(i), Type: chain, Anonymous: true}}, plain(i)...))
+	}
+	top := reflect.StructOf([]reflect.StructField{
+		{Name: "Time", Type: reflect.TypeFor[time.Time](), Anonymous: true},
+		{Name: "C", Type: chain, Anonymous: true},
+	})
+	return reflect.New(top).Elem().Interface()
+}
+
+// TestNativeColdMarshalerChain: the embedding search's first look at a
+// deep StructOf chain (method lookups whose cost grows with each type's
+// name) is charged by that name's length, within the ceiling, and a warm
+// look charges the same steps.
+func TestNativeColdMarshalerChain(t *testing.T) {
+	steps := func(native any) int64 {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		return steps
+	}
+	v := marshalerChain(64, 15, "w")
+	require.Implements(t, (*json.Marshaler)(nil), v)
+	cold := steps(v)
+	warm := steps(v)
+	require.Equal(t, cold, warm, "cold and warm alike")
+	if raceEnabled || testing.Short() {
+		return
+	}
+	run := 0
+	_, per, _ := bestNative(t, func() any {
+		run++
+		return marshalerChain(64, 300, "c"+strconv.Itoa(run))
+	})
+	t.Logf("cold 64-level x300 marshaler chain: %.0f ns/step", per)
+	require.False(t, ceilingFails(t, per), "%.0f ns/step", per)
+	_, per, _ = bestNative(t, func() any {
+		run++
+		return marshalerChain(1, 20_000, "w"+strconv.Itoa(run))
+	})
+	t.Logf("cold one-level x20000 marshaler: %.0f ns/step", per)
+	require.False(t, ceilingFails(t, per), "%.0f ns/step", per)
+}

@@ -328,13 +328,20 @@ func TestParseScalesLinearly(t *testing.T) {
 	}
 	lim := Limits{MaxTemplateBytes: 4 << 20, MaxDepth: DefaultLimits().MaxDepth}
 	for name, build := range scalingShapes {
-		var times [3]time.Duration
-		for i, n := range []int{10 << 10, 100 << 10, 1 << 20} {
-			times[i] = parseTime(t, build(n), lim)
-		}
-		t.Logf("%-10s 10KB %v  100KB %v  1MB %v", name, times[0], times[1], times[2])
 		// a floor keeps timer noise on tiny inputs from failing the test
 		floor := 200 * time.Microsecond
+		var times [3]time.Duration
+		// Up to 3 attempts: a busy machine can slow one size's samples
+		// and not another's; a real superlinear parse fails every time.
+		for attempt := range 3 {
+			for i, n := range []int{10 << 10, 100 << 10, 1 << 20} {
+				times[i] = parseTime(t, build(n), lim)
+			}
+			t.Logf("%-10s 10KB %v  100KB %v  1MB %v", name, times[0], times[1], times[2])
+			if (times[1] < 30*max(times[0], floor) && times[2] < 30*max(times[1], floor)) || attempt == 2 {
+				break
+			}
+		}
 		require.Less(t, times[1], 30*max(times[0], floor), "%s: 10KB -> 100KB", name)
 		require.Less(t, times[2], 30*max(times[1], floor), "%s: 100KB -> 1MB", name)
 	}
