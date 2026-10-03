@@ -231,6 +231,8 @@ func hGlobal(c *hcall) any {
 	if !ok {
 		c.r.fail(fmt.Sprintf("global: invalid key type: %T", ki))
 	}
+	// The global map hashes the namespace and key on every read or write.
+	c.r.hashKey(len(ns) + len(k))
 	vi, ok := c.hash["val"]
 	if !ok {
 		return c.r.global[globalKey{ns, k}]
@@ -260,12 +262,14 @@ func hRoundToNth(c *hcall) any {
 	if err != nil {
 		c.r.fail("round-to-n: 'n' must be convertable to int: " + n)
 	}
-	// The output holds nn digits after the point: charge and bound them
-	// before formatting. fmt ignores a precision it cannot parse (see
+	// The output holds nn digits after the point: bound them before
+	// formatting. fmt ignores a precision it cannot parse (see
 	// fmtPrecisionOK) and prints a short error string instead, so only a
 	// precision it accepts is charged.
+	// The result is then charged at its exact length, as every helper
+	// result is (callFunc).
 	if fmtPrecisionOK(nn) {
-		c.r.produced(int(nn))
+		c.r.reserveProduced(int(nn))
 	}
 	return fmt.Sprintf(fmt.Sprintf("%%.%df", nn), xf)
 }
@@ -296,8 +300,10 @@ func hPrettyNumEn(c *hcall) any {
 	num := c.args[0]
 	f, ok := c.r.toFloat(num)
 	if !ok {
-		msg := fmt.Sprintf("value passed in must be a number, got: %v", num)
-		c.r.produced(len(msg)) // the message holds the whole value
+		// The message holds the whole value as fmt's %v prints it, built by a
+		// charged, depth-bounded walk instead of fmt's recursion.
+		msg := string(c.r.appendV([]byte("value passed in must be a number, got: "), num))
+		c.r.produced(len(msg))
 		c.r.fail(msg)
 	}
 	return humanize.FormatFloat("#,###.##", f)

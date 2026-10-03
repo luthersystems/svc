@@ -3,12 +3,14 @@
 package libhandlebars_test
 
 import (
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/luthersystems/elps/lisp"
 	"github.com/luthersystems/elps/lisp/lisplib"
+	"github.com/luthersystems/elps/lisp/lisplib/libjson"
 	"github.com/luthersystems/elps/parser"
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
@@ -188,8 +190,36 @@ func TestContextSerializationCapped(t *testing.T) {
 	require.Equal(t, dump.Cells[0].Str, res.Cells[0].Str)
 	require.True(t, strings.HasPrefix(res.Cells[0].Str, "allocation size exceeds maximum"), res.Cells[0].Str)
 
-	// Other serialization errors keep their text.
+	// Other serialization errors keep their text exactly.
+	fn, _ := eval(t, env, `(sorted-map "f" (lambda () 1))`)
+	_, derr := libjson.Dump(fn, false)
+	require.Error(t, derr)
 	res, _ = eval(t, env, `(handlebars:render "" (sorted-map "f" (lambda () 1)))`)
 	require.Equal(t, lisp.LError, res.Type)
-	require.True(t, strings.HasPrefix(res.Cells[0].Str, "error while serializing: "), res.Cells[0].Str)
+	require.Equal(t, "error while serializing: "+derr.Error(), res.Cells[0].Str)
+
+	// A non-size error never falls back to the unbounded serializer: with a
+	// small value depth limit, a too-deep list next to a large shared
+	// structure fails fast and allocates little.
+	env.Runtime.MaxAlloc = 0
+	deep := lisp.Int(1)
+	for range 1100 {
+		deep = lisp.QExpr([]*lisp.LVal{deep})
+	}
+	dag := lisp.QExpr([]*lisp.LVal{lisp.Int(1)})
+	for range 24 {
+		dag = lisp.QExpr([]*lisp.LVal{dag, dag})
+	}
+	both := lisp.SortedMap()
+	both.MapSetString("a", deep)
+	both.MapSetString("b", dag)
+	env.Put(lisp.Symbol("both"), both)
+	env.Runtime.MaxValueDepth = 1024
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	res, _ = eval(t, env, `(handlebars:render "" both)`)
+	runtime.ReadMemStats(&after)
+	require.Equal(t, lisp.LError, res.Type)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20))
 }

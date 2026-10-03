@@ -72,3 +72,47 @@ literal of 9223372036854775295 or less is in range and unchanged.
 
 The harness allowlist entry for non-amd64 reference runs covers these
 cases too. On amd64 nothing changes.
+
+## Cost model
+
+A render's steps (the `Meter`'s units, bounded by `Limits.MaxSteps`) are a
+pure function of the template, the context and the options. Work that grows
+with the length of a string or key is charged by its length, through the
+primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
+`max(1, ceil(n/1024))`.
+
+| Operation | Where | Charge |
+|---|---|---|
+| Each AST node evaluated | `eval.go` `at` | 1 |
+| Each path segment resolved | `evalPath` | 1, plus the key lookup below |
+| Each context a lookup tries (mustache climb) | `evalDepthPath` | 1 |
+| Each array element a path is mapped over | `evalCtxPath` | 1 |
+| Map lookup or insert of a key of n bytes: context fields, string-literal paths, hash pair keys, `#each` object keys, `plus`/`minus` hash keys | `lookup`, `hashKey` | KiB(n) |
+| Helper name lookup | `findHelper` | KiB(len(name)) |
+| Array index segment of n bytes (`strconv.Atoi`) | `evalField` | max(1, ceil(n/64)) |
+| Block parameter scan | `blockParam` | 1 per frame, plus each compare |
+| String compare of equal lengths n (block params, `select`, `in-string-array`) | `compare` | KiB(n); unequal lengths 0 |
+| Sorting k keys (`#each` objects, `plus`/`minus`, `%v` of objects) | `sortKeys` | sum of KiB(len) x ceil(log2(k+1)), before sorting |
+| Collecting an object's keys for `#each` | `helperEach` | 1 per key, before collecting |
+| `#each` iteration | `visitBlock`, `helperEach` | 1 |
+| Helper call | `callHelper` | 1 |
+| String argument of n bytes read by a helper | `read` via `convertArg`, `hashStr`, `toFloat`, `toInt` | KiB(n) |
+| String built from a non-string value (`str`), element by element | `appendStrBounded` | 1 per element, plus produced bytes |
+| `select` / `in-string-array` element scanned | helpers | KiB(len(key)) / 1, plus compares |
+| `global` read or write | `hGlobal` | KiB(len(ns) + len(key)) |
+| `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting; result charged as produced |
+| `escape-uri-component` | `hEscapeURIComponent` | exact escaped length checked before escaping; result charged as produced |
+| `prettyp-num-en` error text (fmt `%v` of the value) | `appendV` | 1 per element, depth-bounded, produced bytes |
+| Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
+| Produced bytes: output written, captured sections, helper results | `wrote`, `produced` | 1 per started KiB of the running total; bounded by 8 x MaxOutputBytes |
+
+The ELPS binding adds: parsing, 1 step per started KiB of template on every
+call; encoding the context (as `json:dump-bytes`, under `Runtime.MaxAlloc`),
+1 step per whole KiB written; decoding it, 1 step per started KiB.
+
+`TestCostModelSites` (in `costguard_test.go`) times each site above with 1 KiB
+and 256 KiB strings and fails if the time per step grows more than about 3x
+(an uncharged site grows by about 256x), and `TestCostModelGuard` runs the
+grammar generator with short and long vocabularies as a coarser net. A new
+operation on strings must be charged through these primitives and get a row
+here and a case in `costSites`.

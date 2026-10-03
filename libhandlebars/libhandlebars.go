@@ -208,26 +208,22 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 
 // dumpContext serializes an ELPS render context to JSON as json:dump-bytes
 // does, with :string-numbers false: under the runtime's allocation cap
-// (Runtime.MaxAlloc) and evaluation context, charged per KiB written. The
-// bytes are those libjson's Dump writes.
+// (Runtime.MaxAlloc), value depth limit and evaluation context, charged per
+// KiB written. The bytes are those libjson's Dump writes.
 //
-// A failure that is not one of those limits is reported as before, as
-// "error while serializing: <Dump's error>": Dump runs again only then, on a
-// value the capped walk has already reached the end of or failed inside for
-// a reason other than its size.
+// A runtime limit is returned as json:dump-bytes reports it. Any other
+// failure is reported as before, "error while serializing: <message>": the
+// capped walk returns the same encoder error Dump would, so the unbounded
+// Dump never runs.
 func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
-	s := libjson.DefaultSerializer()
-	res := s.DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
+	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
 	if res.Type != lisp.LError {
 		return res.Bytes(), nil
 	}
-	if isLimitError(res) {
+	if isLimitError(res) || len(res.Cells) == 0 {
 		return nil, res
 	}
-	if _, err := s.Dump(v, false); err != nil {
-		return nil, env.Errorf("error while serializing: %v", err)
-	}
-	return nil, res
+	return nil, env.Errorf("error while serializing: %s", res.Cells[0].Str)
 }
 
 // isLimitError reports whether lerr is a runtime limit: the allocation cap,

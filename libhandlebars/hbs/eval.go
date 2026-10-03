@@ -198,13 +198,16 @@ func (r *renderer) curBlock() *ast.BlockStatement {
 	return r.blocks[len(r.blocks)-1]
 }
 
+// blockParam finds name among the block parameters in scope, innermost
+// first: a step per frame scanned, plus the cost of each compare.
 func (r *renderer) blockParam(name string) any {
 	for i := len(r.bparams) - 1; i >= 0; i-- {
+		r.step()
 		bp := &r.bparams[i]
-		if bp.has1 && bp.name1 == name {
+		if bp.has1 && r.compare(bp.name1, name) {
 			return bp.val1
 		}
-		if bp.name0 == name {
+		if r.compare(bp.name0, name) {
 			return bp.val0
 		}
 	}
@@ -265,9 +268,9 @@ func stripBrackets(part string) string {
 func (r *renderer) evalField(ctx any, name string) (any, bool) {
 	switch c := ctx.(type) {
 	case map[string]any:
-		v, ok := c[name]
-		return v, ok
+		return r.lookup(c, name)
 	case []any:
+		r.parseDigits(len(name))
 		i, err := strconv.Atoi(name)
 		if err == nil && i < len(c) {
 			if i < 0 {
@@ -276,7 +279,7 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 			return c[i], true
 		}
 	case bpContext:
-		if c.name == name {
+		if r.compare(c.name, name) {
 			return c.val, true
 		}
 	default:
@@ -289,7 +292,7 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 	resolved := false
 	for _, part := range parts {
-		r.stepKiB(len(part)) // a long key costs its hashing
+		r.step()
 		v, ok := r.evalField(ctx, stripBrackets(part))
 		if !ok {
 			return nil, false, resolved
@@ -414,7 +417,7 @@ func (r *renderer) evalPathExpression(node *ast.PathExpression) any {
 func (r *renderer) evalExpr(node *ast.Expression, direct bool) any {
 	r.at(node)
 	if name := node.HelperName(); name != "" {
-		if h := findHelper(name); h != nil {
+		if h := r.findHelper(name); h != nil {
 			return r.callHelper(name, h, node, direct)
 		}
 	}
@@ -466,6 +469,7 @@ func (r *renderer) evalHash(node *ast.Hash) map[string]any {
 	for _, pair := range node.Pairs {
 		r.at(pair)
 		if v := r.evalParam(pair.Val); v != nil {
+			r.hashKey(len(pair.Key))
 			hash[pair.Key] = v
 		}
 	}
@@ -506,7 +510,7 @@ func (r *renderer) visitBlock(node *ast.BlockStatement) {
 	r.blocks = append(r.blocks, node)
 
 	v := r.evalExpr(node.Expression, true)
-	if isHelperCall(node.Expression) {
+	if r.isHelperCall(node.Expression) {
 		if _, ok := v.(streamed); !ok {
 			r.writeValue(v, false)
 		}
@@ -542,9 +546,15 @@ func (f *dataFrame) setIter(length, i int, key any) {
 	f.last = i == length-1
 }
 
-func isHelperCall(node *ast.Expression) bool {
+func (r *renderer) isHelperCall(node *ast.Expression) bool {
 	name := node.HelperName()
-	return name != "" && findHelper(name) != nil
+	return name != "" && r.findHelper(name) != nil
+}
+
+// findHelper is findHelper with the lookup charged.
+func (r *renderer) findHelper(name string) *helper {
+	r.hashKey(len(name))
+	return findHelper(name)
 }
 
 // visitPartial reproduces raymond with no partials registered: every partial

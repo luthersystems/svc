@@ -2,7 +2,13 @@
 
 package hbs
 
-import "strings"
+import (
+	"fmt"
+	"math/bits"
+	"sort"
+	"strconv"
+	"strings"
+)
 
 // Output and step accounting for one render.
 //
@@ -102,6 +108,101 @@ func (r *renderer) steps1(n int64) {
 	}
 }
 
+// Cost model primitives. Every operation whose work grows with the length
+// of a string or key goes through one of these (see DETERMINISM.md, "Cost
+// model").
+
+// hashKey charges hashing, parsing or scanning an n-byte key once: one step,
+// or one per started KiB if more.
+func (r *renderer) hashKey(n int) { r.stepKiB(n) }
+
+// parseDigits charges parsing an n-byte number (strconv.Atoi), which costs
+// far more per byte than hashing: one step per started 64 bytes.
+func (r *renderer) parseDigits(n int) { r.steps1(max(1, int64(n-1)>>6+1)) }
+
+// lookup is m[k], charged as hashKey(len(k)).
+func (r *renderer) lookup(m map[string]any, k string) (any, bool) {
+	r.hashKey(len(k))
+	v, ok := m[k]
+	return v, ok
+}
+
+// sortKeys sorts keys, charged up front by a deterministic bound on the
+// comparisons: each key's hashKey cost times ceil(log2(n+1)). The charge
+// depends only on the keys, not on the order they arrive in.
+func (r *renderer) sortKeys(keys []string) {
+	rounds := int64(bits.Len(uint(len(keys))))
+	var cost int64
+	for _, k := range keys {
+		cost += max(1, int64(len(k)-1)>>10+1)
+	}
+	r.steps1(cost * max(1, rounds))
+	sort.Strings(keys)
+}
+
+// appendV appends fmt's %v form of v (a Value or a template literal), as
+// fmt.Sprintf("%v", v) writes it, without fmt's recursion: nested arrays
+// and objects count against MaxDepth, each element costs a step, and the
+// produced-bytes bound is checked as it grows.
+func (r *renderer) appendV(dst []byte, v any) []byte {
+	switch x := v.(type) {
+	case nil:
+		return append(dst, "<nil>"...)
+	case string:
+		return append(dst, x...)
+	case bool:
+		return strconv.AppendBool(dst, x)
+	case int:
+		return strconv.AppendInt(dst, int64(x), 10)
+	case float64:
+		return strconv.AppendFloat(dst, x, 'g', -1, 64)
+	case []any:
+		r.enter()
+		dst = append(dst, '[')
+		for i, e := range x {
+			r.step()
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = r.appendV(dst, e)
+			r.checkProduced(len(dst))
+		}
+		r.leave()
+		return append(dst, ']')
+	case map[string]any:
+		r.enter()
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		r.sortKeys(keys)
+		dst = append(dst, "map["...)
+		for i, k := range keys {
+			r.step()
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = append(dst, k...)
+			dst = append(dst, ':')
+			dst = r.appendV(dst, x[k])
+			r.checkProduced(len(dst))
+		}
+		r.leave()
+		return append(dst, ']')
+	default:
+		// No other dynamic type reaches a helper; fmt has no recursion here.
+		return fmt.Appendf(dst, "%v", v)
+	}
+}
+
+// checkProduced fails the render if a string being built has n bytes,
+// more than the produced-bytes bound leaves room for.
+func (r *renderer) checkProduced(n int) {
+	if int64(n) > r.maxProduced-r.written {
+		r.reserveProduced(n)
+	}
+}
+
 // compare reports a == b, charging a step per started KiB compared when the
 // lengths are equal (unequal lengths compare in constant time).
 func (r *renderer) compare(a, b string) bool {
@@ -139,9 +240,7 @@ func (r *renderer) appendStrBounded(dst []byte, v any) []byte {
 	for _, e := range a {
 		r.step()
 		dst = r.appendStrBounded(dst, e)
-		if int64(len(dst)) > r.maxProduced-r.written {
-			r.reserveProduced(len(dst))
-		}
+		r.checkProduced(len(dst))
 	}
 	return dst
 }

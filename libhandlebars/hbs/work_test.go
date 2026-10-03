@@ -68,13 +68,14 @@ func TestCapturedBytesBounded(t *testing.T) {
 
 // TestHelperCharges pins what helper work costs, so steps bound wall time.
 func TestHelperCharges(t *testing.T) {
-	// round-to-nth: its precision counts as produced bytes, charged before
-	// formatting; then its result and the output do. Produced bytes cost a
-	// step per started KiB of their running total: 999,999 + 1,000,001 +
-	// 1,000,001 bytes is 2930 KiB, 2929 more than the small case's 1.
+	// round-to-nth: its precision is checked against the produced-bytes
+	// bound before formatting; then its result (1,000,001 bytes) and the
+	// output (the same) are charged at their exact length: a step per started
+	// KiB of the running total, 2,000,002 bytes or 1954 KiB, 1953 more than
+	// the small case's 1.
 	base := steps(t, `{{round-to-nth "1" "2"}}`, `{}`)
-	require.Equal(t, base+2929, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
-	require.Equal(t, base+2929, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
+	require.Equal(t, base+1953, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
+	require.Equal(t, base+1953, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
 
 	// A string argument costs a step per started KiB read; a non-string
 	// one, a step per started KiB of the string built.
@@ -160,14 +161,17 @@ func TestPathWorkCharged(t *testing.T) {
 		require.Less(t, time.Since(start), 10*time.Second)
 	}
 	small := steps(t, `{{#with b}}{{#if x}}{{/if}}{{/with}}`, `{"b": [{"x": 1}]}`)
-	// x is mapped over every element: a step for the element and one for
-	// its one-segment path, so 999 more elements cost 1998 more steps.
-	require.Equal(t, small+1998, steps(t, `{{#with b}}{{#if x}}{{/if}}{{/with}}`, `{"b": [`+strings.TrimSuffix(strings.Repeat(`{"x": 1},`, 1000), ",")+`]}`))
+	// x is mapped over every element: a step for the element, one for its
+	// one-segment path and one for the key lookup, so 999 more elements
+	// cost 2997 more steps.
+	require.Equal(t, small+2997, steps(t, `{{#with b}}{{#if x}}{{/if}}{{/with}}`, `{"b": [`+strings.TrimSuffix(strings.Repeat(`{"x": 1},`, 1000), ",")+`]}`))
 
-	// Each path segment costs a step.
+	// Each path segment costs steps.
 	one := steps(t, `{{d}}`, `{"d": 1}`)
 	deep := `{"d": ` + strings.Repeat(`{"x": `, 250) + `1` + strings.Repeat(`}`, 250) + `}`
-	require.Equal(t, one+250, steps(t, `{{d`+strings.Repeat(".x", 250)+`}}`, deep))
+	// Two steps per segment (resolving it and looking its key up); {{d}}
+	// also pays one for the helper-name lookup a dotted path does not make.
+	require.Equal(t, one+2*250-1, steps(t, `{{d`+strings.Repeat(".x", 250)+`}}`, deep))
 }
 
 // TestStrOfArrayBounded: str() of an array checks the produced-bytes bound
@@ -330,4 +334,80 @@ func TestRealisticHeadroom(t *testing.T) {
 	t.Logf("template %d B, context %d B, output %d B, steps %d (%.2f%% of MaxSteps)", tpl.Len(), ctx.Len(), len(out), m.used, stepsPct)
 	require.Less(t, stepsPct, 5.0)
 	require.Less(t, len(out), lim.MaxOutputBytes/10)
+}
+
+// TestStringLengthCharges pins the charge of each operation whose work
+// grows with a string's length (DETERMINISM.md, "Cost model").
+func TestStringLengthCharges(t *testing.T) {
+	long := func(n int, c string) string { return strings.Repeat(c, n) }
+	kib := int64(1024)
+
+	// #each over an object: sorting and looking up long keys. 9 keys of
+	// 1 MiB sharing a prefix: sort 9 x 1024 x ceil(log2 10) and 9 x 1024
+	// lookups at least.
+	var m strings.Builder
+	m.WriteString(`{"m": {`)
+	for i := range 9 {
+		if i > 0 {
+			m.WriteByte(',')
+		}
+		fmt.Fprintf(&m, `"%s%d": 1`, long(1<<20-1, "k"), i)
+	}
+	m.WriteString(`}}`)
+	require.GreaterOrEqual(t, steps(t, `{{#each m}}{{/each}}`, m.String()), 9*kib*4+9*kib)
+
+	// global hashes its namespace and key on every read and write.
+	key := long(4<<20, "z")
+	require.GreaterOrEqual(t, steps(t, `{{global "n" key=k}}`, `{"k": "`+key+`"}`), 4*kib)
+	require.GreaterOrEqual(t, steps(t, `{{global "n" key=k val="v"}}`, `{"k": "`+key+`"}`), 4*kib)
+
+	// A hash pair's key is hashed when the pair is stored.
+	require.GreaterOrEqual(t, steps(t, `{{and `+long(512<<10, "h")+`=1}}`, `{}`), int64(512))
+
+	// A string-literal path is looked up in the context.
+	require.GreaterOrEqual(t, steps(t, `{{"`+long(512<<10, "s")+`"}}`, `{"a": 1}`), int64(512))
+
+	// A long helper name is hashed to find the helper.
+	require.GreaterOrEqual(t, steps(t, `{{`+long(512<<10, "q")+` 1}}`, `{}`), int64(512))
+
+	// Block parameters: a step per frame scanned, plus each equal-length
+	// compare by KiB. 200 frames of 1 KiB names, then 100 references to the
+	// outermost name.
+	var bp strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&bp, `{{#each o as |%s%03d|}}`, long(1021, "p"), i)
+	}
+	bp.WriteString(`{{#each o}}` + strings.Repeat(`{{`+long(1021, "p")+`000}}`, 100) + `{{/each}}`)
+	bp.WriteString(strings.Repeat(`{{/each}}`, 200))
+	require.GreaterOrEqual(t, steps(t, bp.String(), `{"o": [1]}`), int64(100*200*2))
+}
+
+// TestFmtVBounded: prettyp-num-en's error message prints the value as fmt's
+// %v does, with a depth-bounded walk.
+func TestFmtVBounded(t *testing.T) {
+	deep := mustCtx(t, `{"a": `+strings.Repeat("[", 9000)+strings.Repeat("]", 9000)+`}`)
+	var err error
+	withSmallStack(func() {
+		_, err = mustParse(t, `{{prettyp-num-en a}}`).Render(deep, hbs.Options{})
+	})
+	requireLimit(t, err, "maximum depth of 256")
+
+	// The message matches fmt for every kind of value.
+	for _, ctx := range []string{
+		`{"a": [1, 2.5, "x", true, null, [3, []], {"k": [1e21, -0.0001]}]}`,
+		`{"a": {"b": {"c": [1, "two"]}, "a": null, "z": false}}`,
+		`{"a": [1e100, 123456789, 0.000001, 1e-7, 100000000000000000000]}`,
+		`{"a": []}`, `{"a": {}}`, `{"a": true}`, `{"a": null}`,
+	} {
+		m, ok := mustCtx(t, ctx).(map[string]any)
+		require.True(t, ok)
+		v := m["a"]
+		_, err := mustParse(t, `{{prettyp-num-en a}}`).Render(mustCtx(t, ctx), hbs.Options{})
+		if _, ok := v.(float64); ok {
+			continue
+		}
+		var he *hbs.Error
+		require.ErrorAs(t, err, &he)
+		require.Equal(t, fmt.Sprintf("value passed in must be a number, got: %v", v), he.Msg, ctx)
+	}
 }

@@ -5,7 +5,6 @@ package hbs
 import (
 	"fmt"
 	"math"
-	"sort"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
 )
@@ -196,10 +195,10 @@ func (c *hcall) sortedHashValues() []any {
 	for k := range c.hash {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	c.r.sortKeys(keys)
 	vals := make([]any, len(keys))
 	for i, k := range keys {
-		vals[i] = c.hash[k]
+		vals[i], _ = c.r.lookup(c.hash, k)
 	}
 	return vals
 }
@@ -296,19 +295,20 @@ func helperEach(c *hcall) any {
 			c.evalBlock(e, frame, key)
 		}
 	case map[string]any:
-		// Collecting and sorting the keys is charged up front, a step per
-		// key, before the work is done.
+		// Collecting the keys costs a step each, charged before the work;
+		// sorting them and looking each one up are charged by key length.
 		r.steps1(int64(len(x)))
 		keys := make([]string, 0, len(x))
 		for k := range x {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		r.sortKeys(keys)
 		frame := &dataFrame{parent: r.frame, iter: true}
 		for i, k := range keys {
 			r.step()
 			frame.setIter(len(keys), i, k)
-			c.evalBlock(x[k], frame, k)
+			v, _ := r.lookup(x, k)
+			c.evalBlock(v, frame, k)
 		}
 	default:
 		// raymond iterates arrays, maps and structs only.
