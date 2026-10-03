@@ -31,6 +31,10 @@ import (
 //     is not supported: a lookup that raymond would have resolved to a
 //     method or a func fails the render with an error naming it. So do
 //     channels, complex numbers and unsafe pointers.
+//   - Two raymond quirks are not kept: a path did not look into a value held
+//     in an interface type with methods (a protobuf oneof, say) except as a
+//     block's context, and methods of named map and slice types were called.
+//     The conversion looks into such values and reads the map or slice.
 //
 // The conversion visits each value once; a pointer, map or slice reached
 // twice converts once, so shared and cyclic values are safe. Nesting
@@ -176,6 +180,7 @@ func (c *goConv) convertList(v reflect.Value) Value {
 			return seen
 		}
 	}
+	c.steps1(int64(v.Len())) // before allocating
 	out := make([]any, v.Len())
 	var res Value = out
 	if v.Type() != reflect.TypeFor[[]any]() {

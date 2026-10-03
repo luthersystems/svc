@@ -187,7 +187,10 @@ arrive, so the output is a function of the value and the entry point:
   converts a shared or cyclic pointer, map or slice once, and stops at
   MaxSteps. Where raymond called Go code (methods, funcs) or panicked
   printing (channels, complex), the lookup that reaches the value fails the
-  render with an error naming it. `WithJSONContext()`, or
+  render with an error naming it. Not kept: raymond's refusal to look into a
+  value held in an interface type with methods except as a block context,
+  its calls to methods of named map and slice types, and its `%v` of a
+  struct's unexported fields in `prettyp-num-en`'s error. `WithJSONContext()`, or
   `SVC_HANDLEBARS_JSON_GO_CONTEXT=true` read once per process (exactly
   `true`; any other value is logged and ignored), selects the JSON route
   instead.
