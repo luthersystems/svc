@@ -48,6 +48,9 @@ import (
 type jsonCoster interface {
 	charge(values, bytes int64) error
 	steps(n int64) error
+	// encodes charges work encoding/json does when it runs (not the
+	// walk's): a coster that will not run it past its cap may skip it.
+	encodes(n int64) error
 }
 
 var (
@@ -404,16 +407,16 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 				if v.IsNil() {
 					return w.leaf(4)
 				}
-				// base64, quoted: encoding it is charged as a string's scan,
-				// a step per started 32 bytes written.
+				// base64, quoted: sized first, then its encoding charged as
+				// a string's scan, a step per started 32 bytes written.
 				out := int64(base64.StdEncoding.EncodedLen(v.Len()))
-				enc := units64(out, 32)
-				if err := w.c.steps(enc); err != nil {
-					return jsonTotals{steps: enc}, err
-				}
 				tot, err := w.leaf(out + 2)
+				if err != nil {
+					return tot, err
+				}
+				enc := units64(out, 32)
 				tot.steps += enc
-				return tot, err
+				return tot, w.c.encodes(enc)
 			}
 		}
 		if v.IsNil() {
@@ -1114,6 +1117,8 @@ func (b *goBudget) Charge(n int64) error {
 }
 
 func (b *goBudget) steps(n int64) error { return b.Charge(n) }
+
+func (b *goBudget) encodes(n int64) error { return b.Charge(n) }
 
 func (b *goBudget) charge(values, bytes int64) error {
 	b.size += bytes

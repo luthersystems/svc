@@ -471,6 +471,15 @@ func (c *walkCoster) charge(values, bytes int64) error {
 	return nil
 }
 
+// encodes charges the encoder's own work, unless the estimate is already
+// past the allocation cap: then the encoder never runs.
+func (c *walkCoster) encodes(n int64) error {
+	if c.w.lower > c.w.limit {
+		return nil
+	}
+	return c.steps(n)
+}
+
 func (c *walkCoster) steps(n int64) error {
 	if lerr := c.w.env.ChargeSteps(n); lerr.Type == lisp.LError {
 		c.lerr = lerr
