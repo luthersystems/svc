@@ -284,7 +284,7 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 	case map[string]any:
 		return r.lookup(c, name)
 	case []any:
-		r.parseDigits(len(name))
+		r.scanBytes(len(name))
 		i, err := strconv.Atoi(name)
 		if err == nil && i < len(c) {
 			if i < 0 {

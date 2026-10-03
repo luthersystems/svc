@@ -143,11 +143,12 @@ func TestRenderSteps(t *testing.T) {
 	require.Equal(t, empty, call(""), "same input, same steps")
 	// The context's JSON, {"s":"..."}, is len(s)+8 bytes. Writing it costs
 	// a step per whole KiB (as json:dump-bytes charges), decoding it a step
-	// per started KiB; the output costs a step per started KiB.
-	require.Equal(t, empty+1, call("x"))                           // ctx 0+1, output 1
-	require.Equal(t, empty+2, call(strings.Repeat("x", 1016)))     // ctx 1+1, output 1
-	require.Equal(t, empty+3, call(strings.Repeat("x", 1024)))     // ctx 1+2, output 1
-	require.Equal(t, empty+4+4+5, call(strings.Repeat("x", 4097))) // ctx 4+5, output 5
+	// per started KiB. The output costs a step per started KiB, and escaping
+	// it a step per started 16 bytes scanned. Against the empty string:
+	require.Equal(t, empty+2, call("x"))                             // output 1, scan 1
+	require.Equal(t, empty+1+1+64, call(strings.Repeat("x", 1016)))  // ctx 1+1-1, output 1, scan 64
+	require.Equal(t, empty+2+1+64, call(strings.Repeat("x", 1024)))  // ctx 1+2-1, output 1, scan 64
+	require.Equal(t, empty+8+5+257, call(strings.Repeat("x", 4097))) // ctx 4+5-1, output 5, scan 257
 
 	// Iterations cost steps.
 	each := func(n int) int64 {

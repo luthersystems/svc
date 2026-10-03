@@ -72,21 +72,22 @@ func TestHelperCharges(t *testing.T) {
 	// bound before formatting; then its result (1,000,001 bytes) and the
 	// output (the same) are charged at their exact length: a step per started
 	// KiB of the running total, 2,000,002 bytes or 1954 KiB, 1953 more than
-	// the small case's 1.
+	// the small case's 1; and escaping the output scans it, a step per
+	// started 16 bytes: 62,501, 62,500 more than the small case's 1.
 	base := steps(t, `{{round-to-nth "1" "2"}}`, `{}`)
-	require.Equal(t, base+1953, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
-	require.Equal(t, base+1953, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
+	require.Equal(t, base+1953+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
+	require.Equal(t, base+1953+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
 
-	// A string argument costs a step per started KiB read; a non-string
-	// one, a step per started KiB of the string built.
+	// A string argument costs a step per started 256 bytes read; a
+	// non-string one, a step per started KiB of the string built.
 	small := steps(t, `{{eq s "x"}}`, `{"s": "a"}`)
-	require.Equal(t, small+3, steps(t, `{{eq s "x"}}`, `{"s": "`+strings.Repeat("a", 4096)+`"}`))
+	require.Equal(t, small+15, steps(t, `{{eq s "x"}}`, `{"s": "`+strings.Repeat("a", 4096)+`"}`))
 	arr := `{"a": [` + strings.TrimSuffix(strings.Repeat(`"`+strings.Repeat("a", 1023)+`",`, 100), ",") + `]}`
 	// str(a) builds 102,300 bytes: 100 started KiB of produced bytes, 99
 	// more than the small case's output; s's 1-step read is not made; each
 	// of the 100 elements walked costs a step; and each 1023-byte string
-	// leaf is read, a step each.
-	require.Equal(t, small+98+100+100, steps(t, `{{eq a "x"}}`, arr))
+	// leaf is read, 4 steps each (a step per started 256 bytes).
+	require.Equal(t, small+98+100+400, steps(t, `{{eq a "x"}}`, arr))
 
 	// select and in-string-array: one step per element scanned.
 	items := func(n int) string {

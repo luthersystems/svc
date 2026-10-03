@@ -186,8 +186,13 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 	if lerr := lisp.ChargeStartedKiB(env, len(contextBytes)); lerr.Type == lisp.LError {
 		return lerr
 	}
-	ctx, err := hbs.FromJSON(contextBytes)
+	// Numbers are charged as they are parsed (some take 20 us each).
+	m := &envMeter{env: env}
+	ctx, err := hbs.FromJSONMetered(contextBytes, m)
 	if err != nil {
+		if errors.Is(err, errBudget) {
+			return m.lerr
+		}
 		return env.Errorf("error while unmarshaling: %v", err)
 	}
 
@@ -195,7 +200,6 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 	if lerr != nil {
 		return lerr
 	}
-	m := &envMeter{env: env}
 	out, err := prog.Render(ctx, hbs.Options{Meter: m, Limits: hbs.DefaultLimits(), Mode: mode})
 	if err != nil {
 		if errors.Is(err, errBudget) {

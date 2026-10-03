@@ -3,8 +3,11 @@
 package hbs
 
 import (
+	"bytes"
 	"encoding/json"
+	"reflect"
 	"strconv"
+	"strings"
 )
 
 // Value is a template context value: the Go value json.Unmarshal produces
@@ -56,11 +59,113 @@ type Value = any
 //     the same string the later one wins, as in json.Unmarshal.
 //   - true / false are bools. No int, and no other Go type, may appear.
 func FromJSON(data []byte) (Value, error) {
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
+	return FromJSONMetered(data, nil)
+}
+
+// FromJSONMetered is FromJSON with its number parsing charged to m (nil:
+// none): strconv.ParseFloat takes about 20 us on some 6-byte inputs (see
+// floatCost). Each number token is charged in document order, whether or
+// not its literal repeats, and each distinct literal is parsed once. The
+// result and the error text are FromJSON's; a Meter error is returned
+// unchanged.
+func FromJSONMetered(data []byte, m Meter) (Value, error) {
+	// Invalid JSON and roots that are not objects never reach a number
+	// parse: decode them as before, for the same error text.
+	if !json.Valid(data) || !objectRoot(data) {
+		var v map[string]any
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+	nums, err := parseNumbers(data, m)
+	if err != nil {
 		return nil, err
 	}
-	return m, nil
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v map[string]any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	convertNumbers(v, nums)
+	return v, nil
+}
+
+// objectRoot reports whether valid JSON data is an object.
+func objectRoot(data []byte) bool {
+	for _, c := range data {
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			continue
+		default:
+			return c == '{'
+		}
+	}
+	return false
+}
+
+// parseNumbers parses every number token of valid JSON data in document
+// order, charging each by floatCost. The first literal out of float64's
+// range is json.Unmarshal's error for it.
+func parseNumbers(data []byte, m Meter) (map[string]float64, error) {
+	nums := map[string]float64{}
+	var pending int64
+	charge := func(force bool) error {
+		if m == nil || pending == 0 || (!force && pending < meterBatch) {
+			return nil
+		}
+		n := pending
+		pending = 0
+		return m.Charge(n)
+	}
+	for i := 0; i < len(data); i++ {
+		switch c := data[i]; {
+		case c == '"':
+			for i++; i < len(data) && data[i] != '"'; i++ {
+				if data[i] == '\\' {
+					i++
+				}
+			}
+		case c == '-' || (c >= '0' && c <= '9'):
+			j := i
+			for j < len(data) && strings.IndexByte("+-.eE0123456789", data[j]) >= 0 {
+				j++
+			}
+			lit := string(data[i:j])
+			pending += floatCost(lit)
+			if err := charge(false); err != nil {
+				return nil, err
+			}
+			if _, done := nums[lit]; !done {
+				f, err := strconv.ParseFloat(lit, 64)
+				if err != nil {
+					return nil, &json.UnmarshalTypeError{Value: "number " + lit, Type: reflect.TypeFor[float64](), Offset: int64(j)}
+				}
+				nums[lit] = f
+			}
+			i = j - 1
+		}
+	}
+	return nums, charge(true)
+}
+
+// convertNumbers replaces the json.Number values of v with their parsed
+// float64.
+func convertNumbers(v any, nums map[string]float64) any {
+	switch x := v.(type) {
+	case json.Number:
+		return nums[string(x)]
+	case map[string]any:
+		for k, e := range x {
+			x[k] = convertNumbers(e, nums)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = convertNumbers(e, nums)
+		}
+	}
+	return v
 }
 
 // isTrue reports raymond's truthiness (text/template's isTrue): nil, false,

@@ -3,6 +3,7 @@
 package hbs
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -208,7 +209,7 @@ func hSelect(c *hcall) any {
 		c.r.failWith("select: 'where' not in K=V format: ", where)
 	}
 	for _, mi := range items {
-		c.r.stepKiB(len(key))
+		c.r.hashKey(len(key))
 		m, isMap := mi.(map[string]any)
 		if !isMap {
 			continue
@@ -255,10 +256,11 @@ func hRoundToNth(c *hcall) any {
 	if c.r.mode == ModeFixed {
 		bitSize = 64
 	}
-	xf, err := strconv.ParseFloat(x, bitSize)
+	xf, err := c.r.parseFloat(x, bitSize)
 	if err != nil {
 		c.r.failWith("round-to-n: 'x' must be convertable to float: ", x)
 	}
+	c.r.scanBytes(len(n))
 	nn, err := strconv.ParseInt(n, 10, 32)
 	if err != nil {
 		c.r.failWith("round-to-n: 'n' must be convertable to int: ", n)
@@ -305,10 +307,13 @@ func hPrettyNumEn(c *hcall) any {
 		// charged, depth-bounded walk instead of fmt's recursion.
 		c.r.fail(string(c.r.appendV([]byte("value passed in must be a number, got: "), num)))
 	}
-	return humanize.FormatFloat("#,###.##", f)
+	s := humanize.FormatFloat("#,###.##", f)
+	c.r.steps1(int64(len(s))) // humanize of a large float: about 100 ns a byte
+	return s
 }
 
 func hPossessive(c *hcall) any {
+	c.r.scanBytes(len(c.argStr(0))) // TrimRight scans byte by byte
 	name := strings.TrimRight(c.argStr(0), " ")
 	if name == "" {
 		return ""
@@ -331,6 +336,8 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 		// bytes per byte: bound that before parsing.
 		if len(date) != len(layoutISO) {
 			c.r.reserveProduced(len(name) + 8*len(date) + 128)
+			// Building that error takes up to about 80 ns a byte.
+			c.r.steps1(int64(len(date)))
 		}
 		d, err := time.Parse(layoutISO, date)
 		if err != nil {
@@ -345,6 +352,9 @@ func hFormatPhoneGB(c *hcall) any {
 	if rawNum == "" {
 		return ""
 	}
+	// phonenumbers takes 40-175 us a call (it caps its input at 250 bytes):
+	// a fixed charge keeps that within the base cost per step.
+	c.r.steps1(phoneCallCost)
 	formattedNum, err := phonenumbers.Parse(rawNum, "GB")
 	if err != nil {
 		return rawNum
@@ -364,6 +374,7 @@ func hEscapeURIComponent(c *hcall) any {
 	// Bound the result before building it: its exact length is the input's
 	// plus two bytes for each byte QueryEscape writes as %XX.
 	c.r.reserveProduced(queryEscapedLen(s))
+	c.r.steps1(units(len(s), 8)) // QueryEscape: about 5 ns a byte
 	return url.QueryEscape(s)
 }
 
@@ -384,7 +395,9 @@ func queryEscapedLen(s string) int {
 
 func hToStr(c *hcall) any {
 	if c.r.mode == ModeFixed {
-		return toStrFixed(c.args[0])
+		s := toStrFixed(c.args[0])
+		c.r.formatted(len(s))
+		return s
 	}
 	switch i := c.args[0].(type) {
 	case string:
@@ -394,7 +407,9 @@ func hToStr(c *hcall) any {
 	case int64:
 		return strconv.Itoa(int(i))
 	case float64:
-		return fmt.Sprintf("%f", i)
+		s := fmt.Sprintf("%f", i)
+		c.r.steps1(units(len(s), 2)) // %f of a large float: about 25 ns a byte
+		return s
 	default:
 		// svc's switch has empty int8, int16, int32 and float32 cases.
 		return ""
@@ -419,11 +434,11 @@ func toStrFixed(v any) string {
 // Dates.
 
 func hDateDiffMonth(c *hcall) any {
-	start, err := time.Parse(layoutISO, c.argStr(0))
+	start, err := parseISODate(c.argStr(0))
 	if err != nil {
 		return 0
 	}
-	end, err := time.Parse(layoutISO, c.argStr(1))
+	end, err := parseISODate(c.argStr(1))
 	if err != nil {
 		return 0
 	}
@@ -431,11 +446,11 @@ func hDateDiffMonth(c *hcall) any {
 }
 
 func hIsAfter(c *hcall) any {
-	date, err := time.Parse(layoutISO, c.argStr(0))
+	date, err := parseISODate(c.argStr(0))
 	if err != nil {
 		return false
 	}
-	ref, err := time.Parse(layoutISO, c.argStr(1))
+	ref, err := parseISODate(c.argStr(1))
 	if err != nil {
 		return false
 	}
@@ -445,11 +460,30 @@ func hIsAfter(c *hcall) any {
 func hDateAddMonths(c *hcall) any {
 	start := c.argStr(0)
 	months, _ := c.args[1].(int)
-	if date, err := time.Parse(layoutISO, start); err == nil {
+	if date, err := parseISODate(start); err == nil {
 		return date.AddDate(0, months, 0).Format(layoutISO)
 	}
 	return start
 }
+
+// errNotISODate stands for time.Parse's error on an input that is not 10
+// bytes long, for the helpers that discard the error: only a 10-byte input
+// can match layoutISO, and time.Parse builds its error (quoting the input)
+// eagerly, at about 20 ns a byte.
+var errNotISODate = errors.New("not a YYYY-MM-DD date")
+
+// parseISODate is time.Parse(layoutISO, s) for callers that discard the
+// error text.
+func parseISODate(s string) (time.Time, error) {
+	if len(s) != len(layoutISO) {
+		return time.Time{}, errNotISODate
+	}
+	return time.Parse(layoutISO, s)
+}
+
+// phoneCallCost is the steps a format-phone-gb call on a non-empty input
+// costs.
+const phoneCallCost = 2048
 
 func dateDifferenceInMonths(startDate, endDate time.Time) int {
 	y, m, d, hour, mins, sec := dateDifference(startDate, endDate)
@@ -512,8 +546,7 @@ func dateDifference(a, b time.Time) (int, int, int, int, int, int) {
 func (r *renderer) toFloat(v any) (float64, bool) {
 	switch x := v.(type) {
 	case string:
-		r.read(len(x))
-		f, err := strconv.ParseFloat(x, 64)
+		f, err := r.parseFloat(x, 64)
 		return f, err == nil
 	case int:
 		return float64(x), true
@@ -541,7 +574,7 @@ func (r *renderer) toFloat(v any) (float64, bool) {
 func (r *renderer) toInt(v any) (int, bool) {
 	switch x := v.(type) {
 	case string:
-		r.read(len(x))
+		r.scanBytes(len(x))
 		n, err := strconv.ParseInt(x, 10, bits.UintSize)
 		if err != nil {
 			return int(n), false

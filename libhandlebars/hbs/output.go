@@ -86,19 +86,33 @@ func (r *renderer) produced(n int) {
 	r.wrote(n)
 }
 
-// read charges one step per started KiB of a string a helper reads.
-func (r *renderer) read(n int) {
+// Bytes per step for work done byte by byte. The units are sized from
+// measurement so that no operation takes much more than the evaluator's
+// base cost per step (DETERMINISM.md, "Cost model").
+const (
+	hashUnit = 256 // hashing, comparing or copying: well under 1 ns a byte
+	scanUnit = 16  // parsing or scanning a byte at a time: about 2-3 ns a byte
+	fmtUnit  = 8   // formatting a float: about 2-4 ns a byte of output
+)
+
+// formatted charges formatting n bytes of a number.
+func (r *renderer) formatted(n int) { r.steps1(max(1, units(n, fmtUnit))) }
+
+// units is n bytes in steps of per bytes, rounded up.
+func units(n, per int) int64 {
 	if n <= 0 {
-		return
+		return 0
 	}
-	r.steps1(int64(n-1)>>10 + 1)
+	return int64((n-1)/per + 1)
 }
 
-// stepKiB charges one step, or one per started KiB of an n-byte key or
-// string handled, whichever is more.
-func (r *renderer) stepKiB(n int) {
-	r.steps1(max(1, int64(n-1)>>10+1))
-}
+// read charges a string a helper reads or compares: a step per started
+// hashUnit bytes.
+func (r *renderer) read(n int) { r.steps1(units(n, hashUnit)) }
+
+// scanBytes charges parsing or scanning n bytes one at a time: a step per
+// started scanUnit bytes, at least one.
+func (r *renderer) scanBytes(n int) { r.steps1(max(1, units(n, scanUnit))) }
 
 // steps1 records n units of evaluation work.
 func (r *renderer) steps1(n int64) {
@@ -112,13 +126,15 @@ func (r *renderer) steps1(n int64) {
 // of a string or key goes through one of these (see DETERMINISM.md, "Cost
 // model").
 
-// hashKey charges hashing, parsing or scanning an n-byte key once: one step,
-// or one per started KiB if more.
-func (r *renderer) hashKey(n int) { r.stepKiB(n) }
+// hashKey charges hashing an n-byte key once: a step per started hashUnit
+// bytes, at least one.
+func (r *renderer) hashKey(n int) { r.steps1(max(1, units(n, hashUnit))) }
 
-// parseDigits charges parsing an n-byte number (strconv.Atoi), which costs
-// far more per byte than hashing: one step per started 64 bytes.
-func (r *renderer) parseDigits(n int) { r.steps1(max(1, int64(n-1)>>6+1)) }
+// parseFloat is strconv.ParseFloat, charged by floatCost.
+func (r *renderer) parseFloat(s string, bitSize int) (float64, error) {
+	r.steps1(floatCost(s))
+	return strconv.ParseFloat(s, bitSize)
+}
 
 // lookup is m[k], charged as hashKey(len(k)).
 func (r *renderer) lookup(m map[string]any, k string) (any, bool) {
@@ -157,7 +173,10 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 	case int:
 		return strconv.AppendInt(dst, int64(x), 10)
 	case float64:
-		return strconv.AppendFloat(dst, x, 'g', -1, 64)
+		n := len(dst)
+		dst = strconv.AppendFloat(dst, x, 'g', -1, 64)
+		r.formatted(len(dst) - n)
+		return dst
 	case []any:
 		r.enter()
 		dst = append(dst, '[')
@@ -232,6 +251,7 @@ func (r *renderer) str(v any) string {
 	a, ok := v.([]any)
 	if !ok {
 		r.scratch = appendStr(r.scratch[:0], v)
+		r.formatted(len(r.scratch))
 		r.produced(len(r.scratch))
 		return string(r.scratch)
 	}
@@ -277,6 +297,7 @@ func (r *renderer) copyLeaves(b *strings.Builder, a []any) {
 			r.copyLeaves(b, x)
 		default:
 			r.scratch = appendStr(r.scratch[:0], x)
+			r.formatted(len(r.scratch))
 			r.checkProduced(b.Len() + len(r.scratch))
 			b.Write(r.scratch)
 		}
@@ -318,6 +339,7 @@ func (r *renderer) writeEscaped(s string) {
 	r.reserve(len(s))
 	i := strings.IndexAny(s, escapedChars)
 	if i < 0 {
+		r.scanBytes(len(s)) // the scan for the five bytes
 		r.writeString(s)
 		return
 	}
@@ -336,6 +358,8 @@ func (r *renderer) writeEscaped(s string) {
 		}
 	}
 	r.reserve(n)
+	// Escaping is byte-by-byte work over the escaped length.
+	r.scanBytes(n)
 	before := len(r.out)
 	r.out = appendEscaped(r.out, s, i)
 	r.wrote(len(r.out) - before)
@@ -345,25 +369,31 @@ const escapedChars = `&'<>"`
 
 // appendEscaped appends s escaped; i is the index of the first byte to
 // escape, or -1.
+// It makes one pass over s from i.
 func appendEscaped(dst []byte, s string, i int) []byte {
-	for i >= 0 {
-		dst = append(dst, s[:i]...)
-		switch s[i] {
+	dst = append(dst, s[:i]...)
+	start := i
+	for j := i; j < len(s); j++ {
+		var rep string
+		switch s[j] {
 		case '&':
-			dst = append(dst, "&amp;"...)
+			rep = "&amp;"
 		case '\'':
-			dst = append(dst, "&apos;"...)
+			rep = "&apos;"
 		case '<':
-			dst = append(dst, "&lt;"...)
+			rep = "&lt;"
 		case '>':
-			dst = append(dst, "&gt;"...)
-		default: // '"'
-			dst = append(dst, "&quot;"...)
+			rep = "&gt;"
+		case '"':
+			rep = "&quot;"
+		default:
+			continue
 		}
-		s = s[i+1:]
-		i = strings.IndexAny(s, escapedChars)
+		dst = append(dst, s[start:j]...)
+		dst = append(dst, rep...)
+		start = j + 1
 	}
-	return append(dst, s...)
+	return append(dst, s[start:]...)
 }
 
 // writeValue appends raymond's string form of v, escaped when esc is set.
@@ -387,8 +417,9 @@ func (r *renderer) writeValue(v any, esc bool) {
 		r.leave()
 	default:
 		// Numbers, booleans and UNPRINTABLE contain no escapable byte.
-		var buf [32]byte
-		r.writeBytes(appendStr(buf[:0], v))
+		r.scratch = appendStr(r.scratch[:0], v)
+		r.formatted(len(r.scratch)) // a float can print hundreds of digits
+		r.writeBytes(r.scratch)
 	}
 }
 

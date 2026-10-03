@@ -76,49 +76,69 @@ cases too. On amd64 nothing changes.
 ## Cost model
 
 A render's steps (the `Meter`'s units, bounded by `Limits.MaxSteps`) are a
-pure function of the template, the context and the options. Work that grows
-with the length of a string or key is charged by its length, through the
-primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
-`max(1, ceil(n/1024))`.
+pure function of the template, the context and the options.
+
+**Convergence criterion.** Every operation costs at most a bounded constant
+times the evaluator's base cost per step, so the time to exhaust the default
+MaxSteps (2^25) is bounded: about 2.5 s on the reference machine (4 vCPU,
+2.1 GHz; the slowest site measures about 76 ns a step), a tenth of the
+peer's 30 s execute timeout. Work that grows with a string's length is
+charged by length in units sized from measurement; library calls with a
+large fixed cost carry a per-call premium. `TestCostCeiling` runs every
+helper and value walk on its slowest known input class and fails above
+200 ns a step (CI margin), and pins each case's exact step count.
+
+Units: `hash(n)` = max(1, ceil(n/256)) for hashing, comparing and copying
+(under 1 ns a byte); `scan(n)` = max(1, ceil(n/16)) for parsing or scanning
+a byte at a time (2-3 ns a byte); `fmt(n)` = max(1, ceil(n/8)) for
+formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 
 | Operation | Where | Charge |
 |---|---|---|
 | Each AST node evaluated | `eval.go` `at` | 1 |
-| Each path segment resolved | `evalPath` | 1, plus the key lookup below |
+| Each path segment resolved | `evalPath` | 1, plus the key lookup |
 | Each context a lookup tries (mustache climb) | `evalDepthPath` | 1 |
 | Each array element a path is mapped over | `evalCtxPath` | 1 |
-| Map lookup or insert of a key of n bytes: context fields, string-literal paths, hash pair keys, `#each` object keys, `plus`/`minus` hash keys | `lookup`, `hashKey` | KiB(n) |
-| Helper name lookup | `findHelper` | KiB(len(name)) |
-| Array index segment of n bytes (`strconv.Atoi`) | `evalField` | max(1, ceil(n/64)) |
+| Map lookup or insert of an n-byte key: context fields, string-literal paths, hash pair keys, `#each` object keys, `plus`/`minus` keys, helper names | `lookup`, `hashKey`, `findHelper` | hash(n) |
+| Array index segment (`strconv.Atoi`) | `evalField` | scan(n) |
 | Block parameter scan | `blockParam` | 1 per frame, plus each compare |
-| String compare of equal lengths n (block params, `select`, `in-string-array`) | `compare` | KiB(n); unequal lengths 0 |
-| Sorting k keys (`#each` objects, `plus`/`minus`, `%v` of objects) | `sortKeys` | sum of KiB(len) x ceil(log2(k+1)), before sorting |
-| Collecting an object's keys for `#each` | `helperEach` | 1 per key, before collecting |
-| `#each` iteration | `visitBlock`, `helperEach` | 1 |
-| Helper call | `callHelper` | 1 |
-| String argument of n bytes read by a helper | `read` via `convertArg`, `hashStr`, `toFloat`, `toInt` | KiB(n) |
-| String built from an array (`str`): a charged measuring pass, then one copy into a buffer of that size | `measureLeaves`, `copyLeaves` | 1 per element and a read per string leaf, nested arrays against MaxDepth, all before allocating; then produced bytes |
-| `select` / `in-string-array` element scanned | helpers | KiB(len(key)) / 1, plus compares |
-| `global` read or write | `hGlobal` | KiB(len(ns) + len(key)) |
-| `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting; result charged as produced |
-| `escape-uri-component` | `hEscapeURIComponent` | exact escaped length checked before escaping; result charged as produced |
-| `prettyp-num-en` error text (fmt `%v` of the value) | `appendV` | 1 per element, depth-bounded, produced bytes |
+| String compare of equal lengths n | `compare` | hash(n); unequal lengths 0 |
+| Sorting k keys | `sortKeys` | sum of hash(len) x ceil(log2(k+1)), before sorting |
+| Collecting an object's keys | `helperEach`, `appendV` | 1 per key, before collecting |
+| `#each` iteration; helper call | `visitBlock`, `helperEach`, `callHelper` | 1 |
+| String argument read by a helper | `read` via `convertArg`, `hashStr` | hash(n) |
+| Parsing a number from a string (`toFloat`: `gt`, `plus`, `times`..., `round-to-nth`, `prettyp-num-en`) | `parseFloat`, `floatCost` | scan(n), plus 512 + n when the literal is in `ParseFloat`'s slow class (more than 19 significant digits, or a decimal exponent <= -307 or >= 309; about 20 us however short) |
+| Parsing an integer from a string (`to-int`, `round-to-nth`'s precision) | `toInt`, `hRoundToNth` | scan(n) |
+| Formatting a number (printing, `str`, `%v`, `to-str` in ModeFixed) | `formatted` | fmt(len) |
+| `to-str` of a float in ModeCompat (`%f`) | `hToStr` | ceil(len/2) |
+| `prettyp-num-en` (go-humanize) | `hPrettyNumEn` | len of the result |
+| `format-phone-gb` on a non-empty input (phonenumbers: 40-175 us) | `hFormatPhoneGB` | 2048 |
+| `escape-uri-component` | `hEscapeURIComponent` | ceil(n/8), exact escaped length checked before escaping |
+| `possessive` (`TrimRight`) | `hPossessive` | scan(n); result checked before it is built |
+| Date helpers that discard the parse error | `parseISODate` | input that is not 10 bytes fails without `time.Parse` |
+| Date formatters' error text | `dateFormatHelper` | n, and 8n + 128 checked against the produced-bytes bound, before parsing a non-10-byte input |
+| String built from an array (`str`) | `measureLeaves`, `copyLeaves` | 1 per element and a read per string leaf, nested arrays against MaxDepth, all before allocating; numbers fmt(len); then produced bytes |
+| fmt `%v` text (`prettyp-num-en` errors) | `appendV` | 1 per element, leaves and keys checked and charged before copying, depth-bounded |
+| `select` / `in-string-array` element scanned | helpers | hash(len(key)) / 1, plus compares; `where` parsed without allocation |
+| `global` read or write | `hGlobal` | hash(len(ns) + len(key)) |
+| `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting |
 | Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
-| String leaf or object key copied into fmt's `%v` text (`prettyp-num-en` errors) | `appendV` | checked against the produced-bytes bound and charged before copying; keys charged before they are collected |
-| Evaluation error text (it can hold template text) | `errorf` | produced bytes |
-| `possessive` result | `hPossessive` | checked against the produced-bytes bound before it is built |
-| Date parse error text (`date-beautify` and the other format helpers) | `dateFormatHelper` | bounded by 8 x the input length before formatting (the error quotes the input twice), then produced bytes |
-| Escaping a string for output | `writeEscaped` | rejected before scanning if its unescaped length cannot fit; written bytes charged as output |
-| `select` where-clause | `hSelect` | parsed with `Cut`/`Count`, no allocation per separator |
-| Error message of a helper (`fail`) | `fail`, `failWith` | produced bytes; a message holding a whole argument is checked against the bound before it is built |
-| Produced bytes: output written, captured sections, helper results | `wrote`, `produced` | 1 per started KiB of the running total; bounded by 8 x MaxOutputBytes |
+| Escaped output | `writeEscaped` | scan(n) of the escaped length (or of the input when nothing needs escaping), rejected before scanning if it cannot fit |
+| Produced bytes: output, captured sections, helper results, error text | `wrote`, `produced`, `fail`, `errorf` | KiB of the running total; bounded by 8 x MaxOutputBytes |
 
 The ELPS binding adds: parsing, 1 step per started KiB of template on every
 call; encoding the context (as `json:dump-bytes`, under `Runtime.MaxAlloc`),
-1 step per whole KiB written; decoding it, 1 step per started KiB. An encode
-that fails is charged 1 step per started KiB of the JSON it got through,
-estimated by a walk that stops where the encoder stopped
-(`chargeFailedEncode`).
+1 step per whole KiB written; decoding it, 1 step per started KiB, plus each
+number token's `floatCost` (`FromJSONMetered`: tokens charged in document
+order, each distinct literal parsed once). An encode that fails is charged
+1 step per started KiB of the JSON it got through (`chargeFailedEncode`).
+
+`TestCostModelSites` (`costguard_test.go`) times length-sensitive sites at
+1 KiB and 256 KiB and bounds allocation per step; `TestCostModelGuard` does
+both over the grammar generator; `TestCostCeiling` (`ceiling_test.go`) is
+the per-site ceiling with pinned step counts. A new operation on strings or
+a new library call must be charged through these primitives and get a row
+here and a case in `ceilingCases`.
 
 ## Go API: contexts go through JSON
 

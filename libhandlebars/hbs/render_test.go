@@ -128,15 +128,15 @@ func TestMeter(t *testing.T) {
 		require.Equal(t, first, m.used, "charges are deterministic")
 	}
 
-	// Output is charged per started KiB: 4 KiB + 1 byte costs 5 steps more
-	// than nothing.
+	// Output is charged per started KiB and escaping it per started 16
+	// bytes scanned: 4 KiB + 1 byte costs 5 + 257 steps more than nothing.
 	small := &countMeter{}
 	_, err := mustParse(t, `{{s}}`).Render(mustCtx(t, `{"s": ""}`), hbs.Options{Meter: small})
 	require.NoError(t, err)
 	big := &countMeter{}
 	_, err = mustParse(t, `{{s}}`).Render(mustCtx(t, `{"s": "`+strings.Repeat("x", 4097)+`"}`), hbs.Options{Meter: big})
 	require.NoError(t, err)
-	require.Equal(t, small.used+5, big.used)
+	require.Equal(t, small.used+5+257, big.used)
 
 	// A budget error is returned unchanged and stops the render early.
 	huge := mustParse(t, `{{#each a}}{{#each ../a}}xxxxxxxxxxxxxxxx{{/each}}{{/each}}`)

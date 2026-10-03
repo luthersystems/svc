@@ -20,7 +20,7 @@ Luther's templating library is an extension of [handlebars](https://handlebarsjs
 
 ## Limits and steps
   - Templates are limited to 1 MiB and 256 levels of nesting (`handlebars-parse`). A render is limited to 16 MiB of output, 128 MiB of bytes produced in all (output, sections a helper captured, and strings helpers build), and 2^25 evaluation steps, whether or not an ELPS step budget is set (`handlebars-render`).
-  - Decoding the context costs 1 ELPS step per started KiB of its JSON, and parsing 1 step per started KiB of template, on every call (parses are cached, but a cache hit costs the same). Rendering costs 1 step per node evaluated, path segment resolved, context tried by a lookup, array element a path is mapped over, `#each` iteration, helper call and element `select` or `in-string-array` scans; 1 per started KiB of each string a helper reads; and 1 per started KiB of all bytes produced. A render that exhausts the step budget stops early with the budget condition.
+  - Steps bound time: every operation is charged so that no step takes much more than the evaluator's base cost (about 80 ns at worst on a 2.1 GHz vCPU), so the 2^25-step limit ends any render within a few seconds. Parsing costs 1 step per started KiB of template on every call (parses are cached, but a hit costs the same); encoding and decoding the context, and each number in it, are charged too. The full cost model is the table in `hbs/DETERMINISM.md`. A render that exhausts the ELPS step budget stops early with the budget condition.
 
 ## Errors
   - Template syntax errors and template limits signal `handlebars-parse`; evaluation errors and the output limit signal `handlebars-render`.
