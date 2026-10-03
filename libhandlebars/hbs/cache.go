@@ -11,14 +11,14 @@ import (
 // Parse cache bounds, in bytes of memory the entries retain. A program is
 // weighed as its source length plus astBytesPerToken for each lexer token
 // (the AST's size: plain text retains almost nothing beyond the source,
-// tag-dense templates up to about 91 bytes per token, measured on amd64),
+// tag-dense templates about 91 to 113 bytes per token, measured on amd64),
 // plus cacheEntryOverhead; an error verdict as its message plus the
 // overhead. A template over cacheMaxEntryBytes is never cached.
 const (
 	cacheMaxBytes      = 64 << 20
 	cacheMaxEntryBytes = 1 << 20
 	cacheEntryOverhead = 256
-	astBytesPerToken   = 96
+	astBytesPerToken   = 128
 )
 
 // cacheKey identifies a parse: the source's SHA-256 and the limits Parse

@@ -343,3 +343,23 @@ func FuzzParse(f *testing.F) {
 		checkSame(t, src)
 	})
 }
+
+// TestSyntaxErrorBeforeDepthLimit: a syntax error earlier in the source
+// than a depth excess is reported as raymond reported it; a depth excess
+// that comes first is the limit error.
+func TestSyntaxErrorBeforeDepthLimit(t *testing.T) {
+	for _, src := range []string{
+		"{{#" + strings.Repeat("(", 300),
+		"{{x}" + strings.Repeat("{{#if a}}", 300),
+		"{{#if a}}{{/unless}}" + strings.Repeat("{{#if a}}", 300),
+	} {
+		got, ok := engineParse(t, src)
+		require.True(t, ok, src)
+		want := refParse(src, false)
+		require.Empty(t, want.panic)
+		require.NotEmpty(t, want.err)
+		require.Equal(t, want.err, got.err, src[:20])
+	}
+	_, err := Parse(strings.Repeat("{{#if a}}", 300)+"{{x}", DefaultLimits())
+	require.Contains(t, requireKind(t, err, KindLimit), "nesting depth exceeds limit")
+}

@@ -118,3 +118,15 @@ func TestCacheWeighsAST(t *testing.T) {
 	require.Less(t, n, 7, "the bound must evict tag-dense templates")
 	t.Logf("%d of 7 dense 1 MiB templates cached, weight %d", n, bytes)
 }
+
+// TestCacheSkipsOversizedEntry: an entry heavier than the whole bound is
+// not cached and evicts nothing.
+func TestCacheSkipsOversizedEntry(t *testing.T) {
+	c := newParseCache(1 << 20)
+	_, err := c.parse("{{a}}", DefaultLimits())
+	require.NoError(t, err)
+	_, err = c.parse(strings.Repeat("{{a.b}}", 100_000), DefaultLimits())
+	require.NoError(t, err)
+	n, _ := c.stats()
+	require.Equal(t, 1, n)
+}

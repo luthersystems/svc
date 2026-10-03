@@ -97,9 +97,26 @@ func (r *renderer) str(v any) string {
 		r.read(len(s))
 		return s
 	}
-	s := str(v)
-	r.produced(len(s))
-	return s
+	b := r.appendStrBounded(nil, v)
+	r.produced(len(b))
+	return string(b)
+}
+
+// appendStrBounded is appendStr that fails the render as soon as the string
+// it builds would pass the produced-bytes bound, element by element, so a
+// large array never builds its whole string first.
+func (r *renderer) appendStrBounded(dst []byte, v any) []byte {
+	a, ok := v.([]any)
+	if !ok {
+		return appendStr(dst, v)
+	}
+	for _, e := range a {
+		dst = r.appendStrBounded(dst, e)
+		if int64(len(dst)) > r.maxProduced-r.written {
+			r.reserveProduced(len(dst))
+		}
+	}
+	return dst
 }
 
 // wrote accounts for n bytes produced: one step for every started KiB of

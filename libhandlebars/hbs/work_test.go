@@ -141,3 +141,41 @@ func TestIntLiteralNear2p63(t *testing.T) {
 		}
 	}
 }
+
+// TestPathWorkCharged: mapping a path over an array context costs a step
+// per element, and resolving a path a step per segment, so MaxSteps bounds
+// the time these take.
+func TestPathWorkCharged(t *testing.T) {
+	// A #with over an array maps every path inside it over the array.
+	n := 20_000
+	ctx := `{"a": [` + strings.TrimSuffix(strings.Repeat("1,", n), ",") + `], "b": [` + strings.TrimSuffix(strings.Repeat(`{"x": 1},`, n), ",") + `]}`
+	p := mustParse(t, `{{#each a}}{{#with ../b}}{{#if x}}{{/if}}{{/with}}{{/each}}`)
+	start := time.Now()
+	_, err := p.Render(mustCtx(t, ctx), hbs.Options{})
+	requireLimit(t, err, "steps")
+	if !raceEnabled {
+		require.Less(t, time.Since(start), 10*time.Second)
+	}
+	small := steps(t, `{{#with b}}{{#if x}}{{/if}}{{/with}}`, `{"b": [{"x": 1}]}`)
+	// x is mapped over every element: a step for the element and one for
+	// its one-segment path, so 999 more elements cost 1998 more steps.
+	require.Equal(t, small+1998, steps(t, `{{#with b}}{{#if x}}{{/if}}{{/with}}`, `{"b": [`+strings.TrimSuffix(strings.Repeat(`{"x": 1},`, 1000), ",")+`]}`))
+
+	// Each path segment costs a step.
+	one := steps(t, `{{d}}`, `{"d": 1}`)
+	deep := `{"d": ` + strings.Repeat(`{"x": `, 250) + `1` + strings.Repeat(`}`, 250) + `}`
+	require.Equal(t, one+250, steps(t, `{{d`+strings.Repeat(".x", 250)+`}}`, deep))
+}
+
+// TestStrOfArrayBounded: str() of an array checks the produced-bytes bound
+// as it builds, so it stops long before building the whole string.
+func TestStrOfArrayBounded(t *testing.T) {
+	ctx := `{"a": [` + strings.TrimSuffix(strings.Repeat("1e308,", 200_000), ",") + `]}`
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := mustParse(t, `{{#if (eq a "x")}}y{{/if}}`).Render(mustCtx(t, ctx), hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 1 << 20}})
+	runtime.ReadMemStats(&after)
+	requireLimit(t, err, "template evaluation produces more than 8388608 bytes")
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20))
+}

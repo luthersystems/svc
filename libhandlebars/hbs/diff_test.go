@@ -197,6 +197,8 @@ var diffCases = []string{
 	`{{#if zero includeZero=true}}z{{/if}}{{#if 0 includeZero=true}}lit{{/if}}{{#unless 0 includeZero=true}}u{{else}}e{{/unless}}`,
 	`{{#if}}x{{/if}}`, `{{#if t n}}x{{/if}}`, `{{if t}}`, `{{#with t}}{{if t}}{{/with}}`,
 	`{{^t}}not{{/t}}{{^no}}inv{{/no}}`,
+	// round-to-nth precisions fmt rejects print a constant error string
+	`{{round-to-nth "1" "999999999"}}|{{round-to-nth "1.5" "10000010"}}|{{round-to-nth "2.25" "12"}}`,
 	// each / with / equal / climb / data
 	`{{#each items}}{{@index}}:{{name}}:{{@first}}:{{@last}}:{{@key}};{{/each}}`,
 	`{{#each m}}{{@key}}={{this}}@{{@index}}{{#if @last}}!{{/if}};{{/each}}`,

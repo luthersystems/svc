@@ -284,11 +284,12 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 	return nil, false
 }
 
-// evalPath resolves parts from ctx. It reports whether the result exists and
-// whether at least one part resolved.
+// evalPath resolves parts from ctx, one step per part. It reports whether
+// the result exists and whether at least one part resolved.
 func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 	resolved := false
 	for _, part := range parts {
+		r.step()
 		v, ok := r.evalField(ctx, stripBrackets(part))
 		if !ok {
 			return nil, false, resolved
@@ -301,11 +302,12 @@ func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 
 // evalCtxPath is raymond's evalCtxPath. An array context maps the path over
 // its elements and yields a []any, which is nil (but typed) when nothing
-// resolved.
+// resolved. Each element costs a step, even for an empty path.
 func (r *renderer) evalCtxPath(ctx any, parts []string) (any, bool) {
 	if arr, ok := ctx.([]any); ok {
 		var results []any
 		for _, e := range arr {
+			r.step()
 			if v, valid, _ := r.evalPath(e, parts); valid {
 				results = append(results, v)
 			}
@@ -326,6 +328,7 @@ func (r *renderer) evalDepthPath(depth int, parts []string) any {
 	resolved := false
 	ctx, ok := r.ancestorCtx(depth)
 	for result == nil && ok && depth <= len(r.ctx) && !resolved {
+		r.step()
 		result, resolved = r.evalCtxPath(ctx, parts)
 		if !resolved && result == nil {
 			depth++

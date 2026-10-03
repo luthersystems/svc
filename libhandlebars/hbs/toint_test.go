@@ -3,11 +3,14 @@
 package hbs
 
 import (
+	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // hardwareInt is Go's int(f) on the CPU running the test.
@@ -96,4 +99,14 @@ func FuzzFloatToInt(f *testing.F) {
 			t.Fatalf("floatToInt(%v) = %d; out of range, want MinInt64", x, got)
 		}
 	})
+}
+
+// TestFmtPrecisionOK checks fmtPrecisionOK against fmt itself around the
+// cutoff: fmt prints the formatted number exactly when it accepts n.
+func TestFmtPrecisionOK(t *testing.T) {
+	for _, n := range []int64{0, 1, 999_999, 1_000_000, 1_000_009, 9_999_999, 10_000_000, 10_000_009, 10_000_010, 10_000_011, 10_000_019, 10_000_100, 99_999_999, 999_999_999} {
+		got := fmt.Sprintf(fmt.Sprintf("%%.%df", n), 1.0)
+		accepted := !strings.HasPrefix(got, "%!")
+		require.Equal(t, accepted, fmtPrecisionOK(n), "n=%d", n)
+	}
 }

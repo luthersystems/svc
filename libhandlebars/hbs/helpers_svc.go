@@ -261,10 +261,20 @@ func hRoundToNth(c *hcall) any {
 		c.r.fail("round-to-n: 'n' must be convertable to int: " + n)
 	}
 	// The output holds nn digits after the point: charge and bound them
-	// before formatting.
-	c.r.produced(int(nn))
+	// before formatting. fmt ignores a precision it cannot parse (see
+	// fmtPrecisionOK) and prints a short error string instead, so only a
+	// precision it accepts is charged.
+	if fmtPrecisionOK(nn) {
+		c.r.produced(int(nn))
+	}
 	return fmt.Sprintf(fmt.Sprintf("%%.%df", nn), xf)
 }
+
+// fmtPrecisionOK reports whether fmt accepts n as a format precision. fmt's
+// parsenum stops reading digits once the number read so far exceeds 1e6, so
+// it accepts exactly the n whose digits but the last form at most 1e6:
+// n <= 10,000,009. Above that, Sprintf prints "%!(NOVERB)%!(EXTRA ...)".
+func fmtPrecisionOK(n int64) bool { return n/10 <= 1e6 }
 
 func hInStringArray(c *hcall) any {
 	items, ok := c.hash["haystack"].([]any)
