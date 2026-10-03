@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func nest(n int, open, close string) string {
-	return strings.Repeat(open, n) + "x" + strings.Repeat(close, n)
+func nest(n int, open, end string) string {
+	return strings.Repeat(open, n) + "x" + strings.Repeat(end, n)
 }
 
 func elseIfChain(n int) string {
