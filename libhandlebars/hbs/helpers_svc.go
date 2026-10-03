@@ -313,6 +313,7 @@ func hPossessive(c *hcall) any {
 	if name == "" {
 		return ""
 	}
+	c.r.reserveProduced(len(name) + 2) // before building the result
 	if name[len(name)-1] == 's' {
 		return name + "'"
 	}
@@ -324,6 +325,12 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 		date := c.argStr(0)
 		if date == "" {
 			return ""
+		}
+		// Only a 10-byte input can parse. On any other, time.Parse copies the
+		// input into its error, and the error text quotes it twice, up to 4
+		// bytes per byte: bound that before parsing.
+		if len(date) != len(layoutISO) {
+			c.r.reserveProduced(len(name) + 8*len(date) + 128)
 		}
 		d, err := time.Parse(layoutISO, date)
 		if err != nil {

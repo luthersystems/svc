@@ -149,6 +149,8 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 	case nil:
 		return append(dst, "<nil>"...)
 	case string:
+		r.checkProduced(len(dst) + len(x))
+		r.read(len(x))
 		return append(dst, x...)
 	case bool:
 		return strconv.AppendBool(dst, x)
@@ -171,6 +173,8 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 		return append(dst, ']')
 	case map[string]any:
 		r.enter()
+		r.steps1(int64(len(x))) // collecting the keys, before allocating
+		r.flush()
 		keys := make([]string, 0, len(x))
 		for k := range x {
 			keys = append(keys, k)
@@ -182,6 +186,7 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 			if i > 0 {
 				dst = append(dst, ' ')
 			}
+			r.checkProduced(len(dst) + len(k))
 			dst = append(dst, k...)
 			dst = append(dst, ':')
 			dst = r.appendV(dst, x[k])
@@ -213,70 +218,68 @@ func (r *renderer) compare(a, b string) bool {
 	return a == b
 }
 
-// str is str(v) with its cost: reading a string, or building one. An array
-// is built once, into a builder sized from its string leaves, so each leaf
-// is copied once.
+// str is str(v) with its cost: reading a string, or building one. An
+// array is built in two passes. The first is charged (a step per element,
+// a read per string leaf, nested arrays against MaxDepth) and measures the
+// string leaves; once its steps are applied and the result's size is
+// checked against the produced-bytes bound, the second copies each leaf
+// once into a builder of that size.
 func (r *renderer) str(v any) string {
 	if s, ok := v.(string); ok {
 		r.read(len(s))
 		return s
 	}
-	var b strings.Builder
-	if a, ok := v.([]any); ok {
-		b.Grow(min(stringLeavesLen(a, 0), int(r.maxProduced-r.written)))
+	a, ok := v.([]any)
+	if !ok {
+		r.scratch = appendStr(r.scratch[:0], v)
+		r.produced(len(r.scratch))
+		return string(r.scratch)
 	}
-	r.appendStrBounded(&b, v)
+	leaves := r.measureLeaves(a, 0)
+	r.flush()
+	r.reserveProduced(leaves)
+	var b strings.Builder
+	b.Grow(leaves)
+	r.copyLeaves(&b, a)
 	r.produced(b.Len())
 	return b.String()
 }
 
-// stringLeavesLen returns the total length of the string leaves of a,
-// nested up to 64 levels: a sizing hint only, so deeper leaves are not
-// counted.
-func stringLeavesLen(a []any, depth int) int {
-	if depth > 64 {
-		return 0
-	}
-	n := 0
+// measureLeaves charges a walk of a and returns the total length of its
+// string leaves plus n, failing the render as soon as that passes the
+// produced-bytes bound.
+func (r *renderer) measureLeaves(a []any, n int) int {
+	r.enter()
 	for _, e := range a {
+		r.step()
 		switch x := e.(type) {
 		case string:
+			r.read(len(x))
 			n += len(x)
+			r.checkProduced(n)
 		case []any:
-			n += stringLeavesLen(x, depth+1)
+			n = r.measureLeaves(x, n)
 		}
 	}
+	r.leave()
 	return n
 }
 
-// appendStrBounded is appendStr that fails the render as soon as the string
-// it builds would pass the produced-bytes bound, element by element, so a
-// large array never builds its whole string first.
-//
-// Each element costs a step, and nested arrays count against MaxDepth, so
-// the walk is bounded in time and stack.
-func (r *renderer) appendStrBounded(b *strings.Builder, v any) {
-	a, ok := v.([]any)
-	if !ok {
-		// A string leaf can be large: check and charge it before copying.
-		if s, isStr := v.(string); isStr {
-			r.checkProduced(b.Len() + len(s))
-			r.read(len(s))
-			b.WriteString(s)
-			return
-		}
-		// Numbers can print hundreds of digits (1e308): format into one
-		// reused buffer.
-		r.scratch = appendStr(r.scratch[:0], v)
-		b.Write(r.scratch)
-		return
-	}
-	r.enter()
-	defer r.leave()
+// copyLeaves appends str(a) to b. measureLeaves has charged the walk and
+// bounded its depth and string leaves; numbers and booleans are checked as
+// they are added.
+func (r *renderer) copyLeaves(b *strings.Builder, a []any) {
 	for _, e := range a {
-		r.step()
-		r.appendStrBounded(b, e)
-		r.checkProduced(b.Len())
+		switch x := e.(type) {
+		case string:
+			b.WriteString(x)
+		case []any:
+			r.copyLeaves(b, x)
+		default:
+			r.scratch = appendStr(r.scratch[:0], x)
+			r.checkProduced(b.Len() + len(r.scratch))
+			b.Write(r.scratch)
+		}
 	}
 }
 

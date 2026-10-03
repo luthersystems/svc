@@ -71,9 +71,20 @@ func guardRun(t *testing.T, pad int) (int64, int64, uint64) {
 		ns += time.Since(start).Nanoseconds()
 		runtime.ReadMemStats(&after)
 		steps += m.used
-		alloc += after.TotalAlloc - before.TotalAlloc
+		got := after.TotalAlloc - before.TotalAlloc
+		alloc += got
+		if limit := allocBound(m.used, len(tpl)+len(ctx)); got > limit {
+			t.Errorf("seed %d (pad %d): %d bytes allocated for %d steps, want at most %d: something allocates before it is charged", seed, pad, got, m.used, limit)
+		}
 	}
 	return steps, ns, alloc
+}
+
+// allocBound is the most a render may allocate: 8 bytes for each byte of
+// its charged work (a step stands for at most about a KiB) and of its input,
+// plus 1 MiB of fixed overhead.
+func allocBound(steps int64, input int) uint64 {
+	return 8*(uint64(steps)*1024+uint64(input)) + 1<<20 //nolint:gosec // steps and input are non-negative
 }
 
 // TestCostModelGuard checks that the time and memory a render takes per
@@ -200,9 +211,15 @@ func TestCostModelSites(t *testing.T) {
 		var steps int64
 		for range 3 {
 			m := &stepMeter{}
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
 			start := time.Now()
 			_, _ = p.Render(v, hbs.Options{Meter: m, Limits: hbs.Limits{MaxOutputBytes: 1 << 30}})
 			per := float64(time.Since(start).Nanoseconds()) / float64(m.used)
+			runtime.ReadMemStats(&after)
+			if got, limit := after.TotalAlloc-before.TotalAlloc, allocBound(m.used, len(tpl)+len(ctx)); got > limit {
+				t.Errorf("%d bytes allocated for %d steps, want at most %d: something allocates before it is charged", got, m.used, limit)
+			}
 			if best == 0 || per < best {
 				best = per
 			}

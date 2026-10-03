@@ -223,3 +223,34 @@ func TestContextSerializationCapped(t *testing.T) {
 	require.Equal(t, lisp.LError, res.Type)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20))
 }
+
+// TestFailedEncodeCharged: a context encode that fails is charged for the
+// JSON it got through, so a failure late in a large value costs steps in
+// proportion, and runs out of budget instead of running on.
+func TestFailedEncodeCharged(t *testing.T) {
+	env := newEnv(t)
+	failing := func(n int) *lisp.LVal {
+		cells := make([]*lisp.LVal, n)
+		for i := range cells {
+			cells[i] = lisp.Int(0)
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.QExpr(cells))
+		ctx.MapSetString("b", lisp.FunInPackage("user", "f", lisp.Formals(), func(*lisp.LEnv, *lisp.LVal) *lisp.LVal { return lisp.Nil() }))
+		return ctx
+	}
+	steps := func(n int) (*lisp.LVal, int64) {
+		env.Put(lisp.Symbol("ctx"), failing(n))
+		return eval(t, env, `(handlebars:render "" ctx)`)
+	}
+	small, sSteps := steps(100)
+	require.Equal(t, lisp.LError, small.Type)
+	require.True(t, strings.HasPrefix(small.Cells[0].Str, "error while serializing: invalid type encountered"), small.Cells[0].Str)
+	large, lSteps := steps(1_000_000)
+	require.Equal(t, small.Cells[0].Str, large.Cells[0].Str)
+	require.Greater(t, lSteps-sSteps, int64(1500)) // "0" and a comma, 1M times: about 2 MB
+
+	env.Runtime.SetStepBudget(1000)
+	res, _ := steps(1_000_000)
+	require.Equal(t, lisp.CondStepBudgetExceeded, res.Str)
+}

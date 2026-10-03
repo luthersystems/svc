@@ -107,8 +107,12 @@ func (r *renderer) at(n ast.Node) {
 }
 
 // errorf fails the render with raymond's evaluation error text.
+//
+// The message, which can hold template text, counts as produced bytes.
 func (r *renderer) errorf(format string, args ...any) {
-	panic(&Error{Kind: KindRender, Msg: fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", fmt.Sprintf(format, args...), r.curNode)})
+	msg := fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", fmt.Sprintf(format, args...), r.curNode)
+	r.produced(len(msg))
+	panic(&Error{Kind: KindRender, Msg: msg})
 }
 
 // fail fails the render with a helper's error text, which raymond returns

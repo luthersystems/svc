@@ -3,6 +3,7 @@ package libhandlebars
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/luthersystems/elps/elpsutil"
@@ -220,10 +221,96 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 	if res.Type != lisp.LError {
 		return res.Bytes(), nil
 	}
+	// json:dump-bytes charges only a successful encode. Charge the walk
+	// that failed, so a failure costs what the work before it did.
+	if lerr := chargeFailedEncode(env, v); lerr != nil {
+		return nil, lerr
+	}
 	if isLimitError(res) || len(res.Cells) == 0 {
 		return nil, res
 	}
 	return nil, env.Errorf("error while serializing: %s", res.Cells[0].Str)
+}
+
+// chargeFailedEncode charges, one step per started KiB, the JSON a failed
+// encode of v wrote before it stopped, estimated by walking v in the
+// encoder's order: it stops at the first value JSON cannot hold, or once
+// the estimate passes the runtime's allocation cap, where the encoder
+// stopped too. It returns the budget error if the budget runs out first.
+func chargeFailedEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
+	limit := int64(env.Runtime.MaxAllocBytes())
+	var size, charged int64
+	add := func(n int64) *lisp.LVal {
+		size += n
+		if kib := (size + 1023) >> 10; kib > charged {
+			if lerr := env.ChargeSteps(kib - charged); lerr.Type == lisp.LError {
+				return lerr
+			}
+			charged = kib
+		}
+		return nil
+	}
+	stack := []*lisp.LVal{v}
+	for len(stack) > 0 && size <= limit {
+		x := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		var n int64
+		switch {
+		case x.IsNil():
+			n = 4
+		default:
+			switch x.Type {
+			case lisp.LInt:
+				var buf [24]byte
+				n = int64(len(strconv.AppendInt(buf[:0], int64(x.Int), 10)))
+			case lisp.LFloat:
+				n = 24
+			case lisp.LString, lisp.LSymbol:
+				n = int64(len(x.Str)) + 2
+			case lisp.LBytes:
+				n = int64(len(x.Bytes()))*4/3 + 4
+			case lisp.LSExpr:
+				n = int64(len(x.Cells)) + 2
+				stack = appendReversed(stack, x.Cells)
+			case lisp.LQuote, lisp.LTaggedVal:
+				n = 1
+				stack = appendReversed(stack, x.Cells[:1])
+			case lisp.LArray:
+				if len(x.Cells) == 2 {
+					n = int64(len(x.Cells[1].Cells)) + 2
+					stack = appendReversed(stack, x.Cells[1].Cells)
+				}
+			case lisp.LSortMap:
+				m := x.Map()
+				// Charge the entries before allocating room for them.
+				if lerr := add(int64(m.Len()) * 4); lerr != nil {
+					return lerr
+				}
+				buf := make([]*lisp.LVal, m.Len())
+				if e := m.Entries(buf); e.Type == lisp.LError {
+					return nil
+				}
+				for i := len(buf) - 1; i >= 0; i-- {
+					if buf[i] != nil && len(buf[i].Cells) == 2 {
+						stack = append(stack, buf[i].Cells[1], buf[i].Cells[0])
+					}
+				}
+			default:
+				return nil // the encoder stopped here
+			}
+		}
+		if lerr := add(n); lerr != nil {
+			return lerr
+		}
+	}
+	return nil
+}
+
+func appendReversed(stack, cells []*lisp.LVal) []*lisp.LVal {
+	for i := len(cells) - 1; i >= 0; i-- {
+		stack = append(stack, cells[i])
+	}
+	return stack
 }
 
 // isLimitError reports whether lerr is a runtime limit: the allocation cap,

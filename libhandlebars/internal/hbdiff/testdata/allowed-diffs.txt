@@ -45,3 +45,9 @@ kinds:*->limit && candmsg:rendered output exceeds the maximum of 16777216 bytes 
 # 2^63 ({{to-str 9223372036854775807}}) parse to the float64 2^63 and
 # convert by the same pinned rule. On amd64 nothing here matches.
 arch:!amd64 && field:out && candout:-9223372036854775808 | never | #110 | to-int, or an int literal near 2^63, on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64
+
+# Outside the harness (it renders through hbs.FromJSON, as handlebars:render
+# does): libhandlebars.Render, the Go API, converts a Go context through
+# JSON, so Go ints become float64 and structs follow their JSON encoding;
+# raymond kept Go types. See hbs/DETERMINISM.md, "Go API: contexts go
+# through JSON". No entry is needed here.

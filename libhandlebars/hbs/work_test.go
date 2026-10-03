@@ -477,3 +477,68 @@ func TestFmtVRepros(t *testing.T) {
 	_, err = mustParse(t, `{{prettyp-num-en a}}`).Render(deep, hbs.Options{Limits: hbs.Limits{MaxDepth: 8}})
 	requireLimit(t, err, "maximum depth of 8")
 }
+
+// TestChargedBeforeAllocating pins the final review's cases: each is
+// refused, or charged, before the large allocation it used to make.
+func TestChargedBeforeAllocating(t *testing.T) {
+	var err error
+
+	// A shared DAG nested past MaxDepth: the measuring pass stops at the
+	// depth limit after a few elements, not after walking 2^26 of them.
+	dag := []any{nil}
+	for range 26 {
+		dag = []any{dag, dag}
+	}
+	p := mustParse(t, `{{eq a ""}}`)
+	start := time.Now()
+	_, err = p.Render(map[string]any{"a": dag}, hbs.Options{Limits: hbs.Limits{MaxDepth: 4, MaxSteps: 64}})
+	requireLimit(t, err, "maximum depth of 4")
+	require.Less(t, time.Since(start), 50*time.Millisecond)
+
+	// A large leaf is charged before its buffer is allocated.
+	big := map[string]any{"a": []any{strings.Repeat("x", 32<<20)}}
+	alloc := allocDuring(func() { _, err = p.Render(big, hbs.Options{Limits: hbs.Limits{MaxSteps: 64}}) })
+	requireLimit(t, err, "maximum of 64 steps")
+	require.Less(t, alloc, uint64(1<<20))
+
+	tiny := hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 32}}
+	for name, tc := range map[string]struct {
+		tpl string
+		ctx map[string]any
+	}{
+		"%v of a large leaf":     {`{{prettyp-num-en x}}`, map[string]any{"x": map[string]any{"k": strings.Repeat("v", 8<<20)}}},
+		"%v of a large key":      {`{{prettyp-num-en x}}`, map[string]any{"x": map[string]any{strings.Repeat("k", 8<<20): 1}}},
+		"possessive of a large":  {`{{possessive x}}`, map[string]any{"x": strings.Repeat("n", 8<<20)}},
+		"date error of a large":  {`{{date-beautify x}}`, map[string]any{"x": strings.Repeat("d", 8<<20)}},
+		"partial with long name": {`{{> ` + strings.Repeat("z", 500_000) + `}}`, map[string]any{}},
+	} {
+		tp := mustParse(t, tc.tpl)
+		got := allocDuring(func() { _, err = tp.Render(tc.ctx, tiny) })
+		requireLimit(t, err, "produces more than 256 bytes")
+		limit := uint64(1 << 20)
+		if name == "partial with long name" {
+			limit = 8 << 20 // the template's own text is in the message
+		}
+		require.Less(t, got, limit, name)
+	}
+
+	// Collecting a large object's keys is charged before the keys are.
+	keys := map[string]any{}
+	for i := range 200_000 {
+		keys[strconv.Itoa(i)] = 1
+	}
+	p = mustParse(t, `{{prettyp-num-en x}}`)
+	alloc = allocDuring(func() {
+		_, err = p.Render(map[string]any{"x": keys}, hbs.Options{Limits: hbs.Limits{MaxSteps: 1000}})
+	})
+	requireLimit(t, err, "maximum of 1000 steps")
+	require.Less(t, alloc, uint64(1<<20))
+
+	// Within the limits, the texts are unchanged and charged.
+	m := &countMeter{}
+	_, err = mustParse(t, `{{> `+strings.Repeat("z", 500_000)+`}}`).Render(map[string]any{}, hbs.Options{Meter: m})
+	var he *hbs.Error
+	require.ErrorAs(t, err, &he)
+	require.Equal(t, hbs.KindRender, he.Kind)
+	require.Greater(t, m.used, int64(900))
+}

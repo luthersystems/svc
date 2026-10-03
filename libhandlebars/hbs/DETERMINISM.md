@@ -97,14 +97,17 @@ primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
 | `#each` iteration | `visitBlock`, `helperEach` | 1 |
 | Helper call | `callHelper` | 1 |
 | String argument of n bytes read by a helper | `read` via `convertArg`, `hashStr`, `toFloat`, `toInt` | KiB(n) |
-| String built from a non-string value (`str`), element by element, into one buffer sized from the string leaves | `appendStrBounded` | 1 per element, plus produced bytes |
+| String built from an array (`str`): a charged measuring pass, then one copy into a buffer of that size | `measureLeaves`, `copyLeaves` | 1 per element and a read per string leaf, nested arrays against MaxDepth, all before allocating; then produced bytes |
 | `select` / `in-string-array` element scanned | helpers | KiB(len(key)) / 1, plus compares |
 | `global` read or write | `hGlobal` | KiB(len(ns) + len(key)) |
 | `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting; result charged as produced |
 | `escape-uri-component` | `hEscapeURIComponent` | exact escaped length checked before escaping; result charged as produced |
 | `prettyp-num-en` error text (fmt `%v` of the value) | `appendV` | 1 per element, depth-bounded, produced bytes |
 | Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
-| String leaf copied while stringifying an array | `appendStrBounded` | checked against the produced-bytes bound and read-charged before copying |
+| String leaf or object key copied into fmt's `%v` text (`prettyp-num-en` errors) | `appendV` | checked against the produced-bytes bound and charged before copying; keys charged before they are collected |
+| Evaluation error text (it can hold template text) | `errorf` | produced bytes |
+| `possessive` result | `hPossessive` | checked against the produced-bytes bound before it is built |
+| Date parse error text (`date-beautify` and the other format helpers) | `dateFormatHelper` | bounded by 8 x the input length before formatting (the error quotes the input twice), then produced bytes |
 | Escaping a string for output | `writeEscaped` | rejected before scanning if its unescaped length cannot fit; written bytes charged as output |
 | `select` where-clause | `hSelect` | parsed with `Cut`/`Count`, no allocation per separator |
 | Error message of a helper (`fail`) | `fail`, `failWith` | produced bytes; a message holding a whole argument is checked against the bound before it is built |
@@ -112,7 +115,22 @@ primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
 
 The ELPS binding adds: parsing, 1 step per started KiB of template on every
 call; encoding the context (as `json:dump-bytes`, under `Runtime.MaxAlloc`),
-1 step per whole KiB written; decoding it, 1 step per started KiB.
+1 step per whole KiB written; decoding it, 1 step per started KiB. An encode
+that fails is charged 1 step per started KiB of the JSON it got through,
+estimated by a walk that stops where the encoder stopped
+(`chargeFailedEncode`).
+
+## Go API: contexts go through JSON
+
+`libhandlebars.Render(tpl, ctx)` converts a Go `ctx` with `json.Marshal` and
+the engine's decoder, as `handlebars:render` always converted ELPS values.
+Under raymond a Go context kept its Go types, so this is a difference for Go
+callers only (no ELPS-visible change): every number becomes a `float64`
+(`{{#if n includeZero=true}}` with `map[string]any{"n": 0}` rendered `yes`
+and now renders `no`; `{{to-str n}}` prints `0.000000`), and structs follow
+their JSON encoding instead of raymond's field-name rules. The conversion is
+one function, `libhandlebars.Render`, so a native conversion can replace it
+without touching the engine. `TestRenderGoValueTypes` pins the behaviour.
 
 `TestCostModelSites` (in `costguard_test.go`) times each site above with 1 KiB
 and 256 KiB strings and fails if the time per step grows more than about 3x
