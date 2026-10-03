@@ -73,16 +73,17 @@ func (t *jsonTotals) add(o jsonTotals) {
 }
 
 type jsonWalker struct {
-	c        jsonCoster
-	path     map[any]int
-	memo     map[jsonMemoKey]jsonMemo
-	typed1   map[reflect.Type]bool // struct types whose field list this walk has charged
-	pathType []reflect.Type        // the types of the pointer-like values on the path
-	skipped  []skippedMarshaler    // methods passed over, in encoding/json's order
-	maxDepth int                   // container nesting allowed (0: none, as encoding/json)
-	quoted   bool                  // the value is a ",string" field's: a scalar is written as a JSON string
-	levels   int                   // the walk's recursion depth
-	peak     int                   // the deepest level the walk has reached (or a memo hit stands for)
+	c         jsonCoster
+	path      map[any]int
+	memo      map[jsonMemoKey]jsonMemo
+	typed1    map[reflect.Type]bool // struct types whose field list this walk has charged
+	zeroTyped map[reflect.Type]bool // omitzero field types whose analysis this walk has charged
+	pathType  []reflect.Type        // the types of the pointer-like values on the path
+	skipped   []skippedMarshaler    // methods passed over, in encoding/json's order
+	maxDepth  int                   // container nesting allowed (0: none, as encoding/json)
+	quoted    bool                  // the value is a ",string" field's: a scalar is written as a JSON string
+	levels    int                   // the walk's recursion depth
+	peak      int                   // the deepest level the walk has reached (or a memo hit stands for)
 }
 
 // hopCost is the steps a pointer or interface hop costs: the walk keeps
@@ -118,9 +119,52 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, text bool) (jsonTotals, erro
 	// encoding/json writes a nil pointer or a nil interface as null,
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
+		if !text {
+			if raw, ok := rawMessage(v); ok {
+				return w.rawLeaf(raw, v.Type())
+			}
+		}
 		w.skipped = append(w.skipped, skippedMarshaler{v, text})
 	}
 	return w.leaf(1) // its output is not known here: at least a byte
+}
+
+var rawMessageType = reflect.TypeFor[json.RawMessage]()
+
+// rawMessage returns the bytes of a json.RawMessage (or a pointer to one)
+// v, whose MarshalJSON returns them as they are.
+func rawMessage(v reflect.Value) (json.RawMessage, bool) {
+	if v.Kind() == reflect.Pointer && v.Type().Elem() == rawMessageType {
+		v = v.Elem()
+	}
+	if v.Type() != rawMessageType {
+		return nil, false
+	}
+	return json.RawMessage(v.Bytes()), true
+}
+
+// rawLeaf is a json.RawMessage, whose MarshalJSON costs nothing: its
+// bytes are what encoding/json then checks and compacts, so they are
+// charged (a step per started 16 bytes, for this check and that one) and
+// checked here, failing as encoding/json would, before it runs.
+func (w *jsonWalker) rawLeaf(raw json.RawMessage, t reflect.Type) (jsonTotals, error) {
+	if raw == nil {
+		return w.leaf(4) // MarshalJSON writes null
+	}
+	scan := 2 * units64(int64(len(raw)), 16)
+	if err := w.c.steps(scan); err != nil {
+		return jsonTotals{}, err
+	}
+	if !json.Valid(raw) {
+		// Unmarshal checks with the scanner encoding/json compacts with
+		// (failing before it copies), so its error is encoding/json's.
+		var discard json.RawMessage
+		err := json.Unmarshal(raw, &discard)
+		return jsonTotals{steps: scan}, w.fail("json: error calling MarshalJSON for type ", t.String(), ": ", err.Error())
+	}
+	tot, err := w.leaf(1) // compacted, at least a byte
+	tot.steps += scan
+	return tot, err
 }
 
 // fail returns encoding/json's error text made of parts, charging its
@@ -143,14 +187,23 @@ func (w *jsonWalker) fail(parts ...string) error {
 func (w *jsonWalker) firstMarshalerError() error {
 	for _, m := range w.skipped {
 		if m.text {
-			if _, err := m.v.Interface().(encoding.TextMarshaler).MarshalText(); err != nil { //nolint:forcetypeassert // recorded as one
+			b, err := m.v.Interface().(encoding.TextMarshaler).MarshalText() //nolint:forcetypeassert // recorded as one
+			if err != nil {
 				return w.fail("json: error calling MarshalText for type ", m.v.Type().String(), ": ", err.Error())
+			}
+			// encoding/json escapes the text: a step per 16 bytes.
+			if cerr := w.c.steps(units64(int64(len(b)), 16)); cerr != nil {
+				return cerr
 			}
 			continue
 		}
 		b, err := m.v.Interface().(json.Marshaler).MarshalJSON() //nolint:forcetypeassert // recorded as one
 		if err == nil {
-			// encoding/json compacts the bytes, which checks them.
+			// encoding/json compacts the bytes, which checks them: a step
+			// per 16, charged first.
+			if cerr := w.c.steps(units64(int64(len(b)), 16)); cerr != nil {
+				return cerr
+			}
 			var buf bytes.Buffer
 			err = json.Compact(&buf, b)
 		}
@@ -580,8 +633,18 @@ FieldLoop:
 		}
 		if f.omitZero {
 			// IsZero reads the whole value, here and again in Marshal (a
-			// method's cost is the caller's).
-			z := zeroTestCost(fv.Type())
+			// method's cost is the caller's). Analysing its type is
+			// charged the first time this walk meets the type.
+			ft := fv.Type()
+			zi := zeroAnalysis(ft)
+			z := zeroTestCost(zi, ft)
+			if !w.zeroTyped[ft] {
+				if w.zeroTyped == nil {
+					w.zeroTyped = map[reflect.Type]bool{}
+				}
+				w.zeroTyped[ft] = true
+				z += zi.work
+			}
 			if err := w.c.steps(z); err != nil {
 				return tot, err
 			}
@@ -590,7 +653,7 @@ FieldLoop:
 		if (f.omitEmpty && isEmptyValue(fv)) || (f.omitZero && isZeroValue(fv)) {
 			continue
 		}
-		sub, err := w.leaf(int64(len(f.name)) + 3)
+		sub, err := w.leaf(f.nameLen + 1) // "name":
 		tot.add(sub)
 		if err != nil {
 			return tot, err
@@ -608,7 +671,8 @@ FieldLoop:
 
 // fields returns jsonFields(t), charging building the list the first time
 // this walk meets t, cached or not: 12 steps a field (embedded structs'
-// included) and a step per started 16 bytes of names and of tags.
+// included) and a step per started 16 bytes of names and of tags, at
+// their escaped length.
 func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 	if !w.typed1[t] {
 		if w.typed1 == nil {
@@ -625,8 +689,10 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 			for i := range t.NumField() {
 				f := t.Field(i)
 				// A field's index path, copied at its embedding depth, and
-				// its name and tag, read and escaped.
-				n += 12 + int64(depth) + int64((len(f.Name)+15)/16) + int64((len(f.Tag)+15)/16)
+				// its name and tag, read, and the name escaped (at up to 6
+				// bytes a byte: encoding/json builds its HTML-escaped form
+				// for a cold type).
+				n += 12 + int64(depth) + (jsonStringLen(f.Name)+15)/16 + (jsonStringLen(string(f.Tag))+15)/16
 				if f.Anonymous {
 					ft := f.Type
 					if ft.Kind() == reflect.Pointer {
@@ -651,53 +717,80 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 // compared at once, a step per started 256 bytes; anything else (floats,
 // strings, padded structs, arrays of them) is tested element by element,
 // a step per 8 elements.
-func zeroTestCost(t reflect.Type) int64 {
-	if plainMemory(t) {
+func zeroTestCost(z zeroInfo, t reflect.Type) int64 {
+	if z.plain {
 		return 2 * units64(sizeOf(t), 256)
 	}
-	return units64(2*zeroElems(t), 8)
+	return units64(2*z.elems, 8)
 }
 
-// plainMemory reports whether a value of t is zero exactly when its bytes
-// are, so IsZero compares memory: integers, booleans, pointers, and arrays
-// and unpadded structs of them.
-func plainMemory(t reflect.Type) bool {
+// zeroInfo is what zeroTestCost needs of a type, and the work of finding
+// it: the distinct types reached and their fields.
+type zeroInfo struct {
+	plain bool  // a value is zero exactly when its bytes are
+	elems int64 // the values IsZero visits in a value, saturating
+	work  int64 // types and fields the analysis visits, each once
+}
+
+var zeroInfoCache sync.Map // reflect.Type -> zeroInfo
+
+// zeroAnalysis is t's zeroInfo. Each type is analysed once (a type graph
+// shares its children, which a plain recursion would revisit
+// exponentially); the result is cached, and its work charged by the
+// caller whether or not it was.
+func zeroAnalysis(t reflect.Type) zeroInfo {
+	if z, ok := zeroInfoCache.Load(t); ok {
+		return z.(zeroInfo) //nolint:forcetypeassert // only zeroInfo is stored
+	}
+	memo := map[reflect.Type]zeroInfo{}
+	analyseZero(t, memo)
+	z := memo[t]
+	z.work = 0
+	for _, m := range memo {
+		z.work += m.work
+	}
+	zeroInfoCache.Store(t, z)
+	return z
+}
+
+// analyseZero computes t's plain and elems, and its own work (1, plus its
+// fields), with memo holding the types done.
+func analyseZero(t reflect.Type, memo map[reflect.Type]zeroInfo) zeroInfo {
+	if z, ok := memo[t]; ok {
+		z.work = 0
+		return z
+	}
+	var z zeroInfo
 	switch t.Kind() {
 	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
 		reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
-		return true
+		z = zeroInfo{plain: true, elems: 1}
 	case reflect.Array:
-		return plainMemory(t.Elem())
+		e := analyseZero(t.Elem(), memo)
+		z = zeroInfo{plain: e.plain, elems: 1 << 50}
+		if n := int64(t.Len()); e.elems == 0 || n <= (1<<50)/e.elems {
+			z.elems = n * e.elems
+		}
 	case reflect.Struct:
+		// plainMemory: integers, booleans, pointers, and arrays and
+		// unpadded structs of them.
+		z = zeroInfo{plain: true, elems: 1, work: int64(t.NumField())}
 		var sum uintptr
 		for i := range t.NumField() {
 			f := t.Field(i)
-			if !plainMemory(f.Type) {
-				return false
-			}
+			fz := analyseZero(f.Type, memo)
+			z.plain = z.plain && fz.plain
+			z.elems = min(z.elems+fz.elems, 1<<50)
 			sum += f.Type.Size()
 		}
-		return sum == t.Size()
+		z.plain = z.plain && sum == t.Size()
 	default:
-		return false
+		z = zeroInfo{elems: 1}
 	}
-}
-
-// zeroElems is the values IsZero visits in a value of t, saturating.
-func zeroElems(t reflect.Type) int64 {
-	switch t.Kind() {
-	case reflect.Array:
-		return min(int64(t.Len())*zeroElems(t.Elem()), 1<<50)
-	case reflect.Struct:
-		n := int64(1)
-		for i := range t.NumField() {
-			n = min(n+zeroElems(t.Field(i).Type), 1<<50)
-		}
-		return n
-	default:
-		return 1
-	}
+	z.work++
+	memo[t] = z
+	return z
 }
 
 // sizeOf is t.Size() as an int64, capped (a Go type's size fits).
@@ -822,6 +915,7 @@ func quotedLen(s string) int {
 // jsonField is a struct field encoding/json encodes.
 type jsonField struct {
 	name                        string
+	nameLen                     int64 // name as encoding/json writes it: HTML-escaped, quoted
 	index                       []int
 	tag                         bool
 	omitEmpty, omitZero, quoted bool
@@ -897,7 +991,7 @@ func jsonFields(t reflect.Type) []jsonField {
 						default:
 						}
 					}
-					field := jsonField{name: name, tag: tagged, index: index, quoted: quoted,
+					field := jsonField{name: name, nameLen: jsonStringLen(name), tag: tagged, index: index, quoted: quoted,
 						omitEmpty: hasOpt(opts, "omitempty"), omitZero: hasOpt(opts, "omitzero")}
 					fields = append(fields, field)
 					if count[f.typ] > 1 {

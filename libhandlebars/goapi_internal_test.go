@@ -212,27 +212,37 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 			R json.RawMessage
 			F float64
 		}{time.Unix(0, 0).UTC(), json.RawMessage(`{"a": 1}`), math.Inf(1)},
-		"three-type cycle":   ca,
-		"cycle after prefix": map[string]any{"x": []any{[]any{ca.B}}},
-		"unexported and -":   jsHidden{Ok: 1},
-		"embedded conflicts": jsEmbed{},
-		"text keys":          map[jsText]int{{"a"}: 1, {"b"}: 2},
-		"int keys":           map[int]string{3: "c", 1: "a", 20: "b"},
-		"bad key type":       map[[2]int]int{{1, 2}: 3},
-		"NaN":                map[string]any{"a": 1, "b": []any{2.0, math.NaN()}},
-		"Inf float32":        []float32{float32(math.Inf(-1))},
-		"number ok":          json.Number("1.5e3"),
-		"number bad":         map[string]any{"n": json.Number("abc")},
-		"chan":               map[string]any{"z": 1, "a": make(chan int)},
-		"func in slice":      []any{1, func() {}},
-		"complex":            struct{ C complex64 }{1},
-		"omitempty chan":     jsHolder{},
-		"addressable text":   &jsHolder{V: jsPtrText{"v"}, PV: &jsPtrText{"pv"}},
-		"unaddressable text": jsHolder{V: jsPtrText{"v"}},
-		"deep":               deep,
-		"dag":                dag,
-		"bytes":              map[string]any{"b": []byte("hello"), "n": []byte(nil)},
-		"nil things":         map[string]any{"m": map[string]int(nil), "s": []int(nil), "p": (*int)(nil), "i": nil},
+		"raw messages": struct {
+			A json.RawMessage
+			B *json.RawMessage
+			C any
+			D json.RawMessage
+		}{A: json.RawMessage(" [1, 2] "), C: json.RawMessage(`"x"`)},
+		"bad pointer RawMessage": struct {
+			B *json.RawMessage
+		}{B: func() *json.RawMessage { r := json.RawMessage(`[1,`); return &r }()},
+		"bad RawMessage in interface": []any{1, json.RawMessage(`1 2`)},
+		"three-type cycle":            ca,
+		"cycle after prefix":          map[string]any{"x": []any{[]any{ca.B}}},
+		"unexported and -":            jsHidden{Ok: 1},
+		"embedded conflicts":          jsEmbed{},
+		"text keys":                   map[jsText]int{{"a"}: 1, {"b"}: 2},
+		"int keys":                    map[int]string{3: "c", 1: "a", 20: "b"},
+		"bad key type":                map[[2]int]int{{1, 2}: 3},
+		"NaN":                         map[string]any{"a": 1, "b": []any{2.0, math.NaN()}},
+		"Inf float32":                 []float32{float32(math.Inf(-1))},
+		"number ok":                   json.Number("1.5e3"),
+		"number bad":                  map[string]any{"n": json.Number("abc")},
+		"chan":                        map[string]any{"z": 1, "a": make(chan int)},
+		"func in slice":               []any{1, func() {}},
+		"complex":                     struct{ C complex64 }{1},
+		"omitempty chan":              jsHolder{},
+		"addressable text":            &jsHolder{V: jsPtrText{"v"}, PV: &jsPtrText{"pv"}},
+		"unaddressable text":          jsHolder{V: jsPtrText{"v"}},
+		"deep":                        deep,
+		"dag":                         dag,
+		"bytes":                       map[string]any{"b": []byte("hello"), "n": []byte(nil)},
+		"nil things":                  map[string]any{"m": map[string]int(nil), "s": []int(nil), "p": (*int)(nil), "i": nil},
 	} {
 		_, want := json.Marshal(v)
 		var steps int64 = -1
@@ -396,4 +406,96 @@ func TestGoJSONCostLongFieldName(t *testing.T) {
 		require.NoError(t, goJSONCost(bud, v, 0))
 		require.GreaterOrEqual(t, bud.used, int64(len(name)/16))
 	}
+}
+
+type (
+	jsZ0  struct{}
+	jsZ1  struct{ A, B jsZ0 }
+	jsZ2  struct{ A, B jsZ1 }
+	jsZ3  struct{ A, B jsZ2 }
+	jsZ4  struct{ A, B jsZ3 }
+	jsZ5  struct{ A, B jsZ4 }
+	jsZ6  struct{ A, B jsZ5 }
+	jsZ7  struct{ A, B jsZ6 }
+	jsZ8  struct{ A, B jsZ7 }
+	jsZ9  struct{ A, B jsZ8 }
+	jsZ10 struct{ A, B jsZ9 }
+	jsZ11 struct{ A, B jsZ10 }
+	jsZ12 struct{ A, B jsZ11 }
+	jsZ13 struct{ A, B jsZ12 }
+	jsZ14 struct{ A, B jsZ13 }
+	jsZ15 struct{ A, B jsZ14 }
+	jsZ16 struct{ A, B jsZ15 }
+	jsZ17 struct{ A, B jsZ16 }
+	jsZ18 struct{ A, B jsZ17 }
+	jsZ19 struct{ A, B jsZ18 }
+	jsZ20 struct{ A, B jsZ19 }
+	jsZ21 struct{ A, B jsZ20 }
+	jsZ22 struct{ A, B jsZ21 }
+	jsZ23 struct{ A, B jsZ22 }
+)
+
+// TestZeroAnalysisShared: an omitzero field's type is analysed once per
+// type, not once per path to it (2^24 paths here), and the analysis is
+// charged by the types and fields it visits, on every walk.
+func TestZeroAnalysisShared(t *testing.T) {
+	v := struct {
+		X jsZ23 `json:",omitzero"`
+	}{}
+	start := time.Now()
+	for range 2 {
+		bud := &goBudget{max: 1 << 40}
+		require.NoError(t, goJSONCost(bud, reflect.ValueOf(v), 0))
+		require.GreaterOrEqual(t, bud.used, int64(23*3+1), "24 types, all but Z0 with 2 fields")
+	}
+	require.Less(t, time.Since(start), time.Second, "linear in the types, not the paths")
+	z := zeroAnalysis(reflect.TypeFor[jsZ23]())
+	require.True(t, z.plain)
+	require.Equal(t, int64(23*3+1), z.work)
+	require.Equal(t, int64(1<<24-1), z.elems)
+}
+
+// TestRawMessageCharged: a json.RawMessage's bytes are charged and checked
+// by the walk, before encoding/json checks them: invalid ones fail with
+// encoding/json's error, and valid ones before a later failure are paid
+// for too.
+func TestRawMessageCharged(t *testing.T) {
+	big := strings.Repeat("x", 4<<20)
+	bad := struct{ A json.RawMessage }{json.RawMessage(`"` + big)}
+	_, merr := json.Marshal(bad)
+	require.Error(t, merr)
+	bud := &goBudget{max: 1 << 40}
+	require.EqualError(t, goJSONCost(bud, reflect.ValueOf(bad), 0), merr.Error())
+	require.GreaterOrEqual(t, bud.used, int64(2*len(big)/16))
+
+	thenNaN := struct {
+		A json.RawMessage
+		F float64
+	}{json.RawMessage(`"` + big + `"`), math.NaN()}
+	_, merr = json.Marshal(thenNaN)
+	require.Error(t, merr)
+	bud = &goBudget{max: 1 << 40}
+	require.EqualError(t, goJSONCost(bud, reflect.ValueOf(thenNaN), 0), merr.Error())
+	require.GreaterOrEqual(t, bud.used, int64(2*len(big)/16))
+
+	bud = &goBudget{max: 1000}
+	var herr *hbs.Error
+	require.ErrorAs(t, goJSONCost(bud, reflect.ValueOf(bad), 0), &herr)
+	require.Equal(t, hbs.KindLimit, herr.Kind, "over budget before checking")
+}
+
+// TestEscapedFieldNameSized: a field's name is sized as encoding/json
+// writes it, HTML-escaped (each & as \u0026), and its cold field list is
+// charged at that length.
+func TestEscapedFieldNameSized(t *testing.T) {
+	name := strings.Repeat("&", 1<<20)
+	typ := reflect.StructOf([]reflect.StructField{{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`json:"` + name + `" cold:"` + t.Name() + `"`)}})
+	v := reflect.New(typ).Elem()
+	b, err := json.Marshal(v.Interface())
+	require.NoError(t, err)
+	bud := &goBudget{max: 1 << 40}
+	require.NoError(t, goJSONCost(bud, v, 0))
+	require.LessOrEqual(t, bud.size, int64(len(b)))
+	require.Greater(t, bud.size, int64(5*len(name)), "the name at its escaped length")
+	require.GreaterOrEqual(t, bud.used, int64(6*len(name)/16), "the cold field list at the escaped length")
 }

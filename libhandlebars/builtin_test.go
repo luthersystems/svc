@@ -988,3 +988,21 @@ func TestRenderFixedInvalidUTF8Keys(t *testing.T) {
 		require.Equal(t, first, v.Str)
 	}
 }
+
+// TestNativeEscapedNameUnderCap: a native whose field name escapes to six
+// times its length (each & as &) fails the allocation cap from the
+// walk's estimate, before the encoder builds and writes it.
+func TestNativeEscapedNameUnderCap(t *testing.T) {
+	name := strings.Repeat("&", 1<<20)
+	typ := reflect.StructOf([]reflect.StructField{{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`json:"` + name + `" cold:"` + t.Name() + `"`)}})
+	env := newEnv(t)
+	env.Runtime.MaxAlloc = 2 << 20
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(reflect.New(typ).Elem().Interface()))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	var res *lisp.LVal
+	alloc := allocDuring(func() { res, _ = eval(t, env, `(handlebars:render "x" ctx)`) })
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "allocation size exceeds maximum")
+	require.Less(t, alloc, uint64(16<<20), "rejected before the encoder runs")
+}

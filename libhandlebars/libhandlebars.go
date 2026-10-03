@@ -436,13 +436,14 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 		w.natives[x] = b
 		w.markPath()
 	}
+	// The bytes are charged before the cap is checked: they were made.
+	if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
+		return nil, true, lerr
+	}
 	w.lower = before + int64(len(b))
 	if w.lower > w.limit {
 		w.capErr = true
 		return nil, true, nil
-	}
-	if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
-		return nil, true, lerr
 	}
 	return b, false, nil
 }
