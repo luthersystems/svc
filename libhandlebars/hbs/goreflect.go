@@ -170,6 +170,13 @@ func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool, depth 
 // once. reflect.VisibleFields instead revisits a type through every
 // embedding path, which is exponential for diamonds.
 func fieldsByName(t reflect.Type) map[string]reflect.StructField {
+	found, _ := fieldsByNameCount(t)
+	return found
+}
+
+// fieldsByNameCount is fieldsByName, also returning the fields it visited.
+func fieldsByNameCount(t reflect.Type) (map[string]reflect.StructField, int) {
+	visits := 0
 	type scan struct {
 		typ   reflect.Type
 		index []int
@@ -190,6 +197,7 @@ func fieldsByName(t reflect.Type) map[string]reflect.StructField {
 			}
 			visited[s.typ] = true
 			for i := range s.typ.NumField() {
+				visits++
 				f := s.typ.Field(i)
 				f.Index = append(append([]int(nil), s.index...), i)
 				if _, done := found[f.Name]; !done && !hidden[f.Name] {
@@ -227,7 +235,7 @@ func fieldsByName(t reflect.Type) map[string]reflect.StructField {
 			}
 		}
 	}
-	return found
+	return found, visits
 }
 
 // title is strings.Title, the casing raymond applied to field and method

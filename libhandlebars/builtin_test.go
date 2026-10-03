@@ -5,7 +5,10 @@ package libhandlebars_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
+	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -778,4 +781,145 @@ func TestNativeResourceReview(t *testing.T) {
 		t.Logf("%-24s %6.0f ns/step %6d KB", name, per, alloc>>10)
 		require.False(t, ceilingFails(t, per), "%s: %.0f ns/step", name, per)
 	}
+}
+
+// nestedSlices returns n levels of []any around 1.
+func nestedSlices(n int) any {
+	var v any = 1
+	for range n {
+		v = []any{v}
+	}
+	return v
+}
+
+// pointerChain returns n pointer-to-interface hops around a map.
+func pointerChain(n int) any {
+	var x any = map[string]any{"x": 1}
+	for range n {
+		y := x
+		x = &y
+	}
+	return x
+}
+
+// deepRender renders a native and the Go API's JSON mode on a fresh
+// goroutine, as an endorser would, and returns both errors.
+func deepRender(t *testing.T, v any) (*lisp.LVal, error) {
+	t.Helper()
+	var res *lisp.LVal
+	var gerr error
+	env := newEnv(t)
+	env.Runtime.MaxAlloc = 1 << 30
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(v))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	tpl, err := libhandlebars.Parse(`x`)
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		res = env.LoadStringContext(t.Context(), "test", `(handlebars:render "x" ctx)`)
+		_, gerr = libhandlebars.RenderWith(tpl, map[string]any{"n": v}, libhandlebars.WithJSONContext())
+	}()
+	<-done
+	return res, gerr
+}
+
+// TestNativeDepthBound: a value nested past the walk's bound fails with a
+// limit error on a fresh goroutine, never a stack overflow; one just under
+// it renders.
+func TestNativeDepthBound(t *testing.T) {
+	res, gerr := deepRender(t, nestedSlices(60_000))
+	require.Equal(t, lisp.LError, res.Type)
+	require.Contains(t, res.Cells[0].Str, "nests deeper than 50000")
+	require.ErrorContains(t, gerr, "nests deeper than 1024", "the Go API's container bound comes first")
+
+	res, gerr = deepRender(t, pointerChain(30_000))
+	require.Equal(t, lisp.LError, res.Type)
+	require.Contains(t, res.Cells[0].Str, "nests deeper than 50000")
+	require.ErrorContains(t, gerr, "nests deeper than 50000")
+
+	// A []any level is two walk levels (the slice, its interface element).
+	// Past encoding/json's decoder depth (10,000) the encoder's own load
+	// check fails: the same error as json:dump-bytes.
+	for _, n := range []int{24_000, 9_000} {
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 1 << 30
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(nestedSlices(n)))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		res, _ = eval(t, env, `(handlebars:render "x" ctx)`)
+		if dump.Type == lisp.LError {
+			require.Equal(t, lisp.LError, res.Type, "%d: %v", n, res)
+			require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str, n)
+		} else {
+			require.Equal(t, lisp.LString, res.Type, "%d: %v", n, res)
+		}
+	}
+}
+
+// TestNativeDepthNoCrash runs a million levels in a subprocess: the render
+// must fail with an error, not abort the process.
+func TestNativeDepthNoCrash(t *testing.T) {
+	if os.Getenv("HBS_DEEP_CHILD") == "1" {
+		for _, v := range []any{nestedSlices(1_000_000), pointerChain(500_000)} {
+			res, gerr := deepRender(t, v)
+			if res.Type != lisp.LError || gerr == nil {
+				t.Fatalf("no error: %v %v", res, gerr)
+			}
+		}
+		fmt.Println("DEEP-OK")
+		return
+	}
+	if testing.Short() {
+		t.Skip("slow: skipped under -short")
+	}
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestNativeDepthNoCrash$") //nolint:gosec // this test binary
+	cmd.Env = append(os.Environ(), "HBS_DEEP_CHILD=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), "DEEP-OK")
+}
+
+type zeroFloats struct {
+	A [1 << 22]float32 `json:",omitzero"`
+}
+
+type zeroPadded struct {
+	A [1 << 20]struct {
+		I int8
+		F float32
+	} `json:",omitzero"`
+}
+
+type zeroQuads struct {
+	A [1 << 20][4]float32 `json:",omitzero"`
+}
+
+// TestOmitzeroArraysCeiling: omitzero on large arrays that are not plain
+// memory (IsZero tests them element by element, twice) stays within the
+// ceiling, through the Go API's JSON mode.
+func TestOmitzeroArraysCeiling(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	for name, v := range map[string]any{"float32 x4M": &zeroFloats{}, "padded structs x1M": &zeroPadded{}, "[4]float32 x1M": &zeroQuads{}} {
+		res, per, _ := renderNative(t, v)
+		require.Equal(t, lisp.LString, res.Type, "%s: %v", name, res)
+		t.Logf("%-20s %.0f ns/step", name, per)
+		require.False(t, ceilingFails(t, per), "%s: %.0f ns/step", name, per)
+	}
+}
+
+// TestNativeInVectorMarshalledOnce: a native inside an ELPS vector is
+// handed to the encoder as its bytes too, so its MarshalJSON runs once.
+func TestNativeInVectorMarshalledOnce(t *testing.T) {
+	env := newEnv(t)
+	calls := 0
+	env.Put(lisp.Symbol("n"), lisp.Native(onceMarshaler{calls: &calls}))
+	res, _ := eval(t, env, `(handlebars:render "{{v.[0].x}}" (sorted-map "v" (vector n)))`)
+	require.Equal(t, lisp.LString, res.Type, "%v", res)
+	require.Equal(t, "once", res.Str)
+	require.Equal(t, 1, calls)
 }

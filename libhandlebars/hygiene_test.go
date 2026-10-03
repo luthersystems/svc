@@ -19,7 +19,7 @@ func TestNoBuildArtefactsTracked(t *testing.T) {
 	if err != nil {
 		t.Skip("not in a git work tree")
 	}
-	files, err := exec.CommandContext(t.Context(), "git", "-C", strings.TrimSpace(string(root)), "ls-files", "-z").Output()
+	files, err := exec.CommandContext(t.Context(), "git", "-C", strings.TrimSpace(string(root)), "ls-files", "-z").Output() //nolint:gosec // git on this repository's own root
 	if err != nil {
 		t.Skip("git ls-files failed")
 	}

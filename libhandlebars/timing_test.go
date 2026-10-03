@@ -23,8 +23,10 @@ func ceilingFails(t *testing.T, perNs float64) bool {
 	case perNs > 400:
 		return true
 	default:
-		base := baselineNs(t)
-		t.Logf("%.0f ns/step over the ceiling; plain evaluator now %.0f ns/step", perNs, base)
+		// The evaluator measured now, capped at 50 ns a step: however
+		// loaded the machine, a case past 300 ns a step fails.
+		base := min(baselineNs(t), 50)
+		t.Logf("%.0f ns/step over the ceiling; plain evaluator now %.0f ns/step (capped)", perNs, base)
 		return perNs > 6*base
 	}
 }

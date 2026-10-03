@@ -469,6 +469,37 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	}
 }
 
+// jsonNesting is the deepest nesting of objects and arrays in valid JSON
+// b (one pass, charged with b by JSONCost).
+func jsonNesting(b []byte) int {
+	depth, deepest := 0, 0
+	inString := false
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if inString {
+			switch c {
+			case '\\':
+				i++
+			case '"':
+				inString = false
+			default:
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '[', '{':
+			depth++
+			deepest = max(deepest, depth)
+		case ']', '}':
+			depth--
+		default:
+		}
+	}
+	return deepest
+}
+
 // markPath marks the containers the walk is inside as leading to a
 // marshalled native, stopping at one already marked (so each is marked
 // once).
@@ -515,7 +546,11 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		var out *lisp.LVal
 		switch x.Type {
 		case lisp.LNative:
-			if b, ok := w.natives[x]; ok {
+			// JSON nesting past encoding/json's decoder limit (10,000)
+			// fails the encoder's load check; a RawMessage would fail its
+			// compaction first, with other text. Leave such a native to
+			// the encoder.
+			if b, ok := w.natives[x]; ok && jsonNesting(b) <= 10_000 {
 				out = lisp.Native(json.RawMessage(b))
 			}
 		case lisp.LSortMap:
@@ -538,7 +573,29 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 					out.MapSetLVal(e.Cells[0], vals[i])
 				}
 			}
-		case lisp.LSExpr, lisp.LQuote, lisp.LTaggedVal, lisp.LArray:
+		case lisp.LArray:
+			// The elements are the cells of Cells[1], which the walk
+			// visited as the array's own children.
+			if len(x.Cells) != 2 || !copying(len(x.Cells[1].Cells)) {
+				break
+			}
+			var cells []*lisp.LVal
+			for i, c := range x.Cells[1].Cells {
+				if s := sub(c); s != c {
+					if cells == nil {
+						cells = append([]*lisp.LVal(nil), x.Cells[1].Cells...)
+					}
+					cells[i] = s
+				}
+			}
+			if cells != nil {
+				data := *x.Cells[1]
+				data.Cells = cells
+				cp := *x
+				cp.Cells = []*lisp.LVal{x.Cells[0], &data}
+				out = &cp
+			}
+		case lisp.LSExpr, lisp.LQuote, lisp.LTaggedVal:
 			if !copying(len(x.Cells)) {
 				break
 			}

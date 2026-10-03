@@ -196,6 +196,17 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 			F float64     `json:",string"`
 			X json.Number `json:",string"`
 		}{S: `a"b\c<>`, N: 7, F: 1.5, X: "12"},
+		"string option memo": func() any {
+			q := strings.Repeat(`"`, 1024)
+			v := struct {
+				Q *string `json:",string"`
+				U []*string
+			}{Q: &q}
+			for range 100 {
+				v.U = append(v.U, &q)
+			}
+			return v
+		}(),
 		"good marshalers then NaN": struct {
 			T time.Time
 			R json.RawMessage
@@ -230,6 +241,9 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 			got := goJSONCost(bud, reflect.ValueOf(v), 0)
 			if want == nil {
 				require.NoError(t, got, name)
+				b, merr := json.Marshal(v)
+				require.NoError(t, merr, name)
+				require.LessOrEqual(t, bud.size, int64(len(b)), "%s: the size is a lower bound", name)
 			} else {
 				require.Error(t, got, name)
 				require.Equal(t, want.Error(), got.Error(), name)

@@ -162,9 +162,10 @@ func (w *jsonWalker) firstMarshalerError() error {
 }
 
 type jsonMemoKey struct {
-	t     reflect.Type
-	p     any
-	depth int // with a depth bound, a subtree's outcome depends on where it starts
+	t      reflect.Type
+	p      any
+	depth  int  // with a depth bound, a subtree's outcome depends on where it starts
+	quoted bool // a ",string" field's pointer writes its string doubly escaped
 }
 
 // goJSONCost charges json.Marshal(v) to c. It returns a *jsonFailure where
@@ -193,9 +194,17 @@ func (w *jsonWalker) value(v reflect.Value, depth int) (jsonTotals, error) {
 }
 
 // maxJSONLevels bounds the walk's recursion, pointer and interface hops
-// included. encoding/json has no bound, but at this depth it would be
-// near exhausting a goroutine's stack itself.
-const maxJSONLevels = 1_000_000
+// included: a value nested deeper fails with a limit error. The walk uses
+// about 1.3 KB of stack a level (several times encoding/json's), so this
+// keeps it near 64 MB, far below the 1 GB at which Go aborts the process,
+// and fails well before encoding/json itself would run out (about 300,000
+// levels of nested slices). Levels past deepLevel are charged
+// deepLevelCost each for the stack growth they cause.
+const (
+	maxJSONLevels = 50_000
+	deepLevel     = 64
+	deepLevelCost = 8
+)
 
 // typed is newTypeEncoder(t, allowAddr) applied to v.
 func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
@@ -204,6 +213,11 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 	}
 	// No defer: a deferred call per level makes each stack growth of a
 	// deep walk adjust them all.
+	if w.levels >= deepLevel {
+		if err := w.c.steps(deepLevelCost); err != nil {
+			return jsonTotals{}, err
+		}
+	}
 	w.levels++
 	tot, err := w.encode(v, t, allowAddr, depth)
 	w.levels--
@@ -346,7 +360,7 @@ func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTota
 		typ := w.pathType[start+(at-start)%n]
 		return jsonTotals{}, w.fail("json: unsupported value: encountered a cycle via ", typ.String())
 	}
-	mk := jsonMemoKey{t: v.Type(), p: key}
+	mk := jsonMemoKey{t: v.Type(), p: key, quoted: w.quoted}
 	if w.maxDepth > 0 {
 		mk.depth = len(w.pathType) + 1
 	}
@@ -540,9 +554,9 @@ FieldLoop:
 			fv = fv.Field(i)
 		}
 		if f.omitZero {
-			// IsZero reads the whole value (a method's cost is the
-			// caller's).
-			z := units64(sizeOf(fv.Type()), 256)
+			// IsZero reads the whole value, here and again in Marshal (a
+			// method's cost is the caller's).
+			z := zeroTestCost(fv.Type())
 			if err := w.c.steps(z); err != nil {
 				return tot, err
 			}
@@ -604,6 +618,60 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 		}
 	}
 	return jsonFields(t), nil
+}
+
+// zeroTestCost is the steps reflect.Value.IsZero takes on a value of t,
+// twice (the walk tests it, and encoding/json again): plain memory is
+// compared at once, a step per started 256 bytes; anything else (floats,
+// strings, padded structs, arrays of them) is tested element by element,
+// a step per 8 elements.
+func zeroTestCost(t reflect.Type) int64 {
+	if plainMemory(t) {
+		return 2 * units64(sizeOf(t), 256)
+	}
+	return units64(2*zeroElems(t), 8)
+}
+
+// plainMemory reports whether a value of t is zero exactly when its bytes
+// are, so IsZero compares memory: integers, booleans, pointers, and arrays
+// and unpadded structs of them.
+func plainMemory(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
+		return true
+	case reflect.Array:
+		return plainMemory(t.Elem())
+	case reflect.Struct:
+		var sum uintptr
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if !plainMemory(f.Type) {
+				return false
+			}
+			sum += f.Type.Size()
+		}
+		return sum == t.Size()
+	default:
+		return false
+	}
+}
+
+// zeroElems is the values IsZero visits in a value of t, saturating.
+func zeroElems(t reflect.Type) int64 {
+	switch t.Kind() {
+	case reflect.Array:
+		return min(int64(t.Len())*zeroElems(t.Elem()), 1<<50)
+	case reflect.Struct:
+		n := int64(1)
+		for i := range t.NumField() {
+			n = min(n+zeroElems(t.Field(i).Type), 1<<50)
+		}
+		return n
+	default:
+		return 1
+	}
 }
 
 // sizeOf is t.Size() as an int64, capped (a Go type's size fits).

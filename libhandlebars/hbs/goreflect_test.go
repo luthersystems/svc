@@ -79,10 +79,13 @@ func TestFieldsByName(t *testing.T) {
 			}
 		}
 	}
-	deep := diamond(18)
-	start := time.Now()
-	fieldsByName(deep)
-	require.Less(t, time.Since(start), 100*time.Millisecond, "a level-18 diamond")
+	// Each embedded type is visited once: the fields visited grow
+	// linearly with the levels (VisibleFields grows as 2^levels).
+	_, v16 := fieldsByNameCount(diamond(16))
+	_, v18 := fieldsByNameCount(diamond(18))
+	// The top type's 3 fields, 2 types of 3 at each lower level, the base.
+	require.Equal(t, 3+3*2*15+1, v16)
+	require.Equal(t, v16+3*2*2, v18)
 
 	// A cold lookup through a fresh level-18 diamond, end to end.
 	if raceEnabled || testing.Short() {
@@ -93,7 +96,7 @@ func TestFieldsByName(t *testing.T) {
 	require.NoError(t, err)
 	x := reflect.New(cold).Interface()
 	m := &countMeter{}
-	start = time.Now()
+	start := time.Now()
 	_, err = p.Render(map[string]any{"x": x}, Options{Meter: m})
 	require.NoError(t, err)
 	per := float64(time.Since(start).Nanoseconds()) / float64(m.n)
@@ -101,7 +104,7 @@ func TestFieldsByName(t *testing.T) {
 	if per > 200 {
 		// Contention from parallel packages: compare with the plain
 		// evaluator now (as the ceiling tests do).
-		base := internalBaselineNs(t)
+		base := min(internalBaselineNs(t), 50)
 		require.False(t, per > 400 || per > 6*base, "%.0f ns/step, plain evaluator %.0f", per, base)
 	}
 }
