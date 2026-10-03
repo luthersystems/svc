@@ -468,8 +468,9 @@ func (r *renderer) goAppendStr(dst []byte, v reflect.Value) []byte {
 		return dst
 	}
 	if t := v.Type(); !t.Implements(errorType) && !t.Implements(stringerType) {
-		pt := reflect.PointerTo(t)
-		if v.CanAddr() && (pt.Implements(errorType) || pt.Implements(stringerType)) {
+		// CanAddr first: PointerTo builds the pointer type from t's name,
+		// which a type built at run time can make long.
+		if v.CanAddr() && (reflect.PointerTo(t).Implements(errorType) || reflect.PointerTo(t).Implements(stringerType)) {
 			v = v.Addr()
 		} else if k := v.Kind(); k == reflect.Chan || k == reflect.Func {
 			ts := t.String()

@@ -780,7 +780,12 @@ func jsonQuotedStringLen(s string) int64 {
 // walk charges x and its contents. It reports true where the encoder
 // fails, and the budget error if the budget runs out.
 func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
-	if w.size > w.limit {
+	// Past the allocation cap by the bytes surely written (lower), the
+	// encoder fails there: report its error rather than let it run. The
+	// estimate (size) only sets the charge: it over-counts (a float is 24
+	// bytes in it), so stopping on it would leave the rest uncharged.
+	if w.lower > w.limit {
+		w.capErr = true
 		return true, nil
 	}
 	if x.IsNil() {
@@ -846,7 +851,8 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 			return true, lerr
 		}
 		lower = 2 + int64(m.Len()) // braces and colons
-		if w.size > w.limit {
+		if w.lower+lower > w.limit {
+			w.capErr = true
 			return true, nil
 		}
 		buf := make([]*lisp.LVal, m.Len())

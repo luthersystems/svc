@@ -151,7 +151,7 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 }
 
 // maxEmbedRaw bounds embeddedRaw's search: at most 64 hops through
-// interfaces, and 64 embedding levels below each; maxEmbedScan bounds the
+// interfaces (65 wrapped values), and 64 embedding levels below each; maxEmbedScan bounds the
 // embedded fields it looks at. A search that would go past one fails
 // (errEmbedDeep), so no RawMessage escapes the charge.
 const (
@@ -249,7 +249,7 @@ type embedSearch struct {
 // called, never a miss).
 func (s *embedSearch) find(v reflect.Value, hop int) (int64, embedResult) {
 	for ; ; hop++ {
-		if hop >= maxEmbedRaw {
+		if hop > maxEmbedRaw {
 			return 0, embedTooDeep
 		}
 		var ok bool
@@ -554,7 +554,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 }
 
 func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
-	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(marshalerType) && v.CanAddr() {
+	if t.Kind() != reflect.Pointer && allowAddr && v.CanAddr() && reflect.PointerTo(t).Implements(marshalerType) {
 		// encoding/json's addrMarshalerEncoder: it calls the pointer's
 		// method and names v's own type in its error.
 		return w.marshalerLeaf(v.Addr(), t, false)
@@ -562,7 +562,7 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 	if t.Implements(marshalerType) {
 		return w.marshalerLeaf(v, t, false)
 	}
-	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(textMarshalerType) && v.CanAddr() {
+	if t.Kind() != reflect.Pointer && allowAddr && v.CanAddr() && reflect.PointerTo(t).Implements(textMarshalerType) {
 		return w.marshalerLeaf(v.Addr(), t, true)
 	}
 	if t.Implements(textMarshalerType) {

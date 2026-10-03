@@ -1150,6 +1150,9 @@ func TestNativeMarshalerChainFailsClosed(t *testing.T) {
 	res, steps := render(60)
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
 	require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), "within the bound: charged")
+	res, _ = render(64)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.NotContains(t, res.String(), "nests deeper than 64", "64 wrappers: within the bound")
 	for _, n := range []int{65, 128} {
 		res, _ = render(n)
 		require.Equal(t, lisp.LError, res.Type, "%v", res)
@@ -1269,4 +1272,40 @@ func TestParseBudgetFailureNotCached(t *testing.T) {
 	res, _ = eval(t, env, call)
 	require.Equal(t, lisp.LString, res.Type, "%v", res)
 	require.Equal(t, "1 "+t.Name(), res.Str)
+}
+
+// TestEncodeEstimateDoesNotStopWalk: the walk's size estimate over-counts
+// (a float is 24 bytes in it), so passing the allocation cap by it alone
+// must not stop the walk: the encode below it would run uncharged. Here
+// the floats' estimate passes the cap, their JSON does not, and the
+// native after them is charged for every field encoding/json visits.
+func TestEncodeEstimateDoesNotStopWalk(t *testing.T) {
+	floats := make([]*lisp.LVal, 200_000)
+	for i := range floats {
+		floats[i] = lisp.Float(0.5)
+	}
+	shared := &sparse100{}
+	native := make([]*sparse100, 10_000)
+	for i := range native {
+		native[i] = shared
+	}
+	render := func(withFloats, withNative bool) int64 {
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 4 << 20
+		ctx := lisp.SortedMap()
+		if withFloats {
+			ctx.MapSetString("a", lisp.QExpr(floats))
+		}
+		if withNative {
+			ctx.MapSetString("b", lisp.Native(native))
+		}
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		return steps
+	}
+	nativeOnly, floatsOnly, both := render(false, true), render(true, false), render(true, true)
+	t.Logf("native %d, floats %d, both %d steps", nativeOnly, floatsOnly, both)
+	require.GreaterOrEqual(t, nativeOnly, int64(10_000*100), "each of the native's fields")
+	require.GreaterOrEqual(t, both, (nativeOnly+floatsOnly)*9/10, "both charged in full together")
 }
