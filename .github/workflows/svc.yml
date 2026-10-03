@@ -15,6 +15,8 @@ jobs:
           # the golangci-lint v2.13 binary (built with Go 1.26) cannot read
           # export data produced by newer toolchains (Go 1.27 broke it with
           # "export data version 4 is greater than maximum supported version 2").
+          # setup-go installs go.mod's `toolchain` line exactly; without that
+          # line it would install the `go` directive's 1.26.0 release.
           go-version-file: go.mod
       - name: Clean Go Module Cache (needed for cilint in some cases)
         run: go clean -modcache
