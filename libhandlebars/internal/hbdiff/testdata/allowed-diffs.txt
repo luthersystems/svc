@@ -5,7 +5,7 @@
 #
 # pattern conditions (joined by &&): case:<glob>  kinds:<ref>-><cand>
 # tpl:<substring>  field:<kind|msg|out>  candout:<substring>
-# arch:<goarch> or arch:!<goarch>. expires is YYYY-MM-DD or never.
+# candmsg:<substring>  arch:<goarch> or arch:!<goarch>. expires is YYYY-MM-DD or never.
 # Every entry needs an issue and a reason. Keep this list short: anything
 # not here must render byte for byte as the reference does.
 
@@ -22,9 +22,15 @@ case:plusminus/order-* && field:out | never | #106 | D1: plus/minus sum hash val
 kinds:panic->render | never | #106 | a Go runtime panic in the reference becomes a handlebars-render error
 
 # The engine bounds template size, nesting depth and output size
-# (DefaultLimits); raymond had no limits and overflowed the Go stack on
-# deep nesting (D4), which kills the process.
-kinds:*->limit | never | #106 | D4: the engine enforces Limits that raymond did not have
+# (DefaultLimits, design section 7.6); raymond had no limits and overflowed
+# the Go stack on deep nesting (D4), which kills the process. Each entry
+# waives one cap, by its message. The engine's other limits (MaxSteps and
+# the produced-bytes bound) have no entry: a case where the reference
+# rendered and the candidate hit one of them is reported as a difference.
+kinds:*->limit && candmsg:template nesting depth exceeds limit of 256 | never | #106 | D4: templates nest at most 256 levels (parse cap)
+kinds:*->limit && candmsg:template evaluation exceeds the maximum depth of 256 | never | #106 | D4: evaluation recursion is capped at 256 levels (raymond overflowed its stack)
+kinds:*->limit && candmsg:bytes, limit is 1048576 | never | #106 | templates are at most 1 MiB (parse cap)
+kinds:*->limit && candmsg:rendered output exceeds the maximum of 16777216 bytes | never | #106 | output is at most 16 MiB (render cap)
 
 # to-int on NaN, +-Inf or a float outside [-2^63, 2^63) is CPU-dependent in
 # the reference (Go leaves the conversion undefined: amd64 gives MinInt64,

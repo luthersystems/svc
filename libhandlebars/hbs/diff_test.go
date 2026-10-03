@@ -92,9 +92,11 @@ func candRun(tpl, ctxJSON string, o hbs.Options) outcome {
 }
 
 // diff renders with both engines and returns a description of any
-// difference, or "". A template on which the candidate reports a depth limit
-// is not run on the reference: raymond overflows the Go stack there, which
-// cannot be recovered.
+// difference, or "". A template on which the candidate reports a nesting
+// or evaluation depth limit is not run on the reference: raymond can
+// overflow the Go stack there, which cannot be recovered. Any other limit
+// error (output size, steps, produced bytes) is compared like any result,
+// so a case the reference rendered is reported.
 //
 // On a CPU other than amd64, a difference is also skipped when the
 // reference's to-int converted a float that is NaN, +-Inf or outside int64
@@ -102,7 +104,7 @@ func candRun(tpl, ctxJSON string, o hbs.Options) outcome {
 // pins the amd64 result (see refNoteToInt).
 func diff(tpl, ctxJSON string) string {
 	cand := candRun(tpl, ctxJSON, hbs.Options{})
-	if cand.failed && cand.kind == hbs.KindLimit {
+	if cand.failed && cand.kind == hbs.KindLimit && strings.Contains(cand.err, "depth") {
 		return ""
 	}
 	before := refToIntUnportable.Load()

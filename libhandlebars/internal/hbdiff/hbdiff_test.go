@@ -316,3 +316,27 @@ func TestCheckedInAllowlist(t *testing.T) {
 		require.Equal(t, file.Entries[i].Pattern, built.Entries[i].Pattern)
 	}
 }
+
+// TestAllowlistLimits: the built-in allowlist waives the engine's design
+// caps by name, and not its other limits.
+func TestAllowlistLimits(t *testing.T) {
+	al, err := CheckedInAllowlist(time.Now())
+	require.NoError(t, err)
+	c := Case{Name: "g/x", Template: "{{x}}"}
+	ok := Result{Out: "fine"}
+	limit := func(msg string) Result { return Result{ErrKind: KindLimit, ErrMsg: msg} }
+	for _, msg := range []string{
+		"error parsing template: Parse error on line 1:\ntemplate nesting depth exceeds limit of 256",
+		"error while rendering template: template evaluation exceeds the maximum depth of 256",
+		"error parsing template: template is 1048577 bytes, limit is 1048576",
+		"error while rendering template: rendered output exceeds the maximum of 16777216 bytes",
+	} {
+		require.NotNil(t, al.Match(c, ok, limit(msg)), msg)
+	}
+	for _, msg := range []string{
+		"error while rendering template: template evaluation exceeds the maximum of 33554432 steps",
+		"error while rendering template: template evaluation produces more than 134217728 bytes",
+	} {
+		require.Nil(t, al.Match(c, ok, limit(msg)), msg)
+	}
+}

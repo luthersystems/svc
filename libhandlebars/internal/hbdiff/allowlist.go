@@ -29,6 +29,7 @@ import (
 //	tpl:<substring>        the template contains substring
 //	field:<kind|msg|out>   the first differing field
 //	candout:<substring>    the candidate's output contains substring
+//	candmsg:<substring>    the candidate's error message contains substring
 //	arch:<goarch>          the harness runs on GOARCH goarch; arch:!<goarch>
 //	                       means any other GOARCH
 type Allowlist struct {
@@ -117,7 +118,7 @@ func ParseAllowlist(b []byte, now time.Time) (*Allowlist, error) {
 				if _, _, ok := strings.Cut(arg, "->"); !ok {
 					return nil, fmt.Errorf("allowlist line %d: kinds wants ref->cand", n)
 				}
-			case "tpl", "candout":
+			case "tpl", "candout", "candmsg":
 			case "arch":
 				if strings.TrimPrefix(arg, "!") == "" {
 					return nil, fmt.Errorf("allowlist line %d: arch wants a GOARCH", n)
@@ -182,6 +183,8 @@ func (e *AllowEntry) matches(c Case, ref, cand Result, m *Mismatch) bool {
 			ok = m.Field == cd.arg
 		case "candout":
 			ok = strings.Contains(cand.Out, cd.arg)
+		case "candmsg":
+			ok = cand.ErrKind != KindNone && strings.Contains(cand.ErrMsg, cd.arg)
 		case "arch":
 			if a, neg := strings.CutPrefix(cd.arg, "!"); neg {
 				ok = goarch != a

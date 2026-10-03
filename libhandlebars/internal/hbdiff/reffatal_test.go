@@ -52,6 +52,12 @@ func TestRefFatalDepth(t *testing.T) {
 		require.False(t, RefFatal(build(maxRefDepth)), "%s at %d", name, maxRefDepth)
 		require.True(t, RefFatal(build(maxRefDepth+1)), "%s at %d", name, maxRefDepth+1)
 	}
+	// Block helpers called outside block form inside a block re-enter it
+	// (see testdata/ref-fatal.txtar); outside every block they are safe.
+	require.True(t, RefFatal("{{#if t}}{{if t}}{{/if}}"))
+	require.True(t, RefFatal("{{#each a}}{{with t}}{{/each}}"))
+	require.False(t, RefFatal("{{if t}}{{with t}}{{#if t}}x{{/if}}"))
+
 	// Closed blocks give their depth back.
 	require.False(t, RefFatal(strings.Repeat(nest(maxRefDepth, "{{#if t}}", "{{/if}}"), 3)))
 	// Unclosed blocks keep it.
