@@ -783,11 +783,16 @@ func dagKey(levels int) [32]any {
 // MaxSteps (32^5 here) fails the step limit rather than being walked.
 // (hbs's TestMapKeyWalksBounded bounds the walk itself, on 32^6.)
 func TestGoContextKeyWalkBounded(t *testing.T) {
+	if raceEnabled && testing.Short() {
+		t.Skip("slow under -race -short")
+	}
 	m := map[[32]any]int{dagKey(5): 1}
 	tpl, err := libhandlebars.Parse(`{{prettyp-num-en o}}`)
 	require.NoError(t, err)
 	start := time.Now()
 	_, err = libhandlebars.Render(tpl, map[string]any{"o": m})
 	require.ErrorContains(t, err, "maximum of")
-	require.Less(t, time.Since(start), 5*time.Second)
+	if !raceEnabled {
+		require.Less(t, time.Since(start), 5*time.Second)
+	}
 }
