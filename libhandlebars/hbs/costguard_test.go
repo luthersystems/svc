@@ -100,7 +100,9 @@ func TestCostModelGuard(t *testing.T) {
 }
 
 // costSites isolate one operation whose work grows with a string's length
-// each, repeated by an #each over a. build returns the template and context
+// each, repeated by an #each over a. Writing output is not here: it is
+// charged per KiB written and bounded by MaxOutputBytes, and timing it at
+// these sizes measures the memory system as much as the engine. build returns the template and context
 // for strings of n bytes.
 var costSites = []struct {
 	name  string
@@ -160,6 +162,9 @@ var costSites = []struct {
 	{"eq compare", func(n int) (string, string) {
 		s := strings.Repeat("e", n)
 		return `{{#each a}}{{eq ../x ../y}}{{/each}}`, `{"x": "` + s + `1", "y": "` + s + `2"`
+	}},
+	{"array stringified", func(n int) (string, string) {
+		return `{{#each a}}{{eq ../arr "x"}}{{/each}}`, `{"arr": ["` + strings.Repeat("l", n) + `", "` + strings.Repeat("m", n) + `"]`
 	}},
 	{"sorted hash keys", func(n int) (string, string) {
 		k := strings.Repeat("s", n)

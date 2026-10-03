@@ -60,6 +60,17 @@ func TestRenderGoValue(t *testing.T) {
 	require.Equal(t, "1,2,3", res)
 }
 
+// TestRenderGoValueTypes pins that Render converts Go values through JSON:
+// an int becomes a float64, so includeZero (literal 0 only in compat mode)
+// no longer matches it, as it did under raymond.
+func TestRenderGoValueTypes(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{#if n includeZero=true}}yes{{else}}no{{/if}} {{to-str n}}`)
+	require.NoError(t, err)
+	res, err := libhandlebars.Render(tpl, map[string]any{"n": 0})
+	require.NoError(t, err)
+	require.Equal(t, "no 0.000000", res)
+}
+
 func TestRender(t *testing.T) {
 	tplStr := `{{value}}`
 	tpl, err := libhandlebars.Parse(tplStr)

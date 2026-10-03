@@ -83,9 +83,10 @@ func TestHelperCharges(t *testing.T) {
 	require.Equal(t, small+3, steps(t, `{{eq s "x"}}`, `{"s": "`+strings.Repeat("a", 4096)+`"}`))
 	arr := `{"a": [` + strings.TrimSuffix(strings.Repeat(`"`+strings.Repeat("a", 1023)+`",`, 100), ",") + `]}`
 	// str(a) builds 102,300 bytes: 100 started KiB of produced bytes, 99
-	// more than the small case's output; s's 1-step read is not made; and
-	// each of the 100 elements walked costs a step.
-	require.Equal(t, small+98+100, steps(t, `{{eq a "x"}}`, arr))
+	// more than the small case's output; s's 1-step read is not made; each
+	// of the 100 elements walked costs a step; and each 1023-byte string
+	// leaf is read, a step each.
+	require.Equal(t, small+98+100+100, steps(t, `{{eq a "x"}}`, arr))
 
 	// select and in-string-array: one step per element scanned.
 	items := func(n int) string {
@@ -410,4 +411,69 @@ func TestFmtVBounded(t *testing.T) {
 		require.ErrorAs(t, err, &he)
 		require.Equal(t, fmt.Sprintf("value passed in must be a number, got: %v", v), he.Msg, ctx)
 	}
+}
+
+// allocDuring returns the bytes allocated while f runs.
+func allocDuring(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// TestOversizedInputsRejectedBeforeCopying: a string too large for the
+// remaining output or produced bytes is refused before it is copied,
+// scanned or built into a message.
+func TestOversizedInputsRejectedBeforeCopying(t *testing.T) {
+	small := hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 1024}}
+	var err error
+
+	// A large string leaf of an array being stringified.
+	leaf := mustCtx(t, `{"a": ["`+strings.Repeat("x", 16<<20)+`"]}`)
+	p := mustParse(t, `{{eq a "x"}}`)
+	alloc := allocDuring(func() { _, err = p.Render(leaf, small) })
+	requireLimit(t, err, "produces more than 8192 bytes")
+	require.Less(t, alloc, uint64(1<<20))
+
+	// A large string to escape.
+	amp := mustCtx(t, `{"s": "`+strings.Repeat("&", 64<<20)+`"}`)
+	p = mustParse(t, `{{s}}`)
+	alloc = allocDuring(func() { _, err = p.Render(amp, small) })
+	requireLimit(t, err, "rendered output exceeds the maximum of 1024 bytes")
+	require.Less(t, alloc, uint64(1<<20))
+
+	// A malformed select where-clause: no allocation per separator, and
+	// the error text, which holds the clause, is bounded before it is built.
+	w := strings.Repeat("=", 1<<20)
+	wctx := mustCtx(t, `{"a": [], "w": "`+w+`"}`)
+	p = mustParse(t, `{{#select from=a where=w}}x{{/select}}`)
+	alloc = allocDuring(func() { _, err = p.Render(wctx, hbs.Options{}) })
+	var he *hbs.Error
+	require.ErrorAs(t, err, &he)
+	require.Equal(t, hbs.KindRender, he.Kind)
+	require.Equal(t, "select: 'where' not in K=V format: "+w, he.Msg)
+	require.Less(t, alloc, uint64(4<<20))
+	_, err = p.Render(wctx, small)
+	requireLimit(t, err, "produces more than 8192 bytes")
+	for where, ok := range map[string]bool{"k=v": true, "k=": true, "=v": true, "=": true, "k": false, "k=v=w": false, "": false} {
+		_, err := mustParse(t, `{{#select from=a where="`+where+`"}}x{{/select}}`).Render(mustCtx(t, `{"a": []}`), hbs.Options{})
+		require.Equal(t, ok, err == nil, where)
+	}
+}
+
+// TestFmtVRepros pins the review's prettyp-num-en cases: a large array of
+// nulls is charged per element, and a deep array hits the depth limit
+// before the helper's own error.
+func TestFmtVRepros(t *testing.T) {
+	nulls := `{"a": [` + strings.TrimSuffix(strings.Repeat("null,", 1_000_000), ",") + `]}`
+	m := &countMeter{}
+	_, err := mustParse(t, `{{prettyp-num-en a}}`).Render(mustCtx(t, nulls), hbs.Options{Meter: m})
+	require.Error(t, err)
+	require.Greater(t, m.used, int64(1_000_000))
+
+	deep := mustCtx(t, `{"a": `+strings.Repeat("[", 1001)+strings.Repeat("]", 1001)+`}`)
+	_, err = mustParse(t, `{{prettyp-num-en a}}`).Render(deep, hbs.Options{Limits: hbs.Limits{MaxDepth: 8}})
+	requireLimit(t, err, "maximum depth of 8")
 }

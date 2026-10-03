@@ -104,6 +104,10 @@ primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
 | `escape-uri-component` | `hEscapeURIComponent` | exact escaped length checked before escaping; result charged as produced |
 | `prettyp-num-en` error text (fmt `%v` of the value) | `appendV` | 1 per element, depth-bounded, produced bytes |
 | Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
+| String leaf copied while stringifying an array | `appendStrBounded` | checked against the produced-bytes bound and read-charged before copying |
+| Escaping a string for output | `writeEscaped` | rejected before scanning if its unescaped length cannot fit; written bytes charged as output |
+| `select` where-clause | `hSelect` | parsed with `Cut`/`Count`, no allocation per separator |
+| Error message of a helper (`fail`) | `fail`, `failWith` | produced bytes; a message holding a whole argument is checked against the bound before it is built |
 | Produced bytes: output written, captured sections, helper results | `wrote`, `produced` | 1 per started KiB of the running total; bounded by 8 x MaxOutputBytes |
 
 The ELPS binding adds: parsing, 1 step per started KiB of template on every

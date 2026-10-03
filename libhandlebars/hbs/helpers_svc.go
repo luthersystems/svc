@@ -201,11 +201,12 @@ func hSelect(c *hcall) any {
 		c.r.fail(fmt.Sprintf("select: 'from' must be an array: %T", from))
 	}
 	where := c.hashStr("where")
-	kv := strings.Split(where, "=")
-	if len(kv) != 2 {
-		c.r.fail("select: 'where' not in K=V format: " + where)
+	// svc split on "=" and wanted exactly two parts: exactly one "=".
+	// Cut and Count allocate nothing, whatever where holds.
+	key, val, _ := strings.Cut(where, "=")
+	if strings.Count(where, "=") != 1 {
+		c.r.failWith("select: 'where' not in K=V format: ", where)
 	}
-	key, val := kv[0], kv[1]
 	for _, mi := range items {
 		c.r.stepKiB(len(key))
 		m, isMap := mi.(map[string]any)
@@ -256,11 +257,11 @@ func hRoundToNth(c *hcall) any {
 	}
 	xf, err := strconv.ParseFloat(x, bitSize)
 	if err != nil {
-		c.r.fail("round-to-n: 'x' must be convertable to float: " + x)
+		c.r.failWith("round-to-n: 'x' must be convertable to float: ", x)
 	}
 	nn, err := strconv.ParseInt(n, 10, 32)
 	if err != nil {
-		c.r.fail("round-to-n: 'n' must be convertable to int: " + n)
+		c.r.failWith("round-to-n: 'n' must be convertable to int: ", n)
 	}
 	// The output holds nn digits after the point: bound them before
 	// formatting. fmt ignores a precision it cannot parse (see
@@ -302,9 +303,7 @@ func hPrettyNumEn(c *hcall) any {
 	if !ok {
 		// The message holds the whole value as fmt's %v prints it, built by a
 		// charged, depth-bounded walk instead of fmt's recursion.
-		msg := string(c.r.appendV([]byte("value passed in must be a number, got: "), num))
-		c.r.produced(len(msg))
-		c.r.fail(msg)
+		c.r.fail(string(c.r.appendV([]byte("value passed in must be a number, got: "), num)))
 	}
 	return humanize.FormatFloat("#,###.##", f)
 }

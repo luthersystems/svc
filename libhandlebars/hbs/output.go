@@ -233,6 +233,11 @@ func (r *renderer) str(v any) string {
 func (r *renderer) appendStrBounded(dst []byte, v any) []byte {
 	a, ok := v.([]any)
 	if !ok {
+		// A string leaf can be large: check and charge it before copying.
+		if s, isStr := v.(string); isStr {
+			r.checkProduced(len(dst) + len(s))
+			r.read(len(s))
+		}
 		return appendStr(dst, v)
 	}
 	r.enter()
@@ -275,6 +280,9 @@ func (r *renderer) writeEscaped(s string) {
 	if s == "" {
 		return
 	}
+	// Escaping only lengthens s: reject a string that cannot fit before
+	// scanning it.
+	r.reserve(len(s))
 	i := strings.IndexAny(s, escapedChars)
 	if i < 0 {
 		r.writeString(s)

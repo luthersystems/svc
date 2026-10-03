@@ -112,8 +112,17 @@ func (r *renderer) errorf(format string, args ...any) {
 
 // fail fails the render with a helper's error text, which raymond returns
 // unchanged.
+// The message counts as produced bytes: it can hold a whole argument.
 func (r *renderer) fail(msg string) {
+	r.produced(len(msg))
 	panic(&Error{Kind: KindRender, Msg: msg})
+}
+
+// failWith fails with prefix+s, checking the produced-bytes bound before
+// the message is built.
+func (r *renderer) failWith(prefix, s string) {
+	r.reserveProduced(len(prefix) + len(s))
+	r.fail(prefix + s)
 }
 
 func (r *renderer) enter() {

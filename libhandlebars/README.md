@@ -14,6 +14,10 @@ Luther's templating library is an extension of [handlebars](https://handlebarsjs
   - `(handlebars:must-parse tpl)`: validates tpl without rendering it.
   - `(handlebars:libname)` returns `"luthersystems/svc/hbs"`, and `(handlebars:version)` returns the engine version (`hbs.Version`). The version changes whenever a release changes any output, error or step charge.
 
+## Go API
+  - `Parse` returns a `Template`, now `*hbs.Program` (it was a raymond `*Template`), and `Render(tpl, ctx)` renders it in compat mode.
+  - **Breaking for Go callers:** `Render` converts `ctx` through JSON (`json.Marshal`, then the engine's decoder), as `handlebars:render` always has. Under raymond, Go values kept their Go types: an `int` stayed an `int`, structs were read by field name. Now every number is a `float64` and structs follow their JSON encoding. For example, `{{#if n includeZero=true}}` with `map[string]any{"n": 0}` rendered `yes` and now renders `no` (compat mode only treats a literal `0` as zero). The ELPS functions are unaffected; they always converted through JSON.
+
 ## Limits and steps
   - Templates are limited to 1 MiB and 256 levels of nesting (`handlebars-parse`). A render is limited to 16 MiB of output, 128 MiB of bytes produced in all (output, sections a helper captured, and strings helpers build), and 2^25 evaluation steps, whether or not an ELPS step budget is set (`handlebars-render`).
   - Decoding the context costs 1 ELPS step per started KiB of its JSON, and parsing 1 step per started KiB of template, on every call (parses are cached, but a cache hit costs the same). Rendering costs 1 step per node evaluated, path segment resolved, context tried by a lookup, array element a path is mapped over, `#each` iteration, helper call and element `select` or `in-string-array` scans; 1 per started KiB of each string a helper reads; and 1 per started KiB of all bytes produced. A render that exhausts the step budget stops early with the budget condition.
