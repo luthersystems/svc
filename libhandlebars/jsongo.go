@@ -89,13 +89,12 @@ type jsonWalker struct {
 // hop on a long chain).
 const hopCost = 16
 
-// hop charges one pointer or interface hop and adds it to tot.
-func (w *jsonWalker) hop(tot jsonTotals, err error) (jsonTotals, error) {
+// hop adds a pointer or interface hop to the totals of the walk below it.
+// The hop is charged before it is followed (by its caller), so the charge
+// stands however that walk ends.
+func hop(tot jsonTotals, err error) (jsonTotals, error) {
 	tot.steps += hopCost
-	if err != nil {
-		return tot, err
-	}
-	return tot, w.c.steps(hopCost)
+	return tot, err
 }
 
 // q is 2 when the scalar being sized is written quoted (",string").
@@ -304,7 +303,10 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 		if v.IsNil() {
 			return w.leaf(4)
 		}
-		return w.hop(w.value(v.Elem(), depth))
+		if err := w.c.steps(hopCost); err != nil {
+			return jsonTotals{steps: hopCost}, err
+		}
+		return hop(w.value(v.Elem(), depth))
 	case reflect.Struct:
 		return w.structValue(v, t, depth)
 	case reflect.Map:
@@ -339,7 +341,10 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 			t reflect.Type
 			p any
 		}{t, v.UnsafePointer()}, func() (jsonTotals, error) {
-			return w.hop(w.typed(v.Elem(), t.Elem(), true, depth))
+			if err := w.c.steps(hopCost); err != nil {
+				return jsonTotals{steps: hopCost}, err
+			}
+			return hop(w.typed(v.Elem(), t.Elem(), true, depth))
 		})
 	default: // Complex, Chan, Func, UnsafePointer
 		return jsonTotals{}, w.fail("json: unsupported type: ", t.String())
@@ -445,7 +450,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 		tot.steps += int64(n) * perEntry
 		kvs := make([]kv, 0, n)
 		var keyErr string
-		var keyBytes int64
+		var keyBytes, scan int64
 		it := v.MapRange()
 		for it.Next() {
 			ks, err := mapKeyString(it.Key())
@@ -459,21 +464,19 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 				continue
 			}
 			// Its escaping is sized next, and it is compared in the sort:
-			// charge reading it first.
-			scan := int64(len(ks)/16 + 1)
-			if err := w.c.steps(scan); err != nil {
-				return tot, err
-			}
-			tot.steps += scan
+			// reading it is charged with the others, below.
+			scan += int64(len(ks)/16 + 1)
 			keyBytes += int64(len(ks))
 			kvs = append(kvs, kv{ks, it.Value()})
 		}
-		// Sorting compares keys: their bytes, log2(n) times.
-		cmp := (keyBytes/256 + 1) * int64(1+bits.Len(uint(n)))
-		if err := w.c.steps(cmp); err != nil {
+		// Sorting compares keys: their bytes, log2(n) times. The keys'
+		// charges are summed and applied once, so a budget failure does
+		// not depend on Go's map order.
+		scan += (keyBytes/256 + 1) * int64(1+bits.Len(uint(n)))
+		if err := w.c.steps(scan); err != nil {
 			return tot, err
 		}
-		tot.steps += cmp
+		tot.steps += scan
 		if keyErr != "" {
 			return tot, w.fail("json: encoding error for type ", strconv.Quote(t.String()), ": ", strconv.Quote(keyErr))
 		}
@@ -583,7 +586,7 @@ FieldLoop:
 
 // fields returns jsonFields(t), charging building the list the first time
 // this walk meets t, cached or not: 12 steps a field (embedded structs'
-// included) and a step per started 16 bytes of tags.
+// included) and a step per started 16 bytes of names and of tags.
 func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 	if !w.typed1[t] {
 		if w.typed1 == nil {
@@ -599,8 +602,9 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 			seen[t] = true
 			for i := range t.NumField() {
 				f := t.Field(i)
-				// A field's index path, copied at its embedding depth.
-				n += 12 + int64(depth) + int64((len(f.Tag)+15)/16)
+				// A field's index path, copied at its embedding depth, and
+				// its name and tag, read and escaped.
+				n += 12 + int64(depth) + int64((len(f.Name)+15)/16) + int64((len(f.Tag)+15)/16)
 				if f.Anonymous {
 					ft := f.Type
 					if ft.Kind() == reflect.Pointer {

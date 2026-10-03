@@ -149,7 +149,8 @@ func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool, depth 
 		// Resolving the field copies its index path, depth+1 long.
 		r.steps1(planFieldCost + int64(depth))
 		f := t.Field(i)
-		r.steps1(units(len(f.Tag), scanUnit))
+		// Its name is hashed into the plan and its tag parsed.
+		r.steps1(units(len(f.Name), scanUnit) + units(len(f.Tag), scanUnit))
 		if f.Anonymous {
 			ft := f.Type
 			if ft.Kind() == reflect.Pointer {
@@ -592,22 +593,20 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		return n
 	case reflect.Map:
 		// fmt sorts the keys by reflection (internal/fmtsort): about
-		// log2(n) comparisons a key, slower for interface and float keys.
-		k := int64(1 + bits.Len(uint(v.Len())))
-		if kk := v.Type().Key().Kind(); kk == reflect.Interface || kk == reflect.Float32 || kk == reflect.Float64 {
-			k *= 4
-		}
-		z.steps += int64(v.Len()) * k
+		// log2(n) comparisons a key, each as long as the key (see keyCmp).
+		logn := int64(1 + bits.Len(uint(v.Len())))
 		// MapRange copies each key and value out of the map.
 		z.steps += int64(v.Len()) * units(int(min(v.Type().Key().Size()+v.Type().Elem().Size(), 1<<40)), boxUnit)
 		n := 5
 		nans := 0
 		it := v.MapRange()
 		for it.Next() && !z.over() {
-			if k := it.Key(); !k.Equal(k) { // a NaN, or a key holding one
+			k := it.Key()
+			if !k.Equal(k) { // a NaN, or a key holding one
 				nans++
 			}
-			n += 2 + z.size(it.Key(), depth+1) + z.size(it.Value(), depth+1)
+			z.steps += logn * keyCmp(k, z.limit)
+			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
 		if nans > 1 {
 			z.nanKeys = true
@@ -621,6 +620,47 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		return n
 	default:
 		return 64
+	}
+}
+
+// cmpUnit is the bytes of two strings' common prefix a step of comparing
+// them covers (memory compared at a few GB/s).
+const cmpUnit = 256
+
+// keyCmp is the steps fmtsort takes comparing k with another key, by k's
+// length: a string by its bytes, an array or struct element by element
+// (each a reflection call, a quarter step for a scalar), an interface or
+// float by its slower path. It stops counting past limit.
+func keyCmp(k reflect.Value, limit int64) int64 {
+	switch k.Kind() {
+	case reflect.String:
+		return 1 + int64(k.Len()/cmpUnit)
+	case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return 4
+	case reflect.Interface:
+		if k.IsNil() {
+			return 4
+		}
+		return 4 + keyCmp(k.Elem(), limit)
+	case reflect.Array:
+		switch k.Type().Elem().Kind() {
+		case reflect.String, reflect.Interface, reflect.Array, reflect.Struct:
+		default: // elements of one fixed cost, about 5 ns each
+			return 1 + int64(k.Len())*keyCmp(reflect.Zero(k.Type().Elem()), limit)/4
+		}
+		n := int64(1)
+		for i := 0; i < k.Len() && n <= limit; i++ {
+			n += keyCmp(k.Index(i), limit)
+		}
+		return n
+	case reflect.Struct:
+		n := int64(1)
+		for i := 0; i < k.NumField() && n <= limit; i++ {
+			n += keyCmp(k.Field(i), limit)
+		}
+		return n
+	default:
+		return 1
 	}
 }
 

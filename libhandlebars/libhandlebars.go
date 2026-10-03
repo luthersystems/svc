@@ -289,16 +289,38 @@ func (t *intTyper) list(cells []*lisp.LVal, v hbs.Value) {
 	}
 }
 
-// memberName is the JSON member name libjson writes for a map key.
+// memberName is the JSON member name libjson writes for a map key, as it
+// decodes: each byte of invalid UTF-8 is written as U+FFFD.
 func memberName(k *lisp.LVal) (string, bool) {
 	switch k.Type {
 	case lisp.LString, lisp.LSymbol:
-		return k.Str, true
+		return validUTF8(k.Str), true
 	case lisp.LInt:
 		return strconv.Itoa(k.Int), true
 	default:
 		return "", false
 	}
+}
+
+// validUTF8 is s with each byte of invalid UTF-8 replaced by U+FFFD, as
+// encoding/json (and libjson) write it. strings.ToValidUTF8 instead
+// replaces a run of such bytes with one U+FFFD.
+func validUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(3 * len(s)) // at most 3 bytes for each one
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && n == 1 {
+			b.WriteRune(utf8.RuneError)
+		} else {
+			b.WriteString(s[i : i+n])
+		}
+		i += n
+	}
+	return b.String()
 }
 
 // dumpContext serializes an ELPS render context to JSON as json:dump-bytes

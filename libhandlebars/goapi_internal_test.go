@@ -346,3 +346,54 @@ func TestJSONQuotedStringLen(t *testing.T) {
 		require.Equal(t, int64(len(got)-len(`{"S":}`)), jsonQuotedStringLen(s), "%q", s)
 	}
 }
+
+type jsLoop struct{ Self *jsLoop }
+
+// TestGoJSONCostHopsChargedOnError: pointer and interface hops are charged
+// before they are followed, so a walk that fails below them (a cycle) has
+// still paid for them.
+func TestGoJSONCostHopsChargedOnError(t *testing.T) {
+	loop := &jsLoop{}
+	loop.Self = loop
+	const n = 10_000
+	var x any = loop
+	for range n {
+		y := x
+		x = &y // a pointer hop, then an interface hop
+	}
+	bud := &goBudget{max: 1 << 40}
+	err := goJSONCost(bud, reflect.ValueOf(x), 0)
+	require.ErrorContains(t, err, "encountered a cycle")
+	require.GreaterOrEqual(t, bud.used, int64(2*n*hopCost))
+}
+
+// TestGoJSONCostMapKeysOrderFree: a map's key charges are applied together,
+// so a failing budget is spent the same way whatever Go's map order.
+func TestGoJSONCostMapKeysOrderFree(t *testing.T) {
+	m := map[string]int{"a": 1, strings.Repeat("b", 64<<10): 2, strings.Repeat("c", 1<<20): 3}
+	var used int64
+	for i := range 50 {
+		bud := &goBudget{max: 1000}
+		err := goJSONCost(bud, reflect.ValueOf(m), 0)
+		var herr *hbs.Error
+		require.ErrorAs(t, err, &herr)
+		require.Equal(t, hbs.KindLimit, herr.Kind)
+		if i == 0 {
+			used = bud.used
+		}
+		require.Equal(t, used, bud.used, "run %d", i)
+	}
+}
+
+// TestGoJSONCostLongFieldName: converting a struct charges its fields'
+// names by length, on every conversion (the field list is cached).
+func TestGoJSONCostLongFieldName(t *testing.T) {
+	name := "A" + strings.Repeat("a", 1<<20)
+	typ := reflect.StructOf([]reflect.StructField{{Name: name, Type: reflect.TypeFor[int]()}})
+	v := reflect.New(typ).Elem()
+	for range 2 {
+		bud := &goBudget{max: 1 << 40}
+		require.NoError(t, goJSONCost(bud, v, 0))
+		require.GreaterOrEqual(t, bud.used, int64(len(name)/16))
+	}
+}

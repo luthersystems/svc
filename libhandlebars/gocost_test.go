@@ -137,3 +137,66 @@ func TestGoContextColdPlan(t *testing.T) {
 		t.Errorf("cold plan: %.0f ns per step, ceiling 200", worst)
 	}
 }
+
+// TestGoContextLongFieldName: a field's name is charged by its length when
+// the type's plan is built, on every render (whether or not reflect or the
+// engine has the type's fields cached). The JSON conversion's charge is
+// tested in TestGoJSONCostLongFieldName.
+func TestGoContextLongFieldName(t *testing.T) {
+	name := "A" + strings.Repeat("a", 1<<20)
+	typ := reflect.StructOf([]reflect.StructField{{Name: name, Type: reflect.TypeFor[int]()}})
+	v := reflect.New(typ).Elem().Interface()
+	tpl, err := libhandlebars.Parse(`{{x.missing}}`)
+	require.NoError(t, err)
+	for range 2 {
+		m := &countMeter{}
+		_, err = tpl.Render(map[string]any{"x": v}, hbs.Options{Meter: m})
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, m.n, int64(len(name)/16))
+	}
+}
+
+// TestGoContextMapKeyCompare: printing a Go map (%v, here in a helper's
+// error text) sorts its keys (fmtsort),
+// and the comparisons are charged by key length: strings sharing a long
+// prefix, and arrays compared element by element.
+func TestGoContextMapKeyCompare(t *testing.T) {
+	prefix := strings.Repeat("p", 64<<10)
+	strs := make(map[string]int, 512)
+	for i := range 512 {
+		strs[prefix+strconv.Itoa(i)] = i
+	}
+	arrs := make(map[[256]byte]int, 4000)
+	for i := range 4000 {
+		var k [256]byte
+		k[254], k[255] = byte(i>>8), byte(i)
+		arrs[k] = i
+	}
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name string
+		v    any
+		min  int64 // the comparisons alone: n keys, log2(n) times, by length
+	}{
+		{"shared prefix", strs, 512 * 10 * (64 << 10) / 256},
+		{"array keys", arrs, 4000 * 12 * 256 / 4},
+	} {
+		worst := 0.0
+		for run := range 3 {
+			m := &countMeter{}
+			start := time.Now()
+			_, err := tpl.Render(map[string]any{"x": tc.v}, hbs.Options{Meter: m})
+			require.Error(t, err)
+			require.GreaterOrEqual(t, m.n, tc.min, tc.name)
+			per := float64(time.Since(start).Nanoseconds()) / float64(m.n)
+			t.Logf("%s: %d steps, %.0f ns/step", tc.name, m.n, per)
+			if run > 0 {
+				worst = max(worst, per)
+			}
+		}
+		if !raceEnabled && !testing.Short() && ceilingFails(t, worst) {
+			t.Errorf("%s: %.0f ns per step, ceiling 200", tc.name, worst)
+		}
+	}
+}

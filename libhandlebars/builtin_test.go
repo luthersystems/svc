@@ -923,3 +923,31 @@ func TestNativeInVectorMarshalledOnce(t *testing.T) {
 	require.Equal(t, "once", res.Str)
 	require.Equal(t, 1, calls)
 }
+
+// TestRenderFixedInvalidUTF8Keys: render-fixed finds a map key holding
+// invalid UTF-8 under the member name JSON gives it (each invalid byte as
+// U+FFFD), and leaves a name two keys share as JSON decoded it, on every
+// run.
+func TestRenderFixedInvalidUTF8Keys(t *testing.T) {
+	env := newEnv(t)
+	one := lisp.SortedMap()
+	one.MapSetString("\xff\xfe", lisp.Int(9007199254740993))
+	two := lisp.SortedMap()
+	two.MapSetString("\xff", lisp.Int(9007199254740993))
+	two.MapSetString("�", lisp.Int(9007199254740995))
+	env.Put(lisp.Symbol("one"), one)
+	env.Put(lisp.Symbol("two"), two)
+	v, _ := eval(t, env, renderCall("render-fixed", "{{[��]}}", "one"))
+	require.Equal(t, lisp.LString, v.Type, "%v", v)
+	require.Equal(t, "9007199254740993", v.Str)
+	first := ""
+	for range 20 {
+		v, _ = eval(t, env, renderCall("render-fixed", "{{[�]}}", "two"))
+		require.Equal(t, lisp.LString, v.Type, "%v", v)
+		require.Contains(t, []string{"9007199254740992", "9007199254740996"}, v.Str, "a float64, as JSON decoded it")
+		if first == "" {
+			first = v.Str
+		}
+		require.Equal(t, first, v.Str)
+	}
+}
