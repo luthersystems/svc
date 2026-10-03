@@ -15,7 +15,7 @@ const shapesDir = "testdata/shapes"
 
 func loadShapes(t testing.TB) []Case {
 	t.Helper()
-	cases, err := LoadShapes(shapesDir)
+	cases, err := LoadShapes(shapesDir, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, cases)
 	return cases

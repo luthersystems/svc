@@ -61,7 +61,7 @@ func run() error {
 
 	var tpls []hbdiff.Template
 	if *phylum != "" {
-		found, err := hbdiff.ExtractPhylum(*phylum)
+		found, err := hbdiff.ExtractPhylum(*phylum, nil)
 		if err != nil {
 			return err
 		}

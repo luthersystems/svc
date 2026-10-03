@@ -29,27 +29,53 @@ type Template struct {
 // file. Literals are taken whether or not they reach handlebars:render
 // directly, so templates stored in data (labels in a table, say) are
 // included. Duplicates by content are dropped, keeping the first.
-func ExtractPhylum(dir string) ([]Template, error) {
+//
+// Symlinks are followed, files and directories alike, once check (nil:
+// none) accepts their target; a dangling link or a directory loop is an
+// error. Hidden directories (.git, say) are skipped.
+func ExtractPhylum(dir string, check LinkCheck) ([]Template, error) {
 	var files []string
-	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+	onPath := map[string]bool{}
+	var walk func(d string) error
+	walk = func(d string) error {
+		resolved, err := filepath.EvalSymlinks(d)
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			if p != dir && strings.HasPrefix(d.Name(), ".") {
-				return filepath.SkipDir
-			}
-			return nil
+		if onPath[resolved] {
+			return fmt.Errorf("%s: symlink loop", d)
 		}
-		switch {
-		case strings.HasSuffix(p, ".html"):
-			files = append(files, p)
-		case strings.HasSuffix(p, ".lisp") && !strings.HasSuffix(p, "_test.lisp"):
-			files = append(files, p)
+		onPath[resolved] = true
+		defer delete(onPath, resolved)
+		ents, err := os.ReadDir(d)
+		if err != nil {
+			return err
+		}
+		for _, e := range ents {
+			p := filepath.Join(d, e.Name())
+			info, err := FollowEntry(d, e, check)
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				if strings.HasPrefix(e.Name(), ".") {
+					continue
+				}
+				if err := walk(p); err != nil {
+					return err
+				}
+				continue
+			}
+			switch {
+			case strings.HasSuffix(p, ".html"):
+				files = append(files, p)
+			case strings.HasSuffix(p, ".lisp") && !strings.HasSuffix(p, "_test.lisp"):
+				files = append(files, p)
+			}
 		}
 		return nil
-	})
-	if err != nil {
+	}
+	if err := walk(dir); err != nil {
 		return nil, err
 	}
 	sort.Strings(files)

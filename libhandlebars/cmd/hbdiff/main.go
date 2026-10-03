@@ -214,7 +214,7 @@ type ctxFile struct {
 func loadInputs(cfg *config) (*inputs, error) {
 	var tpls []hbdiff.Template
 	if cfg.phylum != "" {
-		found, err := hbdiff.ExtractPhylum(cfg.phylum)
+		found, err := hbdiff.ExtractPhylum(cfg.phylum, outsideSvc)
 		if err != nil {
 			return nil, fmt.Errorf("-phylum: %w", err)
 		}
@@ -264,7 +264,7 @@ func loadInputs(cfg *config) (*inputs, error) {
 	in.unmatched = len(keys)
 	in.index = index.Bytes()
 	if cfg.casesDir != "" {
-		cs, err := hbdiff.LoadShapes(cfg.casesDir)
+		cs, err := hbdiff.LoadShapes(cfg.casesDir, outsideSvc)
 		if err != nil {
 			return nil, fmt.Errorf("-cases: %w", err)
 		}
@@ -336,25 +336,22 @@ func loadContexts(dir string) ([]ctxFile, map[string][]ctxFile, error) {
 }
 
 // ctxEntryIsDir reports whether the -ctx entry e of dir is a directory,
-// following a symlink. A symlink that resolves into an svc work tree, or
-// that does not resolve, is an error.
+// following a symlink once outsideSvc accepts its target.
 func ctxEntryIsDir(dir string, e fs.DirEntry) (bool, error) {
-	if e.Type()&fs.ModeSymlink == 0 {
-		return e.IsDir(), nil
-	}
-	p := filepath.Join(dir, e.Name())
-	r, err := filepath.EvalSymlinks(p)
+	info, err := hbdiff.FollowEntry(dir, e, outsideSvc)
 	if err != nil {
 		return false, fmt.Errorf("-ctx: %w", err)
 	}
-	if root := svcWorkTree(r); root != "" {
-		return false, fmt.Errorf("refusing -ctx entry %s: it links into the svc work tree %s; private inputs stay outside the repository", p, root)
+	return info.IsDir(), nil
+}
+
+// outsideSvc is the LinkCheck for every input: a symlink's target must lie
+// outside any svc work tree, like the input paths themselves.
+func outsideSvc(resolved string) error {
+	if root := svcWorkTree(resolved); root != "" {
+		return fmt.Errorf("refusing a symlink into the svc work tree %s; private inputs stay outside the repository", root)
 	}
-	st, err := os.Stat(r) //nolint:gosec // resolved -ctx entry, checked against the svc work tree above
-	if err != nil {
-		return false, fmt.Errorf("-ctx: %w", err)
-	}
-	return st.IsDir(), nil
+	return nil
 }
 
 // readContextFile reads <dir>/<sub>/<name>. Files that are not .json or

@@ -395,8 +395,8 @@ func TestCtxSymlinks(t *testing.T) {
 	for _, tc := range []struct {
 		name, link, target, want string
 	}{
-		{"key dir into svc", "key2", filepath.Join(svc, "private"), "links into the svc work tree"},
-		{"file into svc", "p.json", filepath.Join(svc, "private", "p.json"), "links into the svc work tree"},
+		{"key dir into svc", "key2", filepath.Join(svc, "private"), "symlink into the svc work tree"},
+		{"file into svc", "p.json", filepath.Join(svc, "private", "p.json"), "symlink into the svc work tree"},
 		{"dangling", "gone.json", filepath.Join(f.root, "nope.json"), "no such file"},
 		{"nested dir", filepath.Join("templates_letter.html", "deeper"), elsewhere, "is a directory"},
 	} {
@@ -407,6 +407,72 @@ func TestCtxSymlinks(t *testing.T) {
 			require.NoError(t, os.Symlink(tc.target, filepath.Join(ctx, tc.link)))
 			out := filepath.Join(f.root, "out-"+strings.ReplaceAll(tc.name, " ", "-"))
 			code, stdout, stderr := runT(t, hbdiff.Ref, "-out", out, "-phylum", f.phylum, "-ctx", ctx)
+			require.Equal(t, exitError, code)
+			require.Contains(t, stderr, tc.want)
+			require.Empty(t, stdout)
+		})
+	}
+}
+
+// TestPhylumAndCasesSymlinks: -phylum and -cases follow symlinks like
+// -ctx, after the same check, and refuse links into svc, dangling links and
+// loops instead of dropping them.
+func TestPhylumAndCasesSymlinks(t *testing.T) {
+	f := newFixture(t)
+	elsewhere := filepath.Join(f.root, "elsewhere")
+	writeFile(t, filepath.Join(elsewhere, "tpl", "linked.html"), secret+" {{name}}")
+	writeFile(t, filepath.Join(elsewhere, "single.html"), secret+" {{n}}")
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "tpl"), filepath.Join(f.phylum, "more")))
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "single.html"), filepath.Join(f.phylum, "single.html")))
+
+	writeFile(t, filepath.Join(elsewhere, "case", "template.hbs"), secret+"{{a}}")
+	writeFile(t, filepath.Join(elsewhere, "case", "ctx", "00.json"), `{"a":1}`)
+	writeFile(t, filepath.Join(elsewhere, "ctx01.json"), `{"a":2}`)
+	cases := filepath.Join(f.root, "cases")
+	writeFile(t, filepath.Join(cases, "one", "template.hbs"), secret+"{{a}}")
+	writeFile(t, filepath.Join(cases, "one", "ctx", "00.json"), `{"a":1}`)
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "ctx01.json"), filepath.Join(cases, "one", "ctx", "01.json")))
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "case"), filepath.Join(cases, "two")))
+
+	code, stdout, stderr := runT(t, hbdiff.Ref, "-out", f.out, "-phylum", f.phylum, "-cases", cases, "-runs", "1")
+	require.Equal(t, exitOK, code, stderr)
+	// 6 phylum templates (4 + 2 through links), each with {}; 3 cases from
+	// 2 case directories whose templates have the same text (one template).
+	require.Contains(t, stdout, "hbdiff: 7 templates, 9 cases")
+	got := readCases(t, f.out)
+	require.Contains(t, got, "more/linked.html#{}")
+	require.Contains(t, got, "single.html#{}")
+	require.Contains(t, got, "shapes/one#01")
+	require.Contains(t, got, "shapes/two#00")
+
+	svc := filepath.Join(f.root, "svc")
+	fakeSvc(t, svc)
+	writeFile(t, filepath.Join(svc, "private", "p.html"), secret+"{{a}}")
+	writeFile(t, filepath.Join(svc, "private", "case", "template.hbs"), secret+"{{a}}")
+	writeFile(t, filepath.Join(svc, "private", "case", "ctx", "00.json"), `{}`)
+	for _, tc := range []struct {
+		name, flag, link, target, want string
+	}{
+		{"phylum dir into svc", "-phylum", "in", filepath.Join(svc, "private"), "symlink into the svc work tree"},
+		{"phylum file into svc", "-phylum", "p.html", filepath.Join(svc, "private", "p.html"), "symlink into the svc work tree"},
+		{"phylum dangling", "-phylum", "gone.html", filepath.Join(f.root, "nope.html"), "no such file"},
+		{"phylum loop", "-phylum", filepath.Join("sub", "up"), ".", "symlink loop"},
+		{"cases dir into svc", "-cases", "c", filepath.Join(svc, "private", "case"), "symlink into the svc work tree"},
+		{"cases ctx into svc", "-cases", filepath.Join("one", "ctx", "01.json"), filepath.Join(svc, "private", "case", "ctx", "00.json"), "symlink into the svc work tree"},
+		{"cases dangling", "-cases", "gone", filepath.Join(f.root, "nope"), "no such file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(f.root, "in-"+strings.ReplaceAll(tc.name, " ", "-"))
+			writeFile(t, filepath.Join(dir, "one", "template.hbs"), "{{a}}")
+			writeFile(t, filepath.Join(dir, "one", "ctx", "00.json"), `{}`)
+			target := tc.target
+			if target == "." {
+				target = dir
+			}
+			require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, tc.link)), 0o700))
+			require.NoError(t, os.Symlink(target, filepath.Join(dir, tc.link)))
+			out := filepath.Join(f.root, "out-"+strings.ReplaceAll(tc.name, " ", "-"))
+			code, stdout, stderr := runT(t, hbdiff.Ref, "-out", out, tc.flag, dir)
 			require.Equal(t, exitError, code)
 			require.Contains(t, stderr, tc.want)
 			require.Empty(t, stdout)
