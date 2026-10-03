@@ -472,7 +472,7 @@ var diffFields = []string{"kind", "msg", "out", "determinism"}
 // writeSummary prints the counts table. It names no case and shows no
 // template or context text, so it is safe for a terminal or a CI log.
 func writeSummary(w io.Writer, rep *hbdiff.Report, info summaryInfo) error {
-	cand := "hbs (ModeCompat, DefaultLimits)"
+	cand := "hbs (ModeCompat, DefaultLimits())"
 	if !info.candidate {
 		cand = "none (reference only)"
 	}

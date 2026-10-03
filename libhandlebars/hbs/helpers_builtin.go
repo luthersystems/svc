@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
 )
 
 // Helper calls.
@@ -129,7 +129,11 @@ func (r *renderer) callFunc(name string, h *helper, params []any, hash map[strin
 		c.args[i] = r.convertArg(name, i, kind, p)
 	}
 	if !h.streams {
-		return h.fn(c)
+		res := h.fn(c)
+		if s, ok := res.(string); ok {
+			r.produced(len(s))
+		}
+		return res
 	}
 	start := len(r.out)
 	h.fn(c)
@@ -144,10 +148,7 @@ func (r *renderer) convertArg(name string, i int, kind argKind, p any) any {
 	case argAny:
 		return p
 	case argString:
-		if s, ok := p.(string); ok {
-			return s
-		}
-		return str(p)
+		return r.str(p)
 	case argBool:
 		if b, ok := p.(bool); ok {
 			return b
@@ -185,7 +186,7 @@ func (c *hcall) argStr(i int) string {
 	return s
 }
 
-func (c *hcall) hashStr(name string) string { return str(c.hash[name]) }
+func (c *hcall) hashStr(name string) string { return c.r.str(c.hash[name]) }
 
 // sortedHashValues returns the hash values in sorted key order.
 func (c *hcall) sortedHashValues() []any {
@@ -311,7 +312,7 @@ func helperEach(c *hcall) any {
 }
 
 func helperEqual(c *hcall) any {
-	if str(c.args[0]) == str(c.args[1]) {
+	if c.r.str(c.args[0]) == c.r.str(c.args[1]) {
 		c.fn()
 	}
 	return nil

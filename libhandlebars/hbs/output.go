@@ -28,30 +28,80 @@ func (r *renderer) step() {
 	}
 }
 
-// flush charges the pending steps.
+// flush charges the pending steps, then applies MaxSteps. A Meter error wins
+// over the step limit when one batch passes both.
 func (r *renderer) flush() {
 	if r.pending == 0 {
 		return
 	}
 	n := r.pending
 	r.pending = 0
-	if r.meter == nil {
-		return
+	r.steps += n
+	if r.meter != nil {
+		if err := r.meter.Charge(n); err != nil {
+			panic(meterError{err})
+		}
 	}
-	if err := r.meter.Charge(n); err != nil {
-		panic(meterError{err})
+	if r.steps > r.maxSteps {
+		panic(errorf(KindLimit, "template evaluation exceeds the maximum of %d steps", r.maxSteps))
 	}
 }
 
-// reserve fails the render if n more bytes would pass MaxOutputBytes.
+// reserve fails the render if n more bytes would pass MaxOutputBytes, or
+// would take the bytes the render has produced past maxProduced.
 func (r *renderer) reserve(n int) {
 	if n > r.maxOut-len(r.out) {
 		panic(errorf(KindLimit, "rendered output exceeds the maximum of %d bytes", r.maxOut))
 	}
+	r.reserveProduced(n)
 }
 
-// wrote accounts for n bytes appended to the output: one step for every
-// started KiB of everything written so far.
+// reserveProduced fails the render if n more produced bytes would pass
+// maxProduced. Produced bytes are everything the render has written to the
+// output, including sections a helper captured as a string and later
+// dropped, plus every string a helper built. They bound the heap a render
+// can hold, since captured strings and helper results can stay alive in
+// hash arguments after the output is truncated.
+func (r *renderer) reserveProduced(n int) {
+	if int64(n) > r.maxProduced-r.written {
+		panic(errorf(KindLimit, "template evaluation produces more than %d bytes", r.maxProduced))
+	}
+}
+
+// produced accounts for a string of n bytes built by a helper, as wrote does
+// for output.
+func (r *renderer) produced(n int) {
+	if n <= 0 {
+		return
+	}
+	r.reserveProduced(n)
+	r.wrote(n)
+}
+
+// read charges one step per started KiB of a string a helper reads.
+func (r *renderer) read(n int) {
+	if n <= 0 {
+		return
+	}
+	r.pending += int64(n-1)>>10 + 1
+	if r.pending >= meterBatch {
+		r.flush()
+	}
+}
+
+// str is str(v) with its cost: reading a string, or building one.
+func (r *renderer) str(v any) string {
+	if s, ok := v.(string); ok {
+		r.read(len(s))
+		return s
+	}
+	s := str(v)
+	r.produced(len(s))
+	return s
+}
+
+// wrote accounts for n bytes produced: one step for every started KiB of
+// everything produced so far.
 func (r *renderer) wrote(n int) {
 	r.written += int64(n)
 	kib := (r.written + 1023) >> 10

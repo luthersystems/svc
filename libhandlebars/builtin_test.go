@@ -123,7 +123,8 @@ func TestParseSteps(t *testing.T) {
 	require.Equal(t, base, bad)
 }
 
-// TestRenderSteps: render charges the parse, then the engine's work,
+// TestRenderSteps: render charges the context's JSON, the parse, then the
+// engine's work,
 // including output by started KiB, and the charge is a pure function of
 // (template, context).
 func TestRenderSteps(t *testing.T) {
@@ -136,9 +137,12 @@ func TestRenderSteps(t *testing.T) {
 	}
 	empty := call("")
 	require.Equal(t, empty, call(""), "same input, same steps")
-	require.Equal(t, empty+1, call("x"))
-	require.Equal(t, empty+1, call(strings.Repeat("x", 1024)))
-	require.Equal(t, empty+5, call(strings.Repeat("x", 4097)))
+	// The context's JSON, {"s":"..."}, is len(s)+8 bytes and costs a step
+	// per started KiB; the output costs a step per started KiB too.
+	require.Equal(t, empty+1, call("x"))                         // ctx 1 KiB, output 1
+	require.Equal(t, empty+1, call(strings.Repeat("x", 1016)))   // ctx 1 KiB, output 1
+	require.Equal(t, empty+2, call(strings.Repeat("x", 1024)))   // ctx 2 KiB, output 1
+	require.Equal(t, empty+4+5, call(strings.Repeat("x", 4097))) // ctx 5 KiB, output 5
 
 	// Iterations cost steps.
 	each := func(n int) int64 {

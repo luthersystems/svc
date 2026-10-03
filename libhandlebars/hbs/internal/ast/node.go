@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/floatint"
 )
 
 // References:
@@ -719,9 +721,13 @@ func (node *NumberLiteral) Canonical() string {
 }
 
 // Number returns an integer or a float.
+//
+// An integer literal is parsed as a float64, so one within about 512 of 2^63
+// rounds to 2^63, which int() converts differently on each CPU. The
+// conversion pins the amd64 result (math.MinInt64) everywhere.
 func (node *NumberLiteral) Number() interface{} {
 	if node.IsInt {
-		return int(node.Value)
+		return floatint.ToInt(node.Value)
 	}
 
 	return node.Value

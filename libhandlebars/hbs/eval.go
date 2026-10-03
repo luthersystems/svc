@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
 )
 
 // The evaluator is a port of raymond's eval.go without reflection. It keeps
@@ -35,12 +35,15 @@ type renderer struct {
 	blocks  []*ast.BlockStatement
 	bparams []blockParams
 
-	pending    int64
-	written    int64
-	chargedKiB int64
-	depth      int
-	maxDepth   int
-	maxOut     int
+	pending     int64
+	written     int64
+	chargedKiB  int64
+	steps       int64
+	maxSteps    int64
+	maxProduced int64
+	depth       int
+	maxDepth    int
+	maxOut      int
 
 	mode        Mode
 	rootInvalid bool
@@ -156,11 +159,14 @@ func (r *renderer) safeFlush() error {
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
-				if me, ok := p.(meterError); ok {
-					err = me.err
-					return
+				switch e := p.(type) {
+				case meterError:
+					err = e.err
+				case *Error:
+					err = e
+				default:
+					panic(p)
 				}
-				panic(p)
 			}
 		}()
 		r.flush()

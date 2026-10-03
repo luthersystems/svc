@@ -59,7 +59,7 @@ func BenchmarkParse(b *testing.B) {
 			b.SetBytes(int64(len(tc.src)))
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := Parse(tc.src, DefaultLimits); err != nil {
+				if _, err := Parse(tc.src, DefaultLimits()); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -77,7 +77,7 @@ func BenchmarkParse(b *testing.B) {
 			b.SetBytes(int64(len(tc.src)))
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := ParseCached(tc.src, DefaultLimits); err != nil {
+				if _, err := ParseCached(tc.src, DefaultLimits()); err != nil {
 					b.Fatal(err)
 				}
 			}

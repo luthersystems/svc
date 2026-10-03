@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/parser"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/parser"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,8 +26,8 @@ func requireKind(t *testing.T, err error, kind ErrorKind, msgAndArgs ...any) str
 // TestParseTemplateSize checks MaxTemplateBytes at the cap and at cap+1,
 // through Parse and ParseCached. The cap counts bytes, not runes.
 func TestParseTemplateSize(t *testing.T) {
-	for _, limit := range []int{1, 2, 100, 4096, DefaultLimits.MaxTemplateBytes} {
-		lim := Limits{MaxTemplateBytes: limit, MaxDepth: DefaultLimits.MaxDepth}
+	for _, limit := range []int{1, 2, 100, 4096, DefaultLimits().MaxTemplateBytes} {
+		lim := Limits{MaxTemplateBytes: limit, MaxDepth: DefaultLimits().MaxDepth}
 		c := newParseCache(cacheMaxBytes)
 		for name, build := range map[string]func(n int) string{
 			"ascii": func(n int) string { return strings.Repeat("x", n) },
@@ -64,11 +64,11 @@ func TestParseSizeCheckedFirst(t *testing.T) {
 }
 
 func TestParseZeroLimitsAreDefaults(t *testing.T) {
-	_, err := Parse(strings.Repeat("x", DefaultLimits.MaxTemplateBytes+1), Limits{})
+	_, err := Parse(strings.Repeat("x", DefaultLimits().MaxTemplateBytes+1), Limits{})
 	requireKind(t, err, KindLimit)
-	_, err = Parse(nest(DefaultLimits.MaxDepth+1, "{{#if a}}", "{{/if}}"), Limits{})
+	_, err = Parse(nest(DefaultLimits().MaxDepth+1, "{{#if a}}", "{{/if}}"), Limits{})
 	requireKind(t, err, KindLimit)
-	_, err = Parse(nest(DefaultLimits.MaxDepth, "{{#if a}}", "{{/if}}"), Limits{})
+	_, err = Parse(nest(DefaultLimits().MaxDepth, "{{#if a}}", "{{/if}}"), Limits{})
 	require.NoError(t, err)
 }
 
@@ -110,7 +110,7 @@ var depthCases = map[string]func(n int) string{
 }
 
 func TestParseDepthLimit(t *testing.T) {
-	for _, limit := range []int{1, 2, 7, DefaultLimits.MaxDepth} {
+	for _, limit := range []int{1, 2, 7, DefaultLimits().MaxDepth} {
 		lim := Limits{MaxTemplateBytes: 1 << 20, MaxDepth: limit}
 		for name, build := range depthCases {
 			if limit < 4 && (name == "chainsexpr" || name == "blocksexpr") {
@@ -177,7 +177,7 @@ const testMaxStack = 4 << 20
 func TestParseMillionNestedIf(t *testing.T) {
 	const n = 1_000_000
 	src := nest(n, "{{#if a}}", "{{/if}}")
-	big := Limits{MaxTemplateBytes: 1 << 30, MaxDepth: DefaultLimits.MaxDepth}
+	big := Limits{MaxTemplateBytes: 1 << 30, MaxDepth: DefaultLimits().MaxDepth}
 
 	var err error
 	var took time.Duration
@@ -187,7 +187,7 @@ func TestParseMillionNestedIf(t *testing.T) {
 		took = time.Since(start)
 	})
 	msg := requireKind(t, err, KindLimit)
-	require.Equal(t, fmt.Sprintf("Parse error on line 1:\ntemplate nesting depth exceeds limit of %d", DefaultLimits.MaxDepth), msg)
+	require.Equal(t, fmt.Sprintf("Parse error on line 1:\ntemplate nesting depth exceeds limit of %d", DefaultLimits().MaxDepth), msg)
 	require.Less(t, took, time.Second)
 	t.Logf("%d nested {{#if}}: %v", n, took)
 }
@@ -197,7 +197,7 @@ func TestParseMillionNestedIf(t *testing.T) {
 // parser alone (its own depth counter, without the prescan).
 func TestParseDeepNestingFailsFast(t *testing.T) {
 	const n = 1_000_000
-	big := Limits{MaxTemplateBytes: 1 << 30, MaxDepth: DefaultLimits.MaxDepth}
+	big := Limits{MaxTemplateBytes: 1 << 30, MaxDepth: DefaultLimits().MaxDepth}
 	for name, src := range map[string]string{
 		"block":   nest(n, "{{#if a}}", "{{/if}}"),
 		"open":    strings.Repeat("{{#if a}}", n),
@@ -210,7 +210,7 @@ func TestParseDeepNestingFailsFast(t *testing.T) {
 	} {
 		for _, parse := range []func() error{
 			func() error {
-				_, err := Parse(src, DefaultLimits)
+				_, err := Parse(src, DefaultLimits())
 				requireKind(t, err, KindLimit, name) // the size cap
 				return nil
 			},
@@ -221,7 +221,7 @@ func TestParseDeepNestingFailsFast(t *testing.T) {
 				return nil
 			},
 			func() error {
-				_, err := parser.ParseLimit(src, DefaultLimits.MaxDepth)
+				_, err := parser.ParseLimit(src, DefaultLimits().MaxDepth)
 				var lerr *parser.LimitError
 				require.ErrorAs(t, err, &lerr, name)
 				return nil
@@ -258,20 +258,20 @@ func TestParseLeaksNoGoroutines(t *testing.T) {
 		"{{#if a}}", "{{x", "{{! x", "{{!-- x", "{{f \"x}}", "{{/if}}", "{{{{raw}}}}x", "{{x.5}}",
 		"{{#if (f}}{{/if}}", "{{#if a}}{{/unless}}", "x\n{{f (g}}\ny", "{{[x", "{{#each a as |b}}",
 	}
-	deep := nest(DefaultLimits.MaxDepth+1, "{{#if a}}", "{{/if}}")
+	deep := nest(DefaultLimits().MaxDepth+1, "{{#if a}}", "{{/if}}")
 	before := runtime.NumGoroutine()
 	c := newParseCache(cacheMaxBytes)
 	for i := range 10_000 {
 		src := bad[i%len(bad)]
-		_, err := Parse(src, DefaultLimits)
+		_, err := Parse(src, DefaultLimits())
 		requireKind(t, err, KindParse, src)
 		// a different source each time, so the cache misses
-		_, err = c.parse(src+strings.Repeat(" ", i%64), DefaultLimits)
+		_, err = c.parse(src+strings.Repeat(" ", i%64), DefaultLimits())
 		requireKind(t, err, KindParse, src)
 		_, err = parser.Parse(src)
 		require.Error(t, err, src)
 		if i%10 == 0 {
-			_, err = Parse(deep, DefaultLimits)
+			_, err = Parse(deep, DefaultLimits())
 			requireKind(t, err, KindLimit)
 			_, err = Parse(src, Limits{MaxTemplateBytes: 1, MaxDepth: 1})
 			requireKind(t, err, KindLimit)
@@ -324,7 +324,7 @@ func TestParseScalesLinearly(t *testing.T) {
 	if testing.Short() || raceEnabled {
 		t.Skip("timing test: skipped with -short and -race")
 	}
-	lim := Limits{MaxTemplateBytes: 4 << 20, MaxDepth: DefaultLimits.MaxDepth}
+	lim := Limits{MaxTemplateBytes: 4 << 20, MaxDepth: DefaultLimits().MaxDepth}
 	for name, build := range scalingShapes {
 		var times [3]time.Duration
 		for i, n := range []int{10 << 10, 100 << 10, 1 << 20} {

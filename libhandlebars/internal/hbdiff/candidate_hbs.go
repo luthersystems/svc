@@ -20,7 +20,7 @@ import (
 // json.Unmarshal into map[string]interface{} reports. The order matches the
 // builtin: decode the context, then parse, then render.
 
-// HBSCandidate renders through hbs in ModeCompat with DefaultLimits.
+// HBSCandidate renders through hbs in ModeCompat with DefaultLimits().
 func HBSCandidate(tpl string, ctxJSON []byte) Result {
 	var r Result
 	func() {
@@ -35,11 +35,11 @@ func hbsRender(tpl string, ctxJSON []byte) Result {
 	if err != nil {
 		return Result{ErrKind: KindUnmarshal, ErrMsg: "error while unmarshaling: " + err.Error()}
 	}
-	p, err := hbs.Parse(tpl, hbs.DefaultLimits)
+	p, err := hbs.Parse(tpl, hbs.DefaultLimits())
 	if err != nil {
 		return hbsError(err, "error parsing template: ")
 	}
-	out, err := p.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: hbs.DefaultLimits})
+	out, err := p.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: hbs.DefaultLimits()})
 	if err != nil {
 		return hbsError(err, "error while rendering template: ")
 	}
@@ -51,7 +51,7 @@ func HBSParseCandidate(tpl string) Result {
 	var r Result
 	func() {
 		defer recoverCandidate(&r)
-		if _, err := hbs.Parse(tpl, hbs.DefaultLimits); err != nil {
+		if _, err := hbs.Parse(tpl, hbs.DefaultLimits()); err != nil {
 			r = hbsError(err, "error parsing template: ")
 		}
 	}()

@@ -35,5 +35,7 @@ kinds:*->limit | never | #106 | D4: the engine enforces Limits that raymond did 
 # {{to-int (div 0 0)}}, {{to-int (mod 1 0)}} (NaN); {{to-int x}} for a
 # context x of 1e19, -1e19, 2^63 or any |x| >= 2^63 except exactly -2^63;
 # any to-int argument computed by times, div, mod, plus or minus that is
-# non-finite or out of int64 range. On amd64 nothing here matches.
-arch:!amd64 && tpl:to-int && field:out && candout:-9223372036854775808 | never | #110 | to-int on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64
+# non-finite or out of int64 range. Integer literals within about 512 of
+# 2^63 ({{to-str 9223372036854775807}}) parse to the float64 2^63 and
+# convert by the same pinned rule. On amd64 nothing here matches.
+arch:!amd64 && field:out && candout:-9223372036854775808 | never | #110 | to-int, or an int literal near 2^63, on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64

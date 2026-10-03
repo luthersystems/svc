@@ -58,3 +58,17 @@ Those runs are allowed differences for non-amd64 reference runs.
 
 On an amd64 peer nothing changes. A non-amd64 peer that ran raymond rendered
 different text for these inputs; it now renders the amd64 text.
+
+## Integer literals near 2^63
+
+The lexer parses a template's number literal as a float64, and an integer
+literal is then converted with `int()`. A literal within about 512 of 2^63
+(for example `9223372036854775807`) rounds to the float64 2^63, which is out
+of range, so raymond's `int()` gave math.MinInt64 on amd64 and saturated on
+arm64. `ast.NumberLiteral.Number` now converts with the same pinned rule as
+`to-int` (`internal/floatint`), in both modes: `{{to-str
+9223372036854775807}}` renders `-9223372036854775808` on every CPU. A
+literal of 9223372036854775295 or less is in range and unchanged.
+
+The harness allowlist entry for non-amd64 reference runs covers these
+cases too. On amd64 nothing changes.

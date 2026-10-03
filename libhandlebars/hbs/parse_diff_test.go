@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
 	refast "github.com/luthersystems/svc/libhandlebars/internal/raymondref/ast"
 	refparser "github.com/luthersystems/svc/libhandlebars/internal/raymondref/parser"
 	"github.com/stretchr/testify/require"
@@ -117,7 +117,7 @@ const refPrintMaxBytes = 32 << 10
 // engineParse parses with the production limits. ok is false when the
 // template is over a limit, where raymond's behaviour is not reproduced.
 func engineParse(t testing.TB, src string) (parseResult, bool) {
-	prog, err := Parse(src, DefaultLimits)
+	prog, err := Parse(src, DefaultLimits())
 	if err != nil {
 		var herr *Error
 		if !errors.As(err, &herr) {
@@ -134,7 +134,7 @@ func engineParse(t testing.TB, src string) (parseResult, bool) {
 	if prog.SourceLen() != len(src) {
 		t.Fatalf("SourceLen %d, want %d", prog.SourceLen(), len(src))
 	}
-	return parseResult{print: ast.Print(prog.AST()), tree: dump(prog.AST())}, true
+	return parseResult{print: ast.Print(prog.ast), tree: dump(prog.ast)}, true
 }
 
 // checkSame fails t when the engine and raymondref disagree on src.

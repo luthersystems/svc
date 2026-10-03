@@ -52,9 +52,9 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 // Template is a parsed template.
 type Template = *hbs.Program
 
-// Parse parses a template with hbs.DefaultLimits.
+// Parse parses a template with hbs.DefaultLimits().
 func Parse(template string) (Template, error) {
-	return hbs.ParseCached(template, hbs.DefaultLimits)
+	return hbs.ParseCached(template, hbs.DefaultLimits())
 }
 
 // Render renders tpl in hbs.ModeCompat, as handlebars:render does. ctx is
@@ -69,7 +69,7 @@ func Render(tpl Template, ctx interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return tpl.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: hbs.DefaultLimits})
+	return tpl.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: hbs.DefaultLimits()})
 }
 
 var builtins = []lisp.LBuiltinDef{
@@ -136,7 +136,7 @@ func parse(env *lisp.LEnv, tpl string) (*hbs.Program, *lisp.LVal) {
 	if lerr := lisp.ChargeStartedKiB(env, len(tpl)); lerr.Type == lisp.LError {
 		return nil, lerr
 	}
-	prog, err := hbs.ParseCached(tpl, hbs.DefaultLimits)
+	prog, err := hbs.ParseCached(tpl, hbs.DefaultLimits())
 	if err != nil {
 		// Syntax errors and template limits (size, nesting) alike.
 		return nil, env.ErrorConditionf(condParse, "error parsing template: %v", err)
@@ -180,6 +180,10 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 			return env.Errorf("error while serializing: %v", err)
 		}
 	}
+	// Decoding the context costs one step per started KiB of its JSON.
+	if lerr := lisp.ChargeStartedKiB(env, len(contextBytes)); lerr.Type == lisp.LError {
+		return lerr
+	}
 	ctx, err := hbs.FromJSON(contextBytes)
 	if err != nil {
 		return env.Errorf("error while unmarshaling: %v", err)
@@ -190,7 +194,7 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 		return lerr
 	}
 	m := &envMeter{env: env}
-	out, err := prog.Render(ctx, hbs.Options{Meter: m, Limits: hbs.DefaultLimits, Mode: mode})
+	out, err := prog.Render(ctx, hbs.Options{Meter: m, Limits: hbs.DefaultLimits(), Mode: mode})
 	if err != nil {
 		if errors.Is(err, errBudget) {
 			return m.lerr

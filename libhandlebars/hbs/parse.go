@@ -3,8 +3,8 @@ package hbs
 import (
 	"errors"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
-	"github.com/luthersystems/svc/libhandlebars/hbs/parser"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/parser"
 )
 
 // Program is a parsed template. It is immutable after Parse returns: the
@@ -16,23 +16,20 @@ type Program struct {
 	srcLen int
 }
 
-// AST returns the processed syntax tree. Callers must not modify it.
-func (p *Program) AST() *ast.Program { return p.ast }
-
 // SourceLen returns the length in bytes of the template source.
 func (p *Program) SourceLen() int { return p.srcLen }
 
 // parseLimits returns the template size and depth limits Parse applies:
-// a non-positive field takes its DefaultLimits value. A zero Limits
+// a non-positive field takes its DefaultLimits() value. A zero Limits
 // therefore means the production limits, never "unlimited": an unlimited
 // depth would let a template overflow the Go stack.
 func parseLimits(lim Limits) (int, int) {
 	maxBytes, maxDepth := lim.MaxTemplateBytes, lim.MaxDepth
 	if maxBytes <= 0 {
-		maxBytes = DefaultLimits.MaxTemplateBytes
+		maxBytes = DefaultLimits().MaxTemplateBytes
 	}
 	if maxDepth <= 0 {
-		maxDepth = DefaultLimits.MaxDepth
+		maxDepth = DefaultLimits().MaxDepth
 	}
 	return maxBytes, maxDepth
 }

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/luthersystems/svc/libhandlebars/hbs/ast"
-	"github.com/luthersystems/svc/libhandlebars/hbs/lexer"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/lexer"
 )
 
 // References:

@@ -29,16 +29,21 @@ const (
 // Limits bound the work one template can cause. They are code constants for
 // production: every endorser must apply the same values.
 type Limits struct {
-	MaxTemplateBytes int // template source length
-	MaxDepth         int // nesting of blocks, subexpressions and paths
-	MaxOutputBytes   int // rendered output length
+	MaxTemplateBytes int   // template source length
+	MaxDepth         int   // nesting of blocks, subexpressions and paths
+	MaxOutputBytes   int   // rendered output length
+	MaxSteps         int64 // evaluation steps (the Meter's units), with or without a Meter
 }
 
-// DefaultLimits are the production limits.
-var DefaultLimits = Limits{
-	MaxTemplateBytes: 1 << 20,
-	MaxDepth:         256,
-	MaxOutputBytes:   16 << 20,
+// DefaultLimits returns the production limits. It is a function, not a
+// variable, so no package can change the limits every caller applies.
+func DefaultLimits() Limits {
+	return Limits{
+		MaxTemplateBytes: 1 << 20,
+		MaxDepth:         256,
+		MaxOutputBytes:   16 << 20,
+		MaxSteps:         1 << 25,
+	}
 }
 
 // Meter charges evaluation work against the caller's budget (the ELPS step
