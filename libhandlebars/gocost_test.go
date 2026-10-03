@@ -73,6 +73,7 @@ func TestGoContextCostCeiling(t *testing.T) {
 		{"%v of a 100k map[any]any", `{{prettyp-num-en m}}`, map[string]any{"m": bigMap}, true},
 		{"chan type with 4 MiB tag", `{{c}}`, map[string]any{"c": reflect.MakeChan(bigTag, 0).Interface()}, true},
 		{"boxing 1 MiB structs", `{{#each xs}}{{#each ../ys}}{{/each}}{{/each}}`, map[string]any{"xs": make([]int, 32), "ys": []struct{ Big [1 << 20]byte }{{}}}, false},
+		{"1000-level embedding lookups", `{{#each xs}}{{leaf}}{{/each}}`, map[string]any{"xs": reflect.MakeSlice(reflect.SliceOf(embedChain(1000)), 20000, 20000).Interface()}, false},
 		{"wide each", `{{#each xs}}{{f4999}}{{/each}}`, map[string]any{"xs": wides}, false},
 		{"deep path", `{{#each xs}}{{` + deepPath.String() + `}}{{/each}}`, map[string]any{"xs": []any{reflect.New(cur).Elem().Interface(), reflect.New(cur).Elem().Interface()}}, false},
 		{"long name", `{{#each xs}}{{` + long + `}}{{/each}}`, map[string]any{"xs": structs[:2000]}, false},

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -547,4 +548,51 @@ func TestEncodeNativesAsJSON(t *testing.T) {
 			require.Equal(t, first, steps, "run %d", i)
 		}
 	})
+}
+
+// embedChain returns a struct type embedding n levels deep, with a Leaf
+// field promoted from the bottom.
+func embedChain(n int) reflect.Type {
+	t := reflect.StructOf([]reflect.StructField{{Name: "Leaf", Type: reflect.TypeFor[int]()}})
+	for i := range n {
+		t = reflect.StructOf([]reflect.StructField{
+			{Name: "E" + strconv.Itoa(i), Type: t, Anonymous: true},
+			{Name: "X" + strconv.Itoa(i), Type: reflect.TypeFor[int]()},
+		})
+	}
+	return t
+}
+
+// TestNativeCostCeiling: natives whose encoding visits many skipped or
+// deeply promoted fields stay within the cost model's ceiling, end to end.
+func TestNativeCostCeiling(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	sparseFields := make([]reflect.StructField, 2000)
+	for i := range sparseFields {
+		sparseFields[i] = reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int](), Tag: `json:",omitempty"`}
+	}
+	sparse := reflect.MakeSlice(reflect.SliceOf(reflect.StructOf(sparseFields)), 2000, 2000).Interface()
+	deep := reflect.MakeSlice(reflect.SliceOf(embedChain(1000)), 300, 300).Interface()
+	for name, native := range map[string]any{"2000 empty omitempty fields x2000": sparse, "1000-level embedding x300": deep} {
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 1 << 30
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		best := 0.0
+		for range 3 {
+			start := time.Now()
+			res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+			require.Equal(t, lisp.LString, res.Type, "%v", res)
+			if per := float64(time.Since(start).Nanoseconds()) / float64(steps); best == 0 || per < best {
+				best = per
+			}
+		}
+		t.Logf("%-36s %.0f ns/step", name, best)
+		if best > 200 {
+			t.Errorf("%s: %.0f ns per step, ceiling 200", name, best)
+		}
+	}
 }

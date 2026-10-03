@@ -185,6 +185,8 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 		p := r.plan(ctx.Type())
 		r.hashKey(len(name))
 		if f, ok := p.byName[r.title(name)]; ok && f.IsExported() {
+			// A promoted field is len(f.Index) hops down embedded structs.
+			r.steps1(units(len(f.Index), 8)) // about 9 ns a hop
 			fv, err := ctx.FieldByIndexErr(f.Index)
 			if err != nil {
 				r.errorf("%s", err.Error())

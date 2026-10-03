@@ -3,9 +3,11 @@
 package libhandlebars
 
 import (
+	"bytes"
 	"cmp"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -70,10 +72,52 @@ func (t *jsonTotals) add(o jsonTotals) {
 
 type jsonWalker struct {
 	c        jsonCoster
-	maxDepth int // container nesting allowed (0: none, as encoding/json)
 	path     map[any]int
-	pathType []reflect.Type // the types of the pointer-like values on the path
 	memo     map[jsonMemoKey]jsonTotals
+	typed1   map[reflect.Type]bool // struct types whose field list this walk has charged
+	pathType []reflect.Type        // the types of the pointer-like values on the path
+	skipped  []skippedMarshaler    // methods passed over, in encoding/json's order
+	maxDepth int                   // container nesting allowed (0: none, as encoding/json)
+}
+
+// skippedMarshaler is a MarshalJSON or MarshalText the walk did not call.
+type skippedMarshaler struct {
+	v    reflect.Value
+	text bool
+}
+
+// marshalerLeaf records a Marshaler or TextMarshaler value encoding/json
+// would call (a nil pointer it writes as null, without calling).
+func (w *jsonWalker) marshalerLeaf(v reflect.Value, text bool) (jsonTotals, error) {
+	if v.Kind() != reflect.Pointer || !v.IsNil() {
+		w.skipped = append(w.skipped, skippedMarshaler{v, text})
+	}
+	return w.leaf(4)
+}
+
+// firstMarshalerError calls the methods the walk passed over, in
+// encoding/json's order, and returns the first error encoding/json would
+// report for one (with its text), or nil. The walk failed after them, so
+// encoding/json would have called each before reaching that failure.
+func (w *jsonWalker) firstMarshalerError() error {
+	for _, m := range w.skipped {
+		if m.text {
+			if _, err := m.v.Interface().(encoding.TextMarshaler).MarshalText(); err != nil { //nolint:forcetypeassert // recorded as one
+				return &jsonFailure{"json: error calling MarshalText for type " + m.v.Type().String() + ": " + err.Error()}
+			}
+			continue
+		}
+		b, err := m.v.Interface().(json.Marshaler).MarshalJSON() //nolint:forcetypeassert // recorded as one
+		if err == nil {
+			// encoding/json compacts the bytes, which checks them.
+			var buf bytes.Buffer
+			err = json.Compact(&buf, b)
+		}
+		if err != nil {
+			return &jsonFailure{"json: error calling MarshalJSON for type " + m.v.Type().String() + ": " + err.Error()}
+		}
+	}
+	return nil
 }
 
 type jsonMemoKey struct {
@@ -87,6 +131,12 @@ type jsonMemoKey struct {
 func goJSONCost(c jsonCoster, v reflect.Value, maxDepth int) error {
 	w := &jsonWalker{c: c, maxDepth: maxDepth, path: map[any]int{}, memo: map[jsonMemoKey]jsonTotals{}}
 	_, err := w.value(v, 0)
+	var fail *jsonFailure
+	if errors.As(err, &fail) && len(w.skipped) > 0 {
+		if merr := w.firstMarshalerError(); merr != nil {
+			return merr
+		}
+	}
 	return err
 }
 
@@ -104,16 +154,16 @@ func (w *jsonWalker) value(v reflect.Value, depth int) (jsonTotals, error) {
 // typed is newTypeEncoder(t, allowAddr) applied to v.
 func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
 	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(marshalerType) && v.CanAddr() {
-		return w.leaf(4)
+		return w.marshalerLeaf(v.Addr(), false)
 	}
 	if t.Implements(marshalerType) {
-		return w.leaf(4)
+		return w.marshalerLeaf(v, false)
 	}
 	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(textMarshalerType) && v.CanAddr() {
-		return w.leaf(4)
+		return w.marshalerLeaf(v.Addr(), true)
 	}
 	if t.Implements(textMarshalerType) {
-		return w.leaf(4)
+		return w.marshalerLeaf(v, true)
 	}
 	switch t.Kind() {
 	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -177,7 +227,13 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 		if v.IsNil() {
 			return w.leaf(4)
 		}
-		return w.pointerLike(v, v.UnsafePointer(), func() (jsonTotals, error) {
+		// encoding/json keys a pointer by v.Interface(): its type and
+		// address, so a pointer to a struct's first field is not the
+		// struct's pointer. Maps and slices are keyed by address alone.
+		return w.pointerLike(v, struct {
+			t reflect.Type
+			p any
+		}{t, v.UnsafePointer()}, func() (jsonTotals, error) {
 			return w.typed(v.Elem(), t.Elem(), true, depth)
 		})
 	default: // Complex, Chan, Func, UnsafePointer
@@ -285,6 +341,13 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			kvs = append(kvs, kv{ks, it.Value()})
 		}
 		slices.SortFunc(kvs, func(a, b kv) int { return strings.Compare(a.ks, b.ks) })
+		for i := 1; i < len(kvs); i++ {
+			if kvs[i].ks == kvs[i-1].ks {
+				// encoding/json writes both, in Go's map order, and a
+				// decoder keeps the last: the result would vary by run.
+				return tot, &jsonFailure{fmt.Sprintf("json: map %s has two keys that encode as %q", t.String(), kvs[i].ks)}
+			}
+		}
 		for _, e := range kvs {
 			sub, err := w.leaf(jsonStringLen(e.ks) + 1)
 			tot.add(sub)
@@ -325,12 +388,24 @@ func (w *jsonWalker) structValue(v reflect.Value, t reflect.Type, depth int) (js
 	if err := w.nest(depth); err != nil {
 		return jsonTotals{}, err
 	}
+	fields, err := w.fields(t)
+	if err != nil {
+		return jsonTotals{}, err
+	}
 	tot, err := w.leaf(2)
 	if err != nil {
 		return tot, err
 	}
 FieldLoop:
-	for _, f := range jsonFields(t) {
+	for _, f := range fields {
+		// Every field costs a visit and its index hops, skipped or not:
+		// encoding/json follows f.index and tests omitempty for each (and
+		// the walk did too): about 2 ns a hop in all.
+		visit := 1 + int64(len(f.index)/4)
+		tot.steps += visit
+		if err := w.c.steps(visit); err != nil {
+			return tot, err
+		}
 		fv := v
 		for _, i := range f.index {
 			if fv.Kind() == reflect.Pointer {
@@ -356,6 +431,44 @@ FieldLoop:
 		}
 	}
 	return tot, nil
+}
+
+// fields returns jsonFields(t), charging building the list the first time
+// this walk meets t, cached or not: 12 steps a field (embedded structs'
+// included) and a step per started 16 bytes of tags.
+func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
+	if !w.typed1[t] {
+		if w.typed1 == nil {
+			w.typed1 = map[reflect.Type]bool{}
+		}
+		w.typed1[t] = true
+		var n int64
+		var count func(t reflect.Type, seen map[reflect.Type]bool)
+		count = func(t reflect.Type, seen map[reflect.Type]bool) {
+			if seen[t] {
+				return
+			}
+			seen[t] = true
+			for i := range t.NumField() {
+				f := t.Field(i)
+				n += 12 + int64((len(f.Tag)+15)/16)
+				if f.Anonymous {
+					ft := f.Type
+					if ft.Kind() == reflect.Pointer {
+						ft = ft.Elem()
+					}
+					if ft.Kind() == reflect.Struct {
+						count(ft, seen)
+					}
+				}
+			}
+		}
+		count(t, map[reflect.Type]bool{})
+		if err := w.c.steps(n); err != nil {
+			return nil, err
+		}
+	}
+	return jsonFields(t), nil
 }
 
 // isEmptyValue is encoding/json's omitempty test.

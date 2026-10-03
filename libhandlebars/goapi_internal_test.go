@@ -4,10 +4,14 @@ package libhandlebars
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 	"math"
+	"math/big"
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -98,6 +102,17 @@ type (
 	jsCC struct{ A *jsCA }
 )
 
+type jsInner struct{ N int }
+
+type jsOuter struct {
+	First jsInner
+	Self  *jsInner
+}
+
+type jsBadText struct{ X int }
+
+func (jsBadText) MarshalText() ([]byte, error) { return nil, errors.New("no text") }
+
 type jsText struct{ S string }
 
 func (t jsText) MarshalText() ([]byte, error) { return []byte("t:" + t.S), nil }
@@ -140,6 +155,8 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 	type mixedA struct{ M map[string]any }
 	ma := &mixedA{M: map[string]any{}}
 	ma.M["a"] = ma
+	outer := &jsOuter{}
+	outer.Self = &outer.First
 	ca := &jsCA{B: &jsCB{C: &jsCC{}}}
 	ca.B.C.A = ca
 	var deep any = 1
@@ -149,10 +166,28 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 	shared := &jsEmbedA{1, 2}
 	dag := map[string]any{"a": shared, "b": shared, "c": []any{shared, shared}}
 	for name, v := range map[string]any{
-		"pointer cycle":      cyc,
-		"map cycle":          selfMap,
-		"slice cycle":        selfSlice,
-		"mixed cycle":        ma,
+		"pointer cycle":       cyc,
+		"map cycle":           selfMap,
+		"slice cycle":         selfSlice,
+		"mixed cycle":         ma,
+		"first-field pointer": outer,
+		"bad RawMessage first": struct {
+			X json.RawMessage
+			Y chan int
+		}{X: json.RawMessage("{")},
+		"bad time first": struct {
+			T time.Time
+			F float64
+		}{time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC), math.NaN()},
+		"bad text then cycle": struct {
+			B jsBadText
+			C *jsCycle
+		}{C: cyc},
+		"good marshalers then NaN": struct {
+			T time.Time
+			R json.RawMessage
+			F float64
+		}{time.Unix(0, 0).UTC(), json.RawMessage(`{"a": 1}`), math.Inf(1)},
 		"three-type cycle":   ca,
 		"cycle after prefix": map[string]any{"x": []any{[]any{ca.B}}},
 		"unexported and -":   jsHidden{Ok: 1},
@@ -191,5 +226,18 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 			}
 			steps = bud.used
 		}
+	}
+}
+
+// TestGoJSONCostDuplicateKeys: a map whose keys encode to the same text is
+// refused, as encoding/json would write them in Go's map order.
+func TestGoJSONCostDuplicateKeys(t *testing.T) {
+	m := map[*big.Int]string{}
+	for i := range 8 {
+		m[big.NewInt(1)] = strconv.Itoa(i)
+	}
+	for range 10 {
+		err := goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(m), 0)
+		require.EqualError(t, err, `json: map map[*big.Int]string has two keys that encode as "1"`)
 	}
 }
