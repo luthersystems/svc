@@ -3,6 +3,7 @@ package libhandlebars
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/luthersystems/elps/elpsutil"
 	"github.com/luthersystems/elps/lisp"
@@ -174,10 +175,10 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 	case lisp.LBytes:
 		contextBytes = context.Bytes()
 	default:
-		var err error
-		contextBytes, err = libjson.DefaultSerializer().Dump(context, false)
-		if err != nil {
-			return env.Errorf("error while serializing: %v", err)
+		var lerr *lisp.LVal
+		contextBytes, lerr = dumpContext(env, context)
+		if lerr != nil {
+			return lerr
 		}
 	}
 	// Decoding the context costs one step per started KiB of its JSON.
@@ -203,6 +204,41 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 		return env.ErrorConditionf(condRender, "error while rendering template: %v", err)
 	}
 	return lisp.String(out)
+}
+
+// dumpContext serializes an ELPS render context to JSON as json:dump-bytes
+// does, with :string-numbers false: under the runtime's allocation cap
+// (Runtime.MaxAlloc) and evaluation context, charged per KiB written. The
+// bytes are those libjson's Dump writes.
+//
+// A failure that is not one of those limits is reported as before, as
+// "error while serializing: <Dump's error>": Dump runs again only then, on a
+// value the capped walk has already reached the end of or failed inside for
+// a reason other than its size.
+func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
+	s := libjson.DefaultSerializer()
+	res := s.DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
+	if res.Type != lisp.LError {
+		return res.Bytes(), nil
+	}
+	if isLimitError(res) {
+		return nil, res
+	}
+	if _, err := s.Dump(v, false); err != nil {
+		return nil, env.Errorf("error while serializing: %v", err)
+	}
+	return nil, res
+}
+
+// isLimitError reports whether lerr is a runtime limit: the allocation cap,
+// a step limit or budget, or a cancelled evaluation.
+func isLimitError(lerr *lisp.LVal) bool {
+	switch lerr.Str {
+	case lisp.CondContextCancelled, lisp.CondStepLimitExceeded, lisp.CondStepBudgetExceeded:
+		return true
+	default:
+	}
+	return len(lerr.Cells) > 0 && strings.HasPrefix(lerr.Cells[0].Str, "allocation size exceeds maximum")
 }
 
 // errBudget is what envMeter returns to the engine when the ELPS budget

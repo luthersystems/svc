@@ -296,6 +296,9 @@ func helperEach(c *hcall) any {
 			c.evalBlock(e, frame, key)
 		}
 	case map[string]any:
+		// Collecting and sorting the keys is charged up front, a step per
+		// key, before the work is done.
+		r.steps1(int64(len(x)))
 		keys := make([]string, 0, len(x))
 		for k := range x {
 			keys = append(keys, k)

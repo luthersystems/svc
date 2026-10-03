@@ -139,12 +139,13 @@ func TestRenderSteps(t *testing.T) {
 	}
 	empty := call("")
 	require.Equal(t, empty, call(""), "same input, same steps")
-	// The context's JSON, {"s":"..."}, is len(s)+8 bytes and costs a step
-	// per started KiB; the output costs a step per started KiB too.
-	require.Equal(t, empty+1, call("x"))                         // ctx 1 KiB, output 1
-	require.Equal(t, empty+1, call(strings.Repeat("x", 1016)))   // ctx 1 KiB, output 1
-	require.Equal(t, empty+2, call(strings.Repeat("x", 1024)))   // ctx 2 KiB, output 1
-	require.Equal(t, empty+4+5, call(strings.Repeat("x", 4097))) // ctx 5 KiB, output 5
+	// The context's JSON, {"s":"..."}, is len(s)+8 bytes. Writing it costs
+	// a step per whole KiB (as json:dump-bytes charges), decoding it a step
+	// per started KiB; the output costs a step per started KiB.
+	require.Equal(t, empty+1, call("x"))                           // ctx 0+1, output 1
+	require.Equal(t, empty+2, call(strings.Repeat("x", 1016)))     // ctx 1+1, output 1
+	require.Equal(t, empty+3, call(strings.Repeat("x", 1024)))     // ctx 1+2, output 1
+	require.Equal(t, empty+4+4+5, call(strings.Repeat("x", 4097))) // ctx 4+5, output 5
 
 	// Iterations cost steps.
 	each := func(n int) int64 {
@@ -164,4 +165,31 @@ func TestRenderBudget(t *testing.T) {
 	require.Equal(t, lisp.CondStepBudgetExceeded, v.Str)
 	_, used := env.Runtime.StepBudget()
 	require.Less(t, used, int64(5000+1000))
+}
+
+// TestContextSerializationCapped: the context is serialized under the
+// runtime's allocation cap, as json:dump-bytes is, so a value that shares
+// structure cannot expand into gigabytes of JSON.
+func TestContextSerializationCapped(t *testing.T) {
+	env := newEnv(t)
+	v := lisp.QExpr([]*lisp.LVal{lisp.Int(1)})
+	for range 20 {
+		v = lisp.QExpr([]*lisp.LVal{v, v})
+	}
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("a", v)
+	env.Put(lisp.Symbol("big"), ctx)
+	env.Runtime.MaxAlloc = 1024
+
+	dump, _ := eval(t, env, `(json:dump-bytes big)`)
+	require.Equal(t, lisp.LError, dump.Type)
+	res, _ := eval(t, env, `(handlebars:render "" big)`)
+	require.Equal(t, lisp.LError, res.Type)
+	require.Equal(t, dump.Cells[0].Str, res.Cells[0].Str)
+	require.True(t, strings.HasPrefix(res.Cells[0].Str, "allocation size exceeds maximum"), res.Cells[0].Str)
+
+	// Other serialization errors keep their text.
+	res, _ = eval(t, env, `(handlebars:render "" (sorted-map "f" (lambda () 1)))`)
+	require.Equal(t, lisp.LError, res.Type)
+	require.True(t, strings.HasPrefix(res.Cells[0].Str, "error while serializing: "), res.Cells[0].Str)
 }

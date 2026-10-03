@@ -5,6 +5,7 @@ package hbs
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"runtime"
 	"strings"
 	"testing"
@@ -109,4 +110,16 @@ func TestFmtPrecisionOK(t *testing.T) {
 		accepted := !strings.HasPrefix(got, "%!")
 		require.Equal(t, accepted, fmtPrecisionOK(n), "n=%d", n)
 	}
+}
+
+// TestQueryEscapedLen checks queryEscapedLen against url.QueryEscape for
+// every byte.
+func TestQueryEscapedLen(t *testing.T) {
+	var all []byte
+	for b := range 256 {
+		all = append(all, byte(b))
+		s := string([]byte{byte(b), 'a', byte(b)})
+		require.Equal(t, len(url.QueryEscape(s)), queryEscapedLen(s), "byte %d", b)
+	}
+	require.Equal(t, len(url.QueryEscape(string(all))), queryEscapedLen(string(all)))
 }

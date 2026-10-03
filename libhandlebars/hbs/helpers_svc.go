@@ -207,13 +207,13 @@ func hSelect(c *hcall) any {
 	}
 	key, val := kv[0], kv[1]
 	for _, mi := range items {
-		c.r.step()
+		c.r.stepKiB(len(key))
 		m, isMap := mi.(map[string]any)
 		if !isMap {
 			continue
 		}
 		// svc compares interfaces: only a string field can match.
-		if s, isStr := m[key].(string); isStr && s == val {
+		if s, isStr := m[key].(string); isStr && c.r.compare(s, val) {
 			c.fnWith(m)
 		}
 	}
@@ -285,7 +285,7 @@ func hInStringArray(c *hcall) any {
 	needle := c.hashStr("needle")
 	for _, i := range items {
 		c.r.step()
-		if s, isStr := i.(string); isStr && s == needle {
+		if s, isStr := i.(string); isStr && c.r.compare(s, needle) {
 			return true
 		}
 	}
@@ -296,7 +296,9 @@ func hPrettyNumEn(c *hcall) any {
 	num := c.args[0]
 	f, ok := c.r.toFloat(num)
 	if !ok {
-		c.r.fail(fmt.Sprintf("value passed in must be a number, got: %v", num))
+		msg := fmt.Sprintf("value passed in must be a number, got: %v", num)
+		c.r.produced(len(msg)) // the message holds the whole value
+		c.r.fail(msg)
 	}
 	return humanize.FormatFloat("#,###.##", f)
 }
@@ -345,7 +347,28 @@ func hFormatPhoneGB(c *hcall) any {
 	return rawNum
 }
 
-func hEscapeURIComponent(c *hcall) any { return url.QueryEscape(c.argStr(0)) }
+func hEscapeURIComponent(c *hcall) any {
+	s := c.argStr(0)
+	// Bound the result before building it: its exact length is the input's
+	// plus two bytes for each byte QueryEscape writes as %XX.
+	c.r.reserveProduced(queryEscapedLen(s))
+	return url.QueryEscape(s)
+}
+
+// queryEscapedLen is len(url.QueryEscape(s)): letters, digits and -_.~ stay,
+// a space becomes +, and every other byte becomes %XX.
+func queryEscapedLen(s string) int {
+	n := len(s)
+	for i := range len(s) {
+		switch c := s[i]; {
+		case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9',
+			c == '-', c == '_', c == '.', c == '~', c == ' ':
+		default:
+			n += 2
+		}
+	}
+	return n
+}
 
 func hToStr(c *hcall) any {
 	if c.r.mode == ModeFixed {

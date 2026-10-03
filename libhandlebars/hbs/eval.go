@@ -289,7 +289,7 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 	resolved := false
 	for _, part := range parts {
-		r.step()
+		r.stepKiB(len(part)) // a long key costs its hashing
 		v, ok := r.evalField(ctx, stripBrackets(part))
 		if !ok {
 			return nil, false, resolved

@@ -5,6 +5,8 @@ package hbs_test
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -80,8 +82,9 @@ func TestHelperCharges(t *testing.T) {
 	require.Equal(t, small+3, steps(t, `{{eq s "x"}}`, `{"s": "`+strings.Repeat("a", 4096)+`"}`))
 	arr := `{"a": [` + strings.TrimSuffix(strings.Repeat(`"`+strings.Repeat("a", 1023)+`",`, 100), ",") + `]}`
 	// str(a) builds 102,300 bytes: 100 started KiB of produced bytes, 99
-	// more than the small case's output; and s's 1-step read is not made.
-	require.Equal(t, small+98, steps(t, `{{eq a "x"}}`, arr))
+	// more than the small case's output; s's 1-step read is not made; and
+	// each of the 100 elements walked costs a step.
+	require.Equal(t, small+98+100, steps(t, `{{eq a "x"}}`, arr))
 
 	// select and in-string-array: one step per element scanned.
 	items := func(n int) string {
@@ -184,4 +187,147 @@ func TestStrOfArrayBounded(t *testing.T) {
 	alloc := after.TotalAlloc - before.TotalAlloc
 	t.Logf("allocated %d bytes", alloc)
 	require.Less(t, alloc, uint64(8*(8<<20)))
+}
+
+// TestOutputCapExactWithEscaping: the output cap applies to the exact
+// escaped length, at cap and cap+1, for each escaped byte.
+func TestOutputCapExactWithEscaping(t *testing.T) {
+	for c, esc := range map[string]string{"&": "&amp;", "<": "&lt;", ">": "&gt;", `"`: "&quot;", "'": "&apos;", "a": "a"} {
+		s := strings.Repeat(c, 7) + "x"
+		want := strings.Repeat(esc, 7) + "x"
+		ctx := mustCtx(t, `{"s": `+strconvQuote(s)+`}`)
+		got, err := mustParse(t, `{{s}}`).Render(ctx, hbs.Options{Limits: hbs.Limits{MaxOutputBytes: len(want)}})
+		require.NoError(t, err, c)
+		require.Equal(t, want, got)
+		_, err = mustParse(t, `{{s}}`).Render(ctx, hbs.Options{Limits: hbs.Limits{MaxOutputBytes: len(want) - 1}})
+		requireLimit(t, err, "rendered output exceeds")
+	}
+}
+
+// TestValueWalksBounded: printing or stringifying a nested array counts
+// against MaxDepth, and every element walked costs a step.
+func TestValueWalksBounded(t *testing.T) {
+	deep := mustCtx(t, `{"a": `+strings.Repeat("[", 9000)+strings.Repeat("]", 9000)+`}`)
+	for _, tpl := range []string{`{{a}}`, `{{eq a ""}}`, `{{#equal a ""}}x{{/equal}}`} {
+		var err error
+		withSmallStack(func() {
+			_, err = mustParse(t, tpl).Render(deep, hbs.Options{Limits: hbs.Limits{MaxDepth: 8}})
+		})
+		requireLimit(t, err, "maximum depth of 8")
+		withSmallStack(func() { _, err = mustParse(t, tpl).Render(deep, hbs.Options{}) })
+		requireLimit(t, err, "maximum depth of 256")
+	}
+
+	arr := func(n int) string { return `{"a": [` + strings.TrimSuffix(strings.Repeat("1,", n), ",") + `]}` }
+	require.GreaterOrEqual(t, steps(t, `{{a}}`, arr(100_000))-steps(t, `{{a}}`, arr(1)), int64(99_999))
+	require.GreaterOrEqual(t, steps(t, `{{eq a ""}}`, arr(100_000))-steps(t, `{{eq a ""}}`, arr(1)), int64(99_999))
+
+	// #each over an object charges every key before sorting them.
+	obj := func(n int) string {
+		var b strings.Builder
+		b.WriteString(`{"m": {`)
+		for i := range n {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			fmt.Fprintf(&b, `"k%d": 1`, i)
+		}
+		b.WriteString(`}}`)
+		return b.String()
+	}
+	m := &countMeter{limit: 1000}
+	_, err := mustParse(t, `{{#each m}}{{/each}}`).Render(mustCtx(t, obj(100_000)), hbs.Options{Meter: m})
+	require.ErrorIs(t, err, errBudget)
+	require.Less(t, m.calls, 3, "the sort is charged before it runs")
+}
+
+// TestCompareAndKeyCharges: string comparisons and long path keys cost a
+// step per started KiB.
+func TestCompareAndKeyCharges(t *testing.T) {
+	big := strings.Repeat("y", 1<<20)
+	hay := `{"a": [` + strings.TrimSuffix(strings.Repeat(`"`+big+`",`, 16), ",") + `], "n": "` + big[:len(big)-1] + `z"}`
+	small := `{"a": ["y"], "n": "z"}`
+	require.GreaterOrEqual(t, steps(t, `{{in-string-array haystack=a needle=n}}`, hay)-steps(t, `{{in-string-array haystack=a needle=n}}`, small), int64(16*1024))
+
+	key := strings.Repeat("k", 1<<19)
+	ctx := `{"` + key + `": 1}`
+	require.GreaterOrEqual(t, steps(t, `{{[`+key+`]}}`, ctx)-steps(t, `{{[k]}}`, `{"k": 1}`), int64(511))
+}
+
+// TestEscapeURIBoundedBeforeBuilding: escape-uri-component checks the
+// produced-bytes bound with the exact escaped length before it escapes.
+func TestEscapeURIBoundedBeforeBuilding(t *testing.T) {
+	ctx := mustCtx(t, `{"s": "`+strings.Repeat("/", 3<<20)+`"}`)
+	p := mustParse(t, `{{escape-uri-component s}}`)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := p.Render(ctx, hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 1 << 20}})
+	runtime.ReadMemStats(&after)
+	requireLimit(t, err, "produces more than")
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(1<<20))
+}
+
+func strconvQuote(s string) string { return strconv.Quote(s) }
+
+// withSmallStack runs f on a goroutine whose stack may not pass 256 KiB, so
+// recursion proportional to a value's nesting kills the test binary.
+func withSmallStack(f func()) {
+	old := debug.SetMaxStack(256 << 10)
+	defer debug.SetMaxStack(old)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f()
+	}()
+	<-done
+}
+
+// TestRealisticHeadroom renders a synthetic document shaped like a large
+// production letter, a 200 KB template with a 3-deep #each over a 300 KB
+// context, and checks that it stays far below the default limits.
+func TestRealisticHeadroom(t *testing.T) {
+	var tpl strings.Builder
+	para := `<p>Dear {{customer.name}}, your account {{customer.id}} shows a balance of {{prettyp-num-en customer.balance}} as of {{date-beautify customer.date}}.{{#if customer.vip}} Thank you for being a valued customer.{{/if}}</p>` + "\n"
+	for tpl.Len() < 150_000 {
+		tpl.WriteString(para)
+	}
+	tpl.WriteString(`{{#each sections}}<h2>{{title}}</h2>{{#each rows}}<tr>{{#each cells}}<td>{{#if (gt value "0")}}{{round-to-nth value "2"}}{{else}}{{escape-uri-component label}}{{/if}}</td>{{/each}}</tr>{{/each}}{{/each}}` + "\n")
+	for tpl.Len() < 200_000 {
+		tpl.WriteString(para)
+	}
+
+	var ctx strings.Builder
+	ctx.WriteString(`{"customer": {"name": "A. Customer", "id": "ACC-0001", "balance": 1234567.891, "date": "2026-10-03", "vip": true}, "sections": [`)
+	for s := range 100 {
+		if s > 0 {
+			ctx.WriteByte(',')
+		}
+		fmt.Fprintf(&ctx, `{"title": "Section %d", "rows": [`, s)
+		for r := range 10 {
+			if r > 0 {
+				ctx.WriteByte(',')
+			}
+			ctx.WriteString(`{"cells": [`)
+			for c := range 10 {
+				if c > 0 {
+					ctx.WriteByte(',')
+				}
+				fmt.Fprintf(&ctx, `{"value": "%d.%03d", "label": "cell %d/%d label"}`, r*c, s, r, c)
+			}
+			ctx.WriteString(`]}`)
+		}
+		ctx.WriteString(`]}`)
+	}
+	ctx.WriteString(`]}`)
+	require.Greater(t, ctx.Len(), 300_000)
+
+	m := &countMeter{}
+	out, err := mustParse(t, tpl.String()).Render(mustCtx(t, ctx.String()), hbs.Options{Meter: m})
+	require.NoError(t, err)
+	lim := hbs.DefaultLimits()
+	stepsPct := 100 * float64(m.used) / float64(lim.MaxSteps)
+	t.Logf("template %d B, context %d B, output %d B, steps %d (%.2f%% of MaxSteps)", tpl.Len(), ctx.Len(), len(out), m.used, stepsPct)
+	require.Less(t, stepsPct, 5.0)
+	require.Less(t, len(out), lim.MaxOutputBytes/10)
 }

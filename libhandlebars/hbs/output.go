@@ -85,10 +85,31 @@ func (r *renderer) read(n int) {
 	if n <= 0 {
 		return
 	}
-	r.pending += int64(n-1)>>10 + 1
+	r.steps1(int64(n-1)>>10 + 1)
+}
+
+// stepKiB charges one step, or one per started KiB of an n-byte key or
+// string handled, whichever is more.
+func (r *renderer) stepKiB(n int) {
+	r.steps1(max(1, int64(n-1)>>10+1))
+}
+
+// steps1 records n units of evaluation work.
+func (r *renderer) steps1(n int64) {
+	r.pending += n
 	if r.pending >= meterBatch {
 		r.flush()
 	}
+}
+
+// compare reports a == b, charging a step per started KiB compared when the
+// lengths are equal (unequal lengths compare in constant time).
+func (r *renderer) compare(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	r.read(len(a))
+	return a == b
 }
 
 // str is str(v) with its cost: reading a string, or building one.
@@ -105,12 +126,18 @@ func (r *renderer) str(v any) string {
 // appendStrBounded is appendStr that fails the render as soon as the string
 // it builds would pass the produced-bytes bound, element by element, so a
 // large array never builds its whole string first.
+//
+// Each element costs a step, and nested arrays count against MaxDepth, so
+// the walk is bounded in time and stack.
 func (r *renderer) appendStrBounded(dst []byte, v any) []byte {
 	a, ok := v.([]any)
 	if !ok {
 		return appendStr(dst, v)
 	}
+	r.enter()
+	defer r.leave()
 	for _, e := range a {
+		r.step()
 		dst = r.appendStrBounded(dst, e)
 		if int64(len(dst)) > r.maxProduced-r.written {
 			r.reserveProduced(len(dst))
@@ -157,8 +184,10 @@ func (r *renderer) writeEscaped(s string) {
 	n := len(s)
 	for j := i; j < len(s); j++ {
 		switch s[j] {
-		case '&', '\'':
-			n += 5 // &amp; &apos;
+		case '&':
+			n += 4 // &amp;
+		case '\'':
+			n += 5 // &apos;
 		case '<', '>':
 			n += 3 // &lt; &gt;
 		case '"':
@@ -209,9 +238,13 @@ func (r *renderer) writeValue(v any, esc bool) {
 			r.writeString(x)
 		}
 	case []any:
+		// Each element costs a step; nested arrays count against MaxDepth.
+		r.enter()
 		for _, e := range x {
+			r.step()
 			r.writeValue(e, esc)
 		}
+		r.leave()
 	default:
 		// Numbers, booleans and UNPRINTABLE contain no escapable byte.
 		var buf [32]byte
