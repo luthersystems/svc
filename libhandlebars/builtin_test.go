@@ -1313,3 +1313,39 @@ func TestEncodeEstimateDoesNotStopWalk(t *testing.T) {
 	require.GreaterOrEqual(t, nativeOnly, int64(10_000*100), "each of the native's fields")
 	require.GreaterOrEqual(t, both, (nativeOnly+floatsOnly)*9/10, "both charged in full together")
 }
+
+// TestEncodeErrorOrder: where several encode errors apply, the one
+// json:dump-bytes reports first is reported: a map's key collision before
+// its size passes the cap, and the cap passed by the bytes before a native
+// before that native's own error (and the native's when they do not).
+func TestEncodeErrorOrder(t *testing.T) {
+	check := func(t *testing.T, ctx *lisp.LVal, maxAlloc int, want string) {
+		t.Helper()
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = maxAlloc
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%v", res)
+		require.Contains(t, dump.Cells[0].Str, want)
+		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
+	}
+	collide := lisp.SortedMap()
+	collide.MapSetLVal(lisp.Int(1), lisp.Int(0))
+	collide.MapSetString("1", lisp.Int(0))
+	check(t, collide, 1, `map int key 1 collides with string key "1"`)
+
+	floatsThenChan := func() *lisp.LVal {
+		floats := make([]*lisp.LVal, 8)
+		for i := range floats {
+			floats[i] = lisp.Float(0.5)
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.QExpr(floats))
+		ctx.MapSetString("z", lisp.Native(make(chan int)))
+		return ctx
+	}
+	check(t, floatsThenChan(), 32, "allocation size exceeds maximum (32)")
+	check(t, floatsThenChan(), 1<<20, "unsupported type: chan int")
+}

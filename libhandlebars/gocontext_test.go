@@ -845,3 +845,33 @@ func TestGoContextSafeString(t *testing.T) {
 		checkGo(t, tpl, ctx)
 	}
 }
+
+// TestGoContextNoAddresses: %v of a Go value (prettyp-num-en's error
+// text) never prints a process address, which would differ between
+// processes: where fmt would print one (a chan, a func, a pointer it does
+// not follow, at the top or nested in an engine array), the value prints
+// as its type. Nil ones print as fmt prints them.
+func TestGoContextNoAddresses(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	n := 3
+	for _, tc := range []struct {
+		x    any
+		want string
+	}{
+		{make(chan int), "got: (chan int)"},
+		{[]any{func() {}}, "got: [(func())]"},
+		{[]any{&n}, "got: [(*int)]"},
+		{[]any{&[]int{1, 2}}, "got: [(*[]int)]"},
+		{map[string]any{"p": &n}, "got: map[p:(*int)]"},
+		{map[string]*int{"p": &n}, "got: (map[string]*int)"},
+		{&[]int{1, 2}, "got: [1 2]"}, // the path lookup follows the pointer
+		{[]*int{nil}, "got: [<nil>]"},
+		{(chan int)(nil), "got: <nil>"},
+	} {
+		for range 3 {
+			_, err := libhandlebars.Render(tpl, map[string]any{"x": tc.x})
+			require.ErrorContains(t, err, tc.want, "%T", tc.x)
+		}
+	}
+}

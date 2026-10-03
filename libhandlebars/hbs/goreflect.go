@@ -525,14 +525,23 @@ func (r *renderer) goAppendKind(dst []byte, val reflect.Value) []byte {
 	return dst
 }
 
-// goAppendV appends fmt's %v of a Go value (prettyp-num-en's error text).
+// goAppendV appends fmt's %v of a Go value (prettyp-num-en's error text),
+// nested (an element of an engine array or object, as fmt sees it inside
+// the context raymond printed) or not. Where fmt would print a process
+// address (a non-nil chan, func or unsafe pointer, or a pointer it does
+// not follow), the text would differ between processes: the value is
+// printed as "(T)", its type, instead.
 // fmt recurses without bound into maps, slices and interfaces, and sorts
 // map keys by reflection, so the value is sized first (goSize), and only
 // then does fmt print it. As raymond's did, fmt calls a value's String or
 // Error method.
-func (r *renderer) goAppendV(dst []byte, v any) []byte {
+func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
 	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
-	size := z.size(reflect.ValueOf(v), 0)
+	depth := 0
+	if nested {
+		depth = 1 // fmt follows a pointer only at the top
+	}
+	size := z.size(reflect.ValueOf(v), depth)
 	// The walk's charge, size and outcome do not depend on Go's map
 	// order: it counts every node up to MaxDepth, or stops once the count
 	// passes what MaxSteps leaves, and reports depth only after.
@@ -545,6 +554,14 @@ func (r *renderer) goAppendV(dst []byte, v any) []byte {
 		// fmt orders NaN keys among themselves by Go's map order, so the
 		// text would differ from run to run.
 		r.fail("Go map with more than one NaN key has no deterministic text")
+	}
+	if z.addr {
+		ts := reflect.TypeOf(v).String()
+		r.steps1(units(len(ts), scanUnit))
+		r.checkProduced(len(dst) + len(ts) + 2)
+		dst = append(append(append(dst, '('), ts...), ')')
+		r.produced(len(ts) + 2)
+		return dst
 	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
@@ -560,6 +577,7 @@ type goSizer struct {
 	steps, limit int64
 	deep         bool
 	nanKeys      bool // a map with more than one key not equal to itself (NaN)
+	addr         bool // fmt would print an address (a chan, func, unsafe or nested pointer)
 }
 
 func (z *goSizer) over() bool { return z.steps >= z.limit }
@@ -600,6 +618,9 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 				return 1 + z.size(v.Elem(), depth+1)
 			default: // fmt prints other pointers as an address
 			}
+		}
+		if !v.IsNil() {
+			z.addr = true // fmt prints its address
 		}
 		return 20
 	case reflect.Array, reflect.Slice:
@@ -651,6 +672,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			n += 1 + z.size(v.Field(i), depth+1)
 		}
 		return n
+	case reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		if !v.IsNil() {
+			z.addr = true // fmt prints its address
+		}
+		return 64
 	default:
 		return 64
 	}

@@ -162,6 +162,11 @@ func (r *renderer) sortKeys(keys []string) {
 // and objects count against MaxDepth, each element costs a step, and the
 // produced-bytes bound is checked as it grows.
 func (r *renderer) appendV(dst []byte, v any) []byte {
+	return r.appendVAt(dst, v, false)
+}
+
+// appendVAt is appendV of v, nested in an engine array or object or not.
+func (r *renderer) appendVAt(dst []byte, v any, nested bool) []byte {
 	switch x := v.(type) {
 	case nil:
 		return append(dst, "<nil>"...)
@@ -186,7 +191,7 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 			if i > 0 {
 				dst = append(dst, ' ')
 			}
-			dst = r.appendV(dst, e)
+			dst = r.appendVAt(dst, e, true)
 			r.checkProduced(len(dst))
 		}
 		r.leave()
@@ -210,7 +215,7 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 			r.read(len(k))
 			dst = append(dst, k...)
 			dst = append(dst, ':')
-			dst = r.appendV(dst, x[k])
+			dst = r.appendVAt(dst, x[k], true)
 			r.checkProduced(len(dst))
 		}
 		r.leave()
@@ -223,7 +228,7 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 			// fmt has no recursion here.
 			return fmt.Appendf(dst, "%v", v)
 		default:
-			return r.goAppendV(dst, v) // a Go composite
+			return r.goAppendV(dst, v, nested) // a Go composite
 		}
 	}
 }

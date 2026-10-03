@@ -476,7 +476,7 @@ func (r *renderer) evalExpr(node *ast.Expression, direct bool) any {
 		}
 	}
 	if lit, ok := node.LiteralStr(); ok {
-		r.formatted(len(lit)) // a number literal is formatted to look it up
+		r.formatted(len(lit)) // a literal is formatted to look it up
 		cur, ok := r.ancestorCtx(0)
 		if ok {
 			if isGo(cur) {

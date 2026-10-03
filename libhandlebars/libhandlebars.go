@@ -350,8 +350,7 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 		return nil, env.Errorf("allocation size exceeds maximum (%d)", env.Runtime.MaxAllocBytes())
 	}
 	if w.nativeErr != nil {
-		// Where the encoder would have failed, with its text.
-		return nil, env.Errorf("error while serializing: %s", w.nativeErr.Error())
+		return nil, w.nativeFailure(env, v)
 	}
 	if len(w.natives) > 0 {
 		if v, lerr = w.withNatives(v); lerr != nil {
@@ -366,6 +365,37 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 		return nil, res
 	}
 	return nil, env.Errorf("error while serializing: %s", res.Cells[0].Str)
+}
+
+// nativeFailure is the error encoding v reports when the walk stopped at a
+// native that fails to encode: that native's error, unless the encoder
+// fails earlier. The walk's byte count is a lower bound, so the encoder
+// itself decides: it runs over v with the failing native replaced by a
+// marker that fails at once (everything before it already charged by the
+// walk, which followed the encoder's order), and reports its allocation
+// cap if the bytes before the native pass it.
+func (w *encodeWalk) nativeFailure(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
+	native := env.Errorf("error while serializing: %s", w.nativeErr.Error())
+	if w.failed == nil {
+		return native
+	}
+	sub, lerr := w.withNatives(v)
+	if lerr != nil {
+		return lerr
+	}
+	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{sub, lisp.Bool(false)}))
+	switch {
+	case res.Type != lisp.LError, len(res.Cells) == 0:
+		return native // the marker was not reached: unexpected, keep the native's error
+	case isLimitError(res):
+		return res
+	case strings.Contains(res.Cells[0].Str, errNativeFailMarker.Error()):
+		return native
+	case strings.HasPrefix(res.Cells[0].Str, "allocation size exceeds maximum"):
+		return env.Errorf("%s", res.Cells[0].Str)
+	default:
+		return env.Errorf("error while serializing: %s", res.Cells[0].Str)
+	}
 }
 
 // chargeEncode charges encoding v to JSON before the encoder runs:
@@ -395,6 +425,7 @@ type encodeWalk struct {
 	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once
 	hasNative   map[*lisp.LVal]bool   // the containers on the way to a marshalled native
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
+	failed      *lisp.LVal            // that native
 	stack       []*lisp.LVal          // the containers the walk is inside
 	lower       int64                 // a lower bound of the JSON's length so far
 	capErr      bool                  // lower passed the allocation cap at a native
@@ -434,6 +465,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 					walk = true
 				case embedTooDeep:
 					w.nativeErr = errEmbedDeep
+					w.failAt(x)
 					return nil, true, nil
 				default:
 				}
@@ -441,6 +473,9 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 		}
 		if walk {
 			if stop, lerr := w.nativeCost(v); stop || lerr != nil {
+				if lerr == nil && w.nativeErr != nil {
+					w.failAt(x)
+				}
 				return nil, true, lerr
 			}
 			// Past the allocation cap even by a lower bound: the encoder
@@ -453,6 +488,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 		var err error
 		if b, err = json.Marshal(x.Native); err != nil {
 			w.nativeErr = err
+			w.failAt(x)
 			return nil, true, nil
 		}
 		if w.natives == nil {
@@ -557,6 +593,23 @@ func jsonNesting(b []byte) int {
 	return deepest
 }
 
+// failAt records x as the native the encode fails at, and marks the
+// containers on the way to it, so withNatives can put a marker there.
+func (w *encodeWalk) failAt(x *lisp.LVal) {
+	w.failed = x
+	w.markPath()
+}
+
+// nativeFailMarker stands in for the native an encode fails at: the
+// encoder runs up to it (so its allocation cap, checked before each value,
+// is reported if the bytes before it already pass it) and fails there,
+// without marshalling the native again.
+type nativeFailMarker struct{}
+
+var errNativeFailMarker = errors.New("libhandlebars: the native that fails")
+
+func (nativeFailMarker) MarshalJSON() ([]byte, error) { return nil, errNativeFailMarker }
+
 // markPath marks the containers the walk is inside as leading to a
 // marshalled native, stopping at one already marked (so each is marked
 // once).
@@ -603,6 +656,10 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		var out *lisp.LVal
 		switch x.Type {
 		case lisp.LNative:
+			if x == w.failed {
+				out = lisp.Native(nativeFailMarker{})
+				break
+			}
 			// JSON nesting past encoding/json's decoder limit (10,000)
 			// fails the encoder's load check; a RawMessage would fail its
 			// compaction first, with other text. Leave such a native to
@@ -850,12 +907,8 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
 			return true, lerr
 		}
-		lower = 2 + int64(m.Len()) // braces and colons
-		if w.lower+lower > w.limit {
-			w.capErr = true
-			return true, nil
-		}
-		buf := make([]*lisp.LVal, m.Len())
+		lower = 2 + int64(m.Len())         // braces and colons
+		buf := make([]*lisp.LVal, m.Len()) // as many as the map holds
 		if e := m.Entries(buf); e.Type == lisp.LError {
 			return true, nil
 		}
@@ -869,6 +922,12 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		// before it encodes any value: stop here, so its error is the one
 		// reported (not a native's below).
 		if intKeyCollision(buf) {
+			return true, nil
+		}
+		// Then the map's own bytes against the cap (the encoder's order:
+		// it refuses the collision before it writes any of the map).
+		if w.lower+lower > w.limit {
+			w.capErr = true
 			return true, nil
 		}
 		for _, entry := range buf {
