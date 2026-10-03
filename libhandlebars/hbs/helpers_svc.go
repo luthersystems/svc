@@ -363,8 +363,10 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 // init warms phonenumbers: the library compiles each region's regular
 // expressions the first time a number from that region is parsed or
 // checked (milliseconds), which no render should pay for. Warming every
-// supported region's example number, in the international form a template
-// would pass, takes about 55 ms and 7 MB once per process.
+// supported region's example number, in the international and national
+// forms a template would pass, takes about 55-70 ms and allocates about
+// 21 MB once per process, of which about 10 MB (the compiled expressions
+// and metadata) stays live.
 func init() {
 	for region := range phonenumbers.GetSupportedRegions() {
 		if ex := phonenumbers.GetExampleNumber(region); ex != nil {

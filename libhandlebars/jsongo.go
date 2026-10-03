@@ -3,115 +3,552 @@
 package libhandlebars
 
 import (
+	"cmp"
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/bits"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 )
 
-// jsonCoster receives the charges of encoding/json's reflective walk of a
-// Go value (goJSONCost).
+// The cost of json.Marshal on a Go value, charged before it runs.
+//
+// goJSONCost walks a value exactly as encoding/json's encoder does: the
+// same encoder for each type (Marshaler and TextMarshaler, by pointer when
+// the value is addressable; base64 for []byte; the struct fields
+// encoding/json selects, with its embedding, tag, "-", omitempty and
+// omitzero rules; map keys in its sorted order), and the same errors, in
+// the same order: unsupported types, NaN and infinite floats, invalid
+// json.Number literals, map key encoding errors, and pointer, map and
+// slice cycles. A cycle is reported with encoding/json's text without
+// running json.Marshal, which would encode a thousand levels of it first.
+// A subtree reached again through the same pointer, map or slice (a DAG)
+// is charged again, as encoding/json encodes it again, from a memo rather
+// than by walking it again.
+//
+// The charges: 3 steps a value plus a step per started KiB of estimated
+// JSON (strings at their escaped length, after a scan of a step per started
+// 64 bytes), and n(1 + log2 n) per map for the key sort. A Marshaler's or
+// TextMarshaler's method is the caller's work, not walked (its output is
+// charged by its consumer: JSONCost or FromJSONMetered).
+
+// jsonCoster receives the charges.
 type jsonCoster interface {
-	value(bytes int64) error // one value writing about bytes of JSON
+	charge(values, bytes int64) error
 	steps(n int64) error
 }
 
 var (
 	marshalerType     = reflect.TypeFor[json.Marshaler]()
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
+	jsonNumberType    = reflect.TypeFor[json.Number]()
+	isZeroerType      = reflect.TypeFor[interface{ IsZero() bool }]()
 )
 
-// goJSONCost charges encoding/json's walk of v through c, before
-// json.Marshal runs: a value at a time with its estimated bytes (strings at
-// their escaped length, after a scan charged a step per started 64 bytes),
-// map keys' sort, and a pointer cycle at the thousand levels encoding/json
-// descends before it reports one. A value implementing json.Marshaler or
-// encoding.TextMarshaler is one value: its method's work is the caller's.
-// It returns tooDeep past maxDepth, which encoding/json would recurse
-// through, and c's error, unchanged.
-func goJSONCost(c jsonCoster, v reflect.Value, depth, maxDepth int, onPath map[uintptr]bool) (error, error) {
-	if depth > maxDepth {
-		return fmt.Errorf("json: Go value nests deeper than %d", maxDepth), nil
-	}
+// jsonFailure is an error encoding/json would return; the walk stops there.
+type jsonFailure struct{ msg string }
+
+func (e *jsonFailure) Error() string { return e.msg }
+
+// jsonTotals are a subtree's charges, kept to charge a DAG's shared
+// subtrees again without walking them.
+type jsonTotals struct{ values, bytes, steps int64 }
+
+func (t *jsonTotals) add(o jsonTotals) {
+	t.values += o.values
+	t.bytes += o.bytes
+	t.steps += o.steps
+}
+
+type jsonWalker struct {
+	c        jsonCoster
+	maxDepth int // container nesting allowed (0: none, as encoding/json)
+	path     map[any]int
+	pathType []reflect.Type // the types of the pointer-like values on the path
+	memo     map[jsonMemoKey]jsonTotals
+}
+
+type jsonMemoKey struct {
+	t     reflect.Type
+	p     any
+	depth int // with a depth bound, a subtree's outcome depends on where it starts
+}
+
+// goJSONCost charges json.Marshal(v) to c. It returns a *jsonFailure where
+// encoding/json fails, and c's errors unchanged.
+func goJSONCost(c jsonCoster, v reflect.Value, maxDepth int) error {
+	w := &jsonWalker{c: c, maxDepth: maxDepth, path: map[any]int{}, memo: map[jsonMemoKey]jsonTotals{}}
+	_, err := w.value(v, 0)
+	return err
+}
+
+func (w *jsonWalker) leaf(bytes int64) (jsonTotals, error) {
+	return jsonTotals{values: 1, bytes: bytes}, w.c.charge(1, bytes)
+}
+
+func (w *jsonWalker) value(v reflect.Value, depth int) (jsonTotals, error) {
 	if !v.IsValid() {
-		return nil, c.value(4)
+		return w.leaf(4)
 	}
-	if t := v.Type(); t.Implements(marshalerType) || t.Implements(textMarshalerType) {
-		return nil, c.value(4)
+	return w.typed(v, v.Type(), true, depth)
+}
+
+// typed is newTypeEncoder(t, allowAddr) applied to v.
+func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
+	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(marshalerType) && v.CanAddr() {
+		return w.leaf(4)
 	}
-	var n int64
-	switch v.Kind() {
-	case reflect.Pointer, reflect.Interface:
-		if v.IsNil() {
-			return nil, c.value(4)
+	if t.Implements(marshalerType) {
+		return w.leaf(4)
+	}
+	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(textMarshalerType) && v.CanAddr() {
+		return w.leaf(4)
+	}
+	if t.Implements(textMarshalerType) {
+		return w.leaf(4)
+	}
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return w.leaf(24)
+	case reflect.Float32, reflect.Float64:
+		if f := v.Float(); math.IsInf(f, 0) || math.IsNaN(f) {
+			return jsonTotals{}, &jsonFailure{"json: unsupported value: " + strconv.FormatFloat(f, 'g', -1, t.Bits())}
 		}
-		if v.Kind() == reflect.Pointer {
-			p := v.Pointer()
-			if onPath[p] {
-				return nil, c.value(1000 * 16) // encoding/json reports it after 1000 levels
-			}
-			onPath[p] = true
-			defer delete(onPath, p)
-		}
-		if err := c.value(1); err != nil {
-			return nil, err
-		}
-		return goJSONCost(c, v.Elem(), depth+1, maxDepth, onPath)
+		return w.leaf(24)
 	case reflect.String:
-		if v.Len() > 0 {
-			if err := c.steps(int64((v.Len()-1)/64 + 1)); err != nil {
-				return nil, err
+		s := v.String()
+		if t == jsonNumberType {
+			num := s
+			if num == "" {
+				num = "0"
+			}
+			if !validNumber(num) {
+				return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: invalid number literal %q", num)}
 			}
 		}
-		n = jsonStringLen(v.String())
+		scan := int64(0)
+		if len(s) > 0 {
+			scan = int64((len(s)-1)/64 + 1)
+			if err := w.c.steps(scan); err != nil {
+				return jsonTotals{}, err
+			}
+		}
+		tot, err := w.leaf(jsonStringLen(s))
+		tot.steps += scan
+		return tot, err
+	case reflect.Interface:
+		if v.IsNil() {
+			return w.leaf(4)
+		}
+		return w.value(v.Elem(), depth)
 	case reflect.Struct:
-		if err := c.value(2); err != nil {
-			return nil, err
-		}
-		for i := range v.NumField() {
-			if deep, err := goJSONCost(c, v.Field(i), depth+1, maxDepth, onPath); deep != nil || err != nil {
-				return deep, err
+		return w.structValue(v, t, depth)
+	case reflect.Map:
+		return w.mapValue(v, t, depth)
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			p := reflect.PointerTo(t.Elem())
+			if !p.Implements(marshalerType) && !p.Implements(textMarshalerType) {
+				if v.IsNil() {
+					return w.leaf(4)
+				}
+				return w.leaf(int64(v.Len())*4/3 + 4) // base64
 			}
 		}
-		return nil, nil
-	case reflect.Map:
-		if err := c.steps(int64(v.Len()) * int64(1+bits.Len(uint(v.Len())))); err != nil {
-			return nil, err
+		if v.IsNil() {
+			return w.leaf(4)
 		}
-		if err := c.value(2); err != nil {
-			return nil, err
+		return w.pointerLike(v, struct {
+			p any
+			n int
+		}{v.UnsafePointer(), v.Len()}, func() (jsonTotals, error) { return w.array(v, t, depth) })
+	case reflect.Array:
+		return w.array(v, t, depth)
+	case reflect.Pointer:
+		if v.IsNil() {
+			return w.leaf(4)
 		}
+		return w.pointerLike(v, v.UnsafePointer(), func() (jsonTotals, error) {
+			return w.typed(v.Elem(), t.Elem(), true, depth)
+		})
+	default: // Complex, Chan, Func, UnsafePointer
+		return jsonTotals{}, &jsonFailure{"json: unsupported type: " + t.String()}
+	}
+}
+
+// pointerLike walks a pointer, map or slice: a cycle back to a value on the
+// path is the error encoding/json reports, and a value walked before (not
+// on the path) is charged from the memo.
+func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTotals, error)) (jsonTotals, error) {
+	if start, ok := w.path[key]; ok {
+		// encoding/json starts recording the path once its pointer level
+		// passes 1000 (the value at index 1000) and reports the first
+		// recorded value seen again: in this cycle (path[start:]), the one
+		// at index 1000.
+		n := len(w.pathType) - start
+		at := max(1000, start)
+		typ := w.pathType[start+(at-start)%n]
+		return jsonTotals{}, &jsonFailure{"json: unsupported value: encountered a cycle via " + typ.String()}
+	}
+	mk := jsonMemoKey{t: v.Type(), p: key}
+	if w.maxDepth > 0 {
+		mk.depth = len(w.pathType) + 1
+	}
+	if tot, ok := w.memo[mk]; ok {
+		if err := w.c.charge(tot.values, tot.bytes); err != nil {
+			return jsonTotals{}, err
+		}
+		return tot, w.c.steps(tot.steps)
+	}
+	w.path[key] = len(w.pathType)
+	w.pathType = append(w.pathType, v.Type())
+	tot, err := walk()
+	w.pathType = w.pathType[:len(w.pathType)-1]
+	delete(w.path, key)
+	if err == nil {
+		w.memo[mk] = tot
+	}
+	return tot, err
+}
+
+func (w *jsonWalker) nest(depth int) error {
+	if w.maxDepth > 0 && depth >= w.maxDepth {
+		return &jsonFailure{fmt.Sprintf("json: Go value nests deeper than %d", w.maxDepth)}
+	}
+	return nil
+}
+
+func (w *jsonWalker) array(v reflect.Value, t reflect.Type, depth int) (jsonTotals, error) {
+	if err := w.nest(depth); err != nil {
+		return jsonTotals{}, err
+	}
+	tot, err := w.leaf(2)
+	if err != nil {
+		return tot, err
+	}
+	for i := range v.Len() {
+		sub, err := w.typed(v.Index(i), t.Elem(), true, depth+1)
+		tot.add(sub)
+		if err != nil {
+			return tot, err
+		}
+	}
+	return tot, nil
+}
+
+func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonTotals, error) {
+	switch t.Key().Kind() {
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+	default:
+		if !t.Key().Implements(textMarshalerType) {
+			return jsonTotals{}, &jsonFailure{"json: unsupported type: " + t.String()}
+		}
+	}
+	if v.IsNil() {
+		return w.leaf(4)
+	}
+	return w.pointerLike(v, v.UnsafePointer(), func() (jsonTotals, error) {
+		if err := w.nest(depth); err != nil {
+			return jsonTotals{}, err
+		}
+		n := v.Len()
+		sort := int64(n) * int64(1+bits.Len(uint(n)))
+		if err := w.c.steps(sort); err != nil {
+			return jsonTotals{}, err
+		}
+		tot, err := w.leaf(2)
+		tot.steps += sort
+		if err != nil {
+			return tot, err
+		}
+		type kv struct {
+			ks string
+			v  reflect.Value
+		}
+		kvs := make([]kv, 0, n)
 		it := v.MapRange()
 		for it.Next() {
-			if deep, err := goJSONCost(c, it.Key(), depth+1, maxDepth, onPath); deep != nil || err != nil {
-				return deep, err
+			ks, err := mapKeyString(it.Key())
+			if err != nil {
+				return tot, &jsonFailure{fmt.Sprintf("json: encoding error for type %q: %q", t.String(), err.Error())}
 			}
-			if deep, err := goJSONCost(c, it.Value(), depth+1, maxDepth, onPath); deep != nil || err != nil {
-				return deep, err
+			kvs = append(kvs, kv{ks, it.Value()})
+		}
+		slices.SortFunc(kvs, func(a, b kv) int { return strings.Compare(a.ks, b.ks) })
+		for _, e := range kvs {
+			sub, err := w.leaf(jsonStringLen(e.ks) + 1)
+			tot.add(sub)
+			if err != nil {
+				return tot, err
 			}
-		}
-		return nil, nil
-	case reflect.Slice, reflect.Array:
-		if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
-			n = int64(v.Len())*4/3 + 4 // base64
-			break
-		}
-		if err := c.value(2); err != nil {
-			return nil, err
-		}
-		for i := range v.Len() {
-			if deep, err := goJSONCost(c, v.Index(i), depth+1, maxDepth, onPath); deep != nil || err != nil {
-				return deep, err
+			sub, err = w.typed(e.v, t.Elem(), true, depth+1)
+			tot.add(sub)
+			if err != nil {
+				return tot, err
 			}
 		}
-		return nil, nil
-	default:
-		n = 24
+		return tot, nil
+	})
+}
+
+// mapKeyString is encoding/json's reflectWithString.resolve.
+func mapKeyString(k reflect.Value) (string, error) {
+	if k.Kind() == reflect.String {
+		return k.String(), nil
 	}
-	return nil, c.value(n)
+	if tm, ok := k.Interface().(encoding.TextMarshaler); ok {
+		if k.Kind() == reflect.Pointer && k.IsNil() {
+			return "", nil
+		}
+		buf, err := tm.MarshalText()
+		return string(buf), err
+	}
+	switch k.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(k.Int(), 10), nil
+	default:
+		return strconv.FormatUint(k.Uint(), 10), nil
+	}
+}
+
+func (w *jsonWalker) structValue(v reflect.Value, t reflect.Type, depth int) (jsonTotals, error) {
+	if err := w.nest(depth); err != nil {
+		return jsonTotals{}, err
+	}
+	tot, err := w.leaf(2)
+	if err != nil {
+		return tot, err
+	}
+FieldLoop:
+	for _, f := range jsonFields(t) {
+		fv := v
+		for _, i := range f.index {
+			if fv.Kind() == reflect.Pointer {
+				if fv.IsNil() {
+					continue FieldLoop
+				}
+				fv = fv.Elem()
+			}
+			fv = fv.Field(i)
+		}
+		if (f.omitEmpty && isEmptyValue(fv)) || (f.omitZero && isZeroValue(fv)) {
+			continue
+		}
+		sub, err := w.leaf(int64(len(f.name)) + 3)
+		tot.add(sub)
+		if err != nil {
+			return tot, err
+		}
+		sub, err = w.typed(fv, fv.Type(), true, depth+1)
+		tot.add(sub)
+		if err != nil {
+			return tot, err
+		}
+	}
+	return tot, nil
+}
+
+// isEmptyValue is encoding/json's omitempty test.
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Interface, reflect.Pointer:
+		return v.IsZero()
+	default:
+		return false
+	}
+}
+
+// isZeroValue is encoding/json's omitzero test: the value's IsZero method
+// where it has one, else reflect's zero value.
+func isZeroValue(v reflect.Value) bool {
+	t := v.Type()
+	switch {
+	case t.Kind() == reflect.Interface && t.Implements(isZeroerType):
+		return v.IsNil() || (v.Elem().Kind() == reflect.Pointer && v.Elem().IsNil()) ||
+			v.Interface().(interface{ IsZero() bool }).IsZero() //nolint:forcetypeassert // checked by Implements
+	case t.Kind() == reflect.Pointer && t.Implements(isZeroerType):
+		return v.IsNil() || v.Interface().(interface{ IsZero() bool }).IsZero() //nolint:forcetypeassert // checked by Implements
+	case t.Implements(isZeroerType):
+		return v.Interface().(interface{ IsZero() bool }).IsZero() //nolint:forcetypeassert // checked by Implements
+	case reflect.PointerTo(t).Implements(isZeroerType):
+		if !v.CanAddr() {
+			v2 := reflect.New(t).Elem()
+			v2.Set(v)
+			v = v2
+		}
+		return v.Addr().Interface().(interface{ IsZero() bool }).IsZero() //nolint:forcetypeassert // checked by Implements
+	default:
+		return v.IsZero()
+	}
+}
+
+// validNumber reports whether s is a JSON number literal, as encoding/json
+// requires of a json.Number.
+func validNumber(s string) bool {
+	if s == "" || (s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+		return false
+	}
+	return json.Valid([]byte(s))
+}
+
+// jsonField is a struct field encoding/json encodes.
+type jsonField struct {
+	name                string
+	index               []int
+	tag                 bool
+	omitEmpty, omitZero bool
+}
+
+var jsonFieldCache sync.Map // reflect.Type -> []jsonField
+
+// jsonFields is encoding/json's typeFields: the fields it encodes, in
+// order.
+func jsonFields(t reflect.Type) []jsonField {
+	if f, ok := jsonFieldCache.Load(t); ok {
+		return f.([]jsonField) //nolint:forcetypeassert // only []jsonField is stored
+	}
+	type queued struct {
+		typ   reflect.Type
+		index []int
+	}
+	current := []queued{}
+	next := []queued{{typ: t}}
+	var count, nextCount map[reflect.Type]int
+	visited := map[reflect.Type]bool{}
+	var fields []jsonField
+	for len(next) > 0 {
+		current, next = next, current[:0]
+		count, nextCount = nextCount, map[reflect.Type]int{}
+		for _, f := range current {
+			if visited[f.typ] {
+				continue
+			}
+			visited[f.typ] = true
+			for i := range f.typ.NumField() {
+				sf := f.typ.Field(i)
+				if sf.Anonymous {
+					st := sf.Type
+					if st.Kind() == reflect.Pointer {
+						st = st.Elem()
+					}
+					if !sf.IsExported() && st.Kind() != reflect.Struct {
+						continue
+					}
+				} else if !sf.IsExported() {
+					continue
+				}
+				tag := sf.Tag.Get("json")
+				if tag == "-" {
+					continue
+				}
+				name, opts, _ := strings.Cut(tag, ",")
+				if !validTag(name) {
+					name = ""
+				}
+				index := make([]int, len(f.index)+1)
+				copy(index, f.index)
+				index[len(f.index)] = i
+				ft := sf.Type
+				if ft.Name() == "" && ft.Kind() == reflect.Pointer {
+					ft = ft.Elem()
+				}
+				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
+					tagged := name != ""
+					if name == "" {
+						name = sf.Name
+					}
+					field := jsonField{name: name, tag: tagged, index: index,
+						omitEmpty: hasOpt(opts, "omitempty"), omitZero: hasOpt(opts, "omitzero")}
+					fields = append(fields, field)
+					if count[f.typ] > 1 {
+						fields = append(fields, field)
+					}
+					continue
+				}
+				nextCount[ft]++
+				if nextCount[ft] == 1 {
+					next = append(next, queued{typ: ft, index: index})
+				}
+			}
+		}
+	}
+	slices.SortFunc(fields, func(a, b jsonField) int {
+		if c := strings.Compare(a.name, b.name); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(len(a.index), len(b.index)); c != 0 {
+			return c
+		}
+		if a.tag != b.tag {
+			if a.tag {
+				return -1
+			}
+			return +1
+		}
+		return slices.Compare(a.index, b.index)
+	})
+	out := fields[:0]
+	for i := 0; i < len(fields); {
+		fi := fields[i]
+		advance := 1
+		for ; i+advance < len(fields); advance++ {
+			if fields[i+advance].name != fi.name {
+				break
+			}
+		}
+		switch fs := fields[i : i+advance]; {
+		case advance == 1:
+			out = append(out, fi)
+		case len(fs[0].index) != len(fs[1].index) || fs[0].tag != fs[1].tag:
+			out = append(out, fs[0]) // dominantField: the first, unless the first two tie
+		}
+		i += advance
+	}
+	slices.SortFunc(out, func(a, b jsonField) int { return slices.Compare(a.index, b.index) })
+	got, _ := jsonFieldCache.LoadOrStore(t, out)
+	return got.([]jsonField) //nolint:forcetypeassert // only []jsonField is stored
+}
+
+func hasOpt(opts, want string) bool {
+	for opts != "" {
+		var o string
+		o, opts, _ = strings.Cut(opts, ",")
+		if o == want {
+			return true
+		}
+	}
+	return false
+}
+
+// validTag is encoding/json's isValidTag.
+func validTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
+		}
+	}
+	return true
 }
 
 // goBudget counts the Go API's conversion steps against MaxSteps, as the
@@ -131,9 +568,9 @@ func (b *goBudget) Charge(n int64) error {
 
 func (b *goBudget) steps(n int64) error { return b.Charge(n) }
 
-func (b *goBudget) value(bytes int64) error {
+func (b *goBudget) charge(values, bytes int64) error {
 	b.size += bytes
-	n := int64(3)
+	n := 3 * values
 	if kib := (b.size + 1023) >> 10; kib > b.kib {
 		n += kib - b.kib
 		b.kib = kib
@@ -141,6 +578,6 @@ func (b *goBudget) value(bytes int64) error {
 	return b.Charge(n)
 }
 
-// jsonGoMaxDepth bounds the nesting of a Go context converted through JSON
-// (encoding/json itself has no bound for acyclic values).
+// jsonGoMaxDepth bounds the container nesting of a Go context converted
+// through JSON (encoding/json itself has no bound for acyclic values).
 const jsonGoMaxDepth = 1024

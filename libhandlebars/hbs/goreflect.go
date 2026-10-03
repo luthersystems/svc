@@ -192,9 +192,14 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 			result = fv
 			break
 		}
+		// raymond's evalStructTag reads a copy (ctx.Interface()), so a
+		// tagged field is not addressable and its pointer methods do not
+		// count; and that copy fails, tag or not, for a struct reached
+		// through an unexported field.
+		if !ctx.CanInterface() {
+			r.fail("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+		}
 		if i, ok := p.byTag[name]; ok {
-			// raymond's evalStructTag reads a copy (ctx.Interface()), so the
-			// field is not addressable and its pointer methods do not count.
 			result = reflect.ValueOf(r.goInterface(ctx)).Field(i)
 		}
 	case reflect.Map:
@@ -442,16 +447,7 @@ type goSizer struct {
 	r            *renderer
 	steps, limit int64
 	deep         bool
-	nanKeys      bool // a map with more than one NaN key
-}
-
-// isNaN reports whether v is a float NaN, or an interface holding one.
-func isNaN(v reflect.Value) bool {
-	if v.Kind() == reflect.Interface && !v.IsNil() {
-		v = v.Elem()
-	}
-	k := v.Kind()
-	return (k == reflect.Float32 || k == reflect.Float64) && v.Float() != v.Float()
+	nanKeys      bool // a map with more than one key not equal to itself (NaN)
 }
 
 func (z *goSizer) over() bool { return z.steps >= z.limit }
@@ -503,7 +499,7 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		nans := 0
 		it := v.MapRange()
 		for it.Next() && !z.over() {
-			if isNaN(it.Key()) {
+			if k := it.Key(); !k.Equal(k) { // a NaN, or a key holding one
 				nans++
 			}
 			n += 2 + z.size(it.Key(), depth+1) + z.size(it.Value(), depth+1)

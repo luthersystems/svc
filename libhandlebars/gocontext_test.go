@@ -510,6 +510,12 @@ type goErrHolder struct{ E error }
 // field is a copy, the empty name finds the first untagged field, and a
 // path into a nil interface whose type has the method fails.
 func TestGoContextReview2(t *testing.T) {
+	type unexportedTagged struct {
+		in struct{ X int } `handlebars:"in"` //nolint:unused // read by the template through its tag
+	}
+	checkGo(t, `{{s.in.nothing}}`, map[string]any{"s": unexportedTagged{}})
+	checkGo(t, `{{s.in.x}}`, map[string]any{"s": unexportedTagged{}})
+
 	n, str := 5, "str"
 	ctx := map[string]any{
 		"l": []any{&n}, "s": []any{&str}, "nested": []any{[]any{&n}},
@@ -576,6 +582,20 @@ func TestGoContextNaNKeys(t *testing.T) {
 	}
 	_, err = libhandlebars.Render(tpl, map[string]any{"m": one})
 	require.ErrorContains(t, err, "map[NaN:1 1:3]")
+
+	type nanStruct struct{ F float64 }
+	nan := math.NaN()
+	for _, m := range []any{
+		map[nanStruct]int{{nan}: 1, {nan}: 2},
+		map[[1]float64]int{{nan}: 1, {nan}: 2},
+		map[complex128]int{complex(nan, 0): 1, complex(nan, 0): 2},
+		map[any]int{nanStruct{nan}: 1, nanStruct{nan}: 2, "x": 3},
+	} {
+		for range 20 {
+			_, rerr := libhandlebars.Render(tpl, map[string]any{"m": m})
+			require.ErrorContains(t, rerr, "more than one NaN key", "%T", m)
+		}
+	}
 }
 
 type countMeter struct{ n int64 }

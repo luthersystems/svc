@@ -397,9 +397,9 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 	return b, false, nil
 }
 
-// walkCoster adapts the encode walk to goJSONCost: values go through add,
-// so they count toward the estimate and the allocation cap, and a budget
-// error is kept for the walk to return.
+// walkCoster adapts the encode walk to goJSONCost: values go through
+// addN, so they count toward the estimate and the allocation cap, and a
+// budget error is kept for the walk to return.
 type walkCoster struct {
 	w    *encodeWalk
 	lerr *lisp.LVal
@@ -407,8 +407,8 @@ type walkCoster struct {
 
 var errWalkBudget = errors.New("budget")
 
-func (c *walkCoster) value(bytes int64) error {
-	if lerr := c.w.add(bytes); lerr != nil {
+func (c *walkCoster) charge(values, bytes int64) error {
+	if lerr := c.w.addN(values, bytes); lerr != nil {
 		c.lerr = lerr
 		return errWalkBudget
 	}
@@ -423,20 +423,21 @@ func (c *walkCoster) steps(n int64) error {
 	return nil
 }
 
-// nativeCost charges encoding/json's reflective walk of a native (see
-// goJSONCost). It reports stop where the walk passes the value depth
-// limit, which the encoder has for ELPS values and encoding/json lacks.
+// nativeCost charges encoding/json's walk of a native (goJSONCost). It
+// reports stop where encoding/json would fail, recording its error.
 func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	c := &walkCoster{w: w}
-	deep, err := goJSONCost(c, v, 0, w.depth, map[uintptr]bool{})
-	if err != nil {
+	err := goJSONCost(c, v, 0)
+	var fail *jsonFailure
+	switch {
+	case err == nil:
+		return false, nil
+	case errors.As(err, &fail):
+		w.nativeErr = fail
+		return true, nil
+	default:
 		return true, c.lerr
 	}
-	if deep != nil {
-		w.nativeErr = deep
-		return true, nil
-	}
-	return false, nil
 }
 
 // withNatives returns v with each native the walk marshalled replaced by a
@@ -504,7 +505,10 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
 }
 
 // add charges n more estimated bytes and one value.
-func (w *encodeWalk) add(n int64) *lisp.LVal {
+func (w *encodeWalk) add(n int64) *lisp.LVal { return w.addN(1, n) }
+
+// addN charges n more estimated bytes and values values.
+func (w *encodeWalk) addN(values, n int64) *lisp.LVal {
 	w.size += n
 	if kib := (w.size + 1023) >> 10; kib > w.charged {
 		if lerr := w.env.ChargeSteps(kib - w.charged); lerr.Type == lisp.LError {
@@ -512,7 +516,7 @@ func (w *encodeWalk) add(n int64) *lisp.LVal {
 		}
 		w.charged = kib
 	}
-	if lerr := w.env.ChargeSteps(encodeValueCost); lerr.Type == lisp.LError {
+	if lerr := w.env.ChargeSteps(encodeValueCost * values); lerr.Type == lisp.LError {
 		return lerr
 	}
 	return nil

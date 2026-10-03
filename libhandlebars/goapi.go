@@ -101,12 +101,10 @@ func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, er
 		// The conversion counts against the render's MaxSteps: the
 		// marshal is charged by a walk first, then the decode.
 		bud := &goBudget{max: lim.MaxSteps}
-		deep, err := goJSONCost(bud, reflect.ValueOf(ctx), 0, jsonGoMaxDepth, map[uintptr]bool{})
-		if err != nil {
+		// A value encoding/json would refuse fails here, with its text,
+		// before json.Marshal runs.
+		if err := goJSONCost(bud, reflect.ValueOf(ctx), jsonGoMaxDepth); err != nil {
 			return "", err
-		}
-		if deep != nil {
-			return "", deep
 		}
 		b, err := json.Marshal(ctx)
 		if err != nil {

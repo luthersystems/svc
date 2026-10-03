@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/luthersystems/elps/lisp"
 	"github.com/luthersystems/elps/lisp/lisplib"
@@ -463,5 +464,87 @@ func TestEncodeNatives(t *testing.T) {
 		res, _ := eval(t, env, `(handlebars:render "{{#each a.k}}{{this}},{{/each}}{{a.n}}|{{q.[0].z}}{{q.[1]}}" ctx)`)
 		require.Equal(t, lisp.LString, res.Type, "%v", res)
 		require.Equal(t, "1,&lt;&amp;&gt;,2.5,|12", res.Str)
+	})
+}
+
+type nativeCycle struct {
+	Arr  [2000]int
+	Self *nativeCycle
+}
+
+type nativeHidden struct {
+	big map[int]int // unexported: encoding/json skips it
+	N   int
+}
+
+type nativeDAG struct {
+	l, r *nativeDAG // unexported: encoding/json skips them
+	V    int
+}
+
+// TestEncodeNativesAsJSON: the walk charges a native as encoding/json
+// encodes it, and fails where and as it fails, without running it on a
+// cycle: a pointer cycle, a map holding itself, unexported fields skipped,
+// no depth bound encoding/json lacks, and the same steps on every run.
+func TestEncodeNativesAsJSON(t *testing.T) {
+	render := func(t *testing.T, env *lisp.LEnv, native any) (*lisp.LVal, *lisp.LVal, int64, time.Duration) {
+		t.Helper()
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		start := time.Now()
+		res, steps := eval(t, env, `(handlebars:render "{{n.N}}" ctx)`)
+		return dump, res, steps, time.Since(start)
+	}
+	t.Run("pointer cycle", func(t *testing.T) {
+		x := &nativeCycle{}
+		x.Self = x
+		dump, res, steps, d := render(t, newEnv(t), x)
+		require.Equal(t, lisp.LError, res.Type)
+		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
+		require.Less(t, d.Nanoseconds()/max(steps, 1), int64(1000), "%v for %d steps", d, steps)
+	})
+	t.Run("map holding itself", func(t *testing.T) {
+		m := map[string]any{}
+		m["self"] = m
+		dump, res, _, d := render(t, newEnv(t), m)
+		require.Equal(t, lisp.LError, res.Type)
+		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
+		require.Less(t, d, time.Second)
+	})
+	t.Run("unexported fields skipped", func(t *testing.T) {
+		big := make(map[int]int, 200_000)
+		for i := range 200_000 {
+			big[i] = i
+		}
+		var dag *nativeDAG
+		for range 30 {
+			dag = &nativeDAG{l: dag, r: dag, V: 1}
+		}
+		for _, n := range []any{nativeHidden{big: big, N: 7}, dag} {
+			_, res, steps, _ := render(t, newEnv(t), n)
+			require.Equal(t, lisp.LString, res.Type, "%v", res)
+			require.Less(t, steps, int64(1000), "%T", n)
+		}
+	})
+	t.Run("no depth bound, same steps", func(t *testing.T) {
+		var deep any = 1
+		for range 2100 {
+			deep = []any{deep}
+		}
+		n := map[string]any{"a": deep, "b": make([]int, 10_000), "c": make([]int, 10_000), "d": make([]int, 10_000)}
+		env := newEnv(t)
+		env.Runtime.MaxValueDepth = 2000
+		var first int64
+		for i := range 30 {
+			dump, res, steps, _ := render(t, env, n)
+			require.Equal(t, lisp.LBytes, dump.Type, "%v", dump)
+			require.Equal(t, lisp.LString, res.Type, "%v", res)
+			if i == 0 {
+				first = steps
+			}
+			require.Equal(t, first, steps, "run %d", i)
+		}
 	})
 }

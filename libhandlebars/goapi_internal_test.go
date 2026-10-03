@@ -5,6 +5,7 @@ package libhandlebars
 import (
 	"encoding/json"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
+	"math"
 	"reflect"
 	"testing"
 
@@ -64,13 +65,11 @@ func TestJSONGoContextBudget(t *testing.T) {
 		items[i] = item
 	}
 	bud := &goBudget{max: 1 << 40}
-	deep, err := goJSONCost(bud, reflect.ValueOf(map[string]any{"items": items}), 0, jsonGoMaxDepth, map[uintptr]bool{})
-	require.NoError(t, err)
-	require.NoError(t, deep)
-	require.Greater(t, bud.used, int64(1_000_000), "100k shared pointers walked as encoding/json does")
+	require.NoError(t, goJSONCost(bud, reflect.ValueOf(map[string]any{"items": items}), jsonGoMaxDepth))
+	require.Greater(t, bud.used, int64(1_000_000), "100k shared pointers charged as encoding/json encodes them")
 
 	bud = &goBudget{max: 1000}
-	_, err = goJSONCost(bud, reflect.ValueOf(items), 0, jsonGoMaxDepth, map[uintptr]bool{})
+	err := goJSONCost(bud, reflect.ValueOf(items), jsonGoMaxDepth)
 	var herr *hbs.Error
 	require.ErrorAs(t, err, &herr)
 	require.Equal(t, hbs.KindLimit, herr.Kind)
@@ -86,4 +85,111 @@ func TestJSONGoContextBudget(t *testing.T) {
 	out, err := RenderWith(tpl, map[string]any{"n": []any{1}}, WithJSONContext())
 	require.NoError(t, err)
 	require.Equal(t, "x", out)
+}
+
+type jsCycle struct {
+	Arr  [10]int
+	Self *jsCycle
+}
+
+type (
+	jsCA struct{ B *jsCB }
+	jsCB struct{ C *jsCC }
+	jsCC struct{ A *jsCA }
+)
+
+type jsText struct{ S string }
+
+func (t jsText) MarshalText() ([]byte, error) { return []byte("t:" + t.S), nil }
+
+type jsPtrText struct{ S string }
+
+func (t *jsPtrText) MarshalText() ([]byte, error) { return []byte("p:" + t.S), nil }
+
+type jsHidden struct {
+	ch   chan int //nolint:unused // unexported: encoding/json skips it
+	C    chan int `json:"-"`
+	Ok   int
+	Zero struct{ C chan int } `json:",omitzero"`
+}
+
+type jsEmbedA struct{ X, Y int }
+type jsEmbedB struct{ X, Z int }
+type jsEmbed struct {
+	jsEmbedA
+	jsEmbedB
+	Y string `json:"y"`
+}
+
+type jsHolder struct {
+	V  jsPtrText
+	PV *jsPtrText
+	C  chan int `json:",omitempty"`
+}
+
+// TestGoJSONCostMatchesMarshal: for many shapes, goJSONCost fails exactly
+// where json.Marshal fails, with its text, succeeds where it succeeds, and
+// charges the same steps on every run.
+func TestGoJSONCostMatchesMarshal(t *testing.T) {
+	cyc := &jsCycle{}
+	cyc.Self = cyc
+	selfMap := map[string]any{}
+	selfMap["self"] = selfMap
+	selfSlice := []any{nil}
+	selfSlice[0] = selfSlice
+	type mixedA struct{ M map[string]any }
+	ma := &mixedA{M: map[string]any{}}
+	ma.M["a"] = ma
+	ca := &jsCA{B: &jsCB{C: &jsCC{}}}
+	ca.B.C.A = ca
+	var deep any = 1
+	for range 3000 {
+		deep = []any{deep}
+	}
+	shared := &jsEmbedA{1, 2}
+	dag := map[string]any{"a": shared, "b": shared, "c": []any{shared, shared}}
+	for name, v := range map[string]any{
+		"pointer cycle":      cyc,
+		"map cycle":          selfMap,
+		"slice cycle":        selfSlice,
+		"mixed cycle":        ma,
+		"three-type cycle":   ca,
+		"cycle after prefix": map[string]any{"x": []any{[]any{ca.B}}},
+		"unexported and -":   jsHidden{Ok: 1},
+		"embedded conflicts": jsEmbed{},
+		"text keys":          map[jsText]int{{"a"}: 1, {"b"}: 2},
+		"int keys":           map[int]string{3: "c", 1: "a", 20: "b"},
+		"bad key type":       map[[2]int]int{{1, 2}: 3},
+		"NaN":                map[string]any{"a": 1, "b": []any{2.0, math.NaN()}},
+		"Inf float32":        []float32{float32(math.Inf(-1))},
+		"number ok":          json.Number("1.5e3"),
+		"number bad":         map[string]any{"n": json.Number("abc")},
+		"chan":               map[string]any{"z": 1, "a": make(chan int)},
+		"func in slice":      []any{1, func() {}},
+		"complex":            struct{ C complex64 }{1},
+		"omitempty chan":     jsHolder{},
+		"addressable text":   &jsHolder{V: jsPtrText{"v"}, PV: &jsPtrText{"pv"}},
+		"unaddressable text": jsHolder{V: jsPtrText{"v"}},
+		"deep":               deep,
+		"dag":                dag,
+		"bytes":              map[string]any{"b": []byte("hello"), "n": []byte(nil)},
+		"nil things":         map[string]any{"m": map[string]int(nil), "s": []int(nil), "p": (*int)(nil), "i": nil},
+	} {
+		_, want := json.Marshal(v)
+		var steps int64 = -1
+		for range 20 {
+			bud := &goBudget{max: 1 << 50}
+			got := goJSONCost(bud, reflect.ValueOf(v), 0)
+			if want == nil {
+				require.NoError(t, got, name)
+			} else {
+				require.Error(t, got, name)
+				require.Equal(t, want.Error(), got.Error(), name)
+			}
+			if steps >= 0 {
+				require.Equal(t, steps, bud.used, "%s: same steps every run", name)
+			}
+			steps = bud.used
+		}
+	}
 }
