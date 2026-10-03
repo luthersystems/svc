@@ -549,10 +549,24 @@ func (c *walkCoster) steps(n int64) error {
 // reports stop where encoding/json would fail, recording its error.
 func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	c := &walkCoster{w: w}
-	err := goJSONCost(c, v, 0)
+	jw, err := goJSONWalk(c, v, 0)
 	var fail *jsonFailure
 	switch {
 	case err == nil:
+		// Past the allocation cap by a lower bound, the native is not
+		// marshalled; but json.Marshal would call its skipped marshalers
+		// (a time.Time out of range, say) before the encoder's next cap
+		// check, and fail with the first one's error: report that first.
+		if w.lower > w.limit && len(jw.skipped) > 0 {
+			merr := jw.firstMarshalerError()
+			if errors.As(merr, &fail) {
+				w.nativeErr = fail
+				return true, nil
+			}
+			if merr != nil {
+				return true, c.lerr
+			}
+		}
 		return false, nil
 	case errors.As(err, &fail):
 		w.nativeErr = fail
@@ -854,7 +868,12 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	}
 	var n int64
 	var children []*lisp.LVal
-	lower := int64(-1) // n unless set: the bytes surely written
+	// lower is a bound of the bytes written by the time the encoder
+	// reaches each value (libjson checks its cap there, against what it
+	// has written so far): a container's opener counts on entry, its
+	// closer (and a map's colons) only after its children.
+	lower := int64(-1) // n unless set: the bytes surely written first
+	var closer int64   // written after the children
 	switch x.Type {
 	case lisp.LInt:
 		var buf [24]byte
@@ -888,13 +907,13 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	case lisp.LBytes:
 		n, lower = int64(len(x.Bytes()))*4/3+4, int64(base64.StdEncoding.EncodedLen(len(x.Bytes())))
 	case lisp.LSExpr:
-		n, children, lower = int64(len(x.Cells))+2, x.Cells, 2
+		n, children, lower, closer = int64(len(x.Cells))+2, x.Cells, 1, 1
 	case lisp.LQuote, lisp.LTaggedVal:
 		n, children, lower = 1, x.Cells[:1], 0
 	case lisp.LArray:
 		lower = 0
 		if len(x.Cells) == 2 {
-			n, children, lower = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells, 2
+			n, children, lower, closer = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells, 1, 1
 		}
 	case lisp.LSortMap:
 		m := x.Map()
@@ -907,8 +926,8 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
 			return true, lerr
 		}
-		lower = 2 + int64(m.Len())         // braces and colons
-		buf := make([]*lisp.LVal, m.Len()) // as many as the map holds
+		lower, closer = 1, 1+int64(m.Len()) // the brace first; the colons and closer as written
+		buf := make([]*lisp.LVal, m.Len())  // as many as the map holds
 		if e := m.Entries(buf); e.Type == lisp.LError {
 			return true, nil
 		}
@@ -922,12 +941,6 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		// before it encodes any value: stop here, so its error is the one
 		// reported (not a native's below).
 		if intKeyCollision(buf) {
-			return true, nil
-		}
-		// Then the map's own bytes against the cap (the encoder's order:
-		// it refuses the collision before it writes any of the map).
-		if w.lower+lower > w.limit {
-			w.capErr = true
 			return true, nil
 		}
 		for _, entry := range buf {
@@ -946,6 +959,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		return true, lerr
 	}
 	if len(children) == 0 {
+		w.lower += closer
 		return false, nil
 	}
 	if _, cyclic := w.path[x]; cyclic {
@@ -962,6 +976,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 			return true, lerr
 		}
 	}
+	w.lower += closer
 	return false, nil
 }
 

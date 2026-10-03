@@ -493,15 +493,23 @@ type jsonMemoKey struct {
 // goJSONCost charges json.Marshal(v) to c. It returns a *jsonFailure where
 // encoding/json fails, and c's errors unchanged.
 func goJSONCost(c jsonCoster, v reflect.Value, maxDepth int) error {
+	_, err := goJSONWalk(c, v, maxDepth)
+	return err
+}
+
+// goJSONWalk is goJSONCost, also returning its walker, whose skipped
+// marshalers a caller that stops before json.Marshal can call
+// (firstMarshalerError) to report what Marshal would.
+func goJSONWalk(c jsonCoster, v reflect.Value, maxDepth int) (*jsonWalker, error) {
 	w := &jsonWalker{c: c, maxDepth: maxDepth, path: map[any]int{}, memo: map[jsonMemoKey]jsonMemo{}}
 	_, err := w.value(v, 0)
 	var fail *jsonFailure
 	if errors.As(err, &fail) && len(w.skipped) > 0 {
 		if merr := w.firstMarshalerError(); merr != nil {
-			return merr
+			return w, merr
 		}
 	}
-	return err
+	return w, err
 }
 
 func (w *jsonWalker) leaf(bytes int64) (jsonTotals, error) {

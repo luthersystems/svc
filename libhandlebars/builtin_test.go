@@ -1349,3 +1349,53 @@ func TestEncodeErrorOrder(t *testing.T) {
 	check(t, floatsThenChan(), 32, "allocation size exceeds maximum (32)")
 	check(t, floatsThenChan(), 1<<20, "unsupported type: chan int")
 }
+
+// TestEncodeErrorOrderNearCap: just under the default allocation cap, an
+// error the encoder meets before it has written past the cap is the one
+// reported: a map's key collision, a function value in nested lists, and a
+// native's stdlib Marshaler failing (time.Time past year 9999), not the
+// cap the whole output would pass.
+func TestEncodeErrorOrderNearCap(t *testing.T) {
+	env := newEnv(t)
+	limit := env.Runtime.MaxAllocBytes()
+	check := func(t *testing.T, env *lisp.LEnv, ctx *lisp.LVal, want string) {
+		t.Helper()
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type)
+		require.Contains(t, dump.String(), want)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%v", res)
+		require.Contains(t, res.String(), want)
+	}
+
+	m := lisp.SortedMap()
+	m.MapSetString("1", lisp.Int(0))
+	for i := range 300 {
+		m.MapSetLVal(lisp.Int(i), lisp.Int(0))
+	}
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("a", lisp.String(strings.Repeat("x", limit-150)))
+	ctx.MapSetString("b", m)
+	check(t, newEnv(t), ctx, `map int key 1 collides with string key "1"`)
+
+	env = newEnv(t)
+	fn, _ := eval(t, env, `(lambda () 1)`)
+	require.Equal(t, lisp.LFun, fn.Type)
+	nested := fn
+	for range 100 {
+		nested = lisp.QExpr([]*lisp.LVal{nested})
+	}
+	ctx = lisp.SortedMap()
+	ctx.MapSetString("a", lisp.String(strings.Repeat("x", limit-150)))
+	ctx.MapSetString("b", nested)
+	check(t, env, ctx, "invalid type encountered")
+
+	native := struct {
+		S string
+		T time.Time
+	}{strings.Repeat("s", limit), time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}
+	ctx = lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(native))
+	check(t, newEnv(t), ctx, "error calling MarshalJSON for type time.Time")
+}
