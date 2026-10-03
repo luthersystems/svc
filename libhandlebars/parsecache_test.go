@@ -104,14 +104,20 @@ func TestMustParseCacheParity(t *testing.T) {
 	require.Positive(t, n, "the cache was never populated")
 }
 
+func mustParseCacheEntryCost(tpl string) int {
+	return len(tpl) + mustParseEntryOverhead
+}
+
 func TestMustParseCacheBounded(t *testing.T) {
 	resetMustParseCache()
 	t.Cleanup(resetMustParseCache)
-	big := strings.Repeat("y", mustParseCacheMaxTemplate)
-	for i := range 2 * mustParseCacheMaxBytes / mustParseCacheMaxTemplate {
-		mustParseVerdictOf(fmt.Sprintf("%d%s", i, big[:len(big)-8]))
+	// Short templates, so the entry overhead dominates and the test stays
+	// quick under -race.
+	for i := range 2 * mustParseCacheMaxBytes / mustParseCacheEntryCost("0000000") {
+		mustParseVerdictOf(fmt.Sprintf("%07d", i))
 	}
 	require.LessOrEqual(t, mustParseCache.bytes, mustParseCacheMaxBytes)
+	require.Greater(t, mustParseCache.bytes, mustParseCacheMaxBytes-mustParseCacheEntryCost("0000000"))
 	require.False(t, mustParseVerdictOf("{{ok}}").failed)
 	require.True(t, mustParseVerdictOf("{{").failed)
 

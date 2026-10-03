@@ -11,10 +11,14 @@ import (
 
 // Bounds on the must-parse verdict cache. Templates are phylum literals in
 // practice, so a few MiB covers every real phylum; once the cache is full,
-// further templates are parsed on every call exactly as before.
+// further templates are parsed on every call exactly as before. Entries are
+// never evicted, so the first templates a process validates keep their place.
 const (
 	mustParseCacheMaxTemplate = 64 << 10
 	mustParseCacheMaxBytes    = 4 << 20
+	// mustParseEntryOverhead approximates the map bucket and string headers
+	// of one entry, so a cache of short templates stays near its byte bound.
+	mustParseEntryOverhead = 96
 )
 
 // mustParseVerdict is the outcome of raymond.Parse on one template: nothing
@@ -52,7 +56,7 @@ func mustParseVerdictOf(tpl string) mustParseVerdict {
 	if _, ok := mustParseCache.m[tpl]; ok {
 		return v
 	}
-	cost := len(tpl) + len(v.errMsg)
+	cost := len(tpl) + len(v.errMsg) + mustParseEntryOverhead
 	if mustParseCache.bytes+cost > mustParseCacheMaxBytes {
 		return v
 	}
