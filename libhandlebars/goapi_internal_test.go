@@ -634,8 +634,8 @@ func TestRawMessageEmbedded(t *testing.T) {
 	bud := &goBudget{max: 1 << 40}
 	require.NoError(t, goJSONCost(bud, reflect.ValueOf(own), 0), "its own method encodes")
 	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "and is charged all the same")
-	_, _, ok := embeddedRaw(reflect.ValueOf(jsEmbRawPtr{}))
-	require.False(t, ok, "a nil embedded pointer is left to encoding/json")
+	_, _, found := embeddedRaw(reflect.ValueOf(jsEmbRawPtr{}))
+	require.Equal(t, embedNone, found, "a nil embedded pointer is left to encoding/json")
 }
 
 type jsPrecA struct{ json.RawMessage }
@@ -649,7 +649,7 @@ type jsPrecB struct {
 
 // TestRawMessageSelectorRules: the RawMessage whose MarshalJSON Go selects
 // (the shallowest) is the one charged; a struct with many fields is
-// charged for the fields the search looks at.
+// charged for the field list the search looks at.
 func TestRawMessageSelectorRules(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
 	v := jsPrecB{jsPrecA{json.RawMessage(`1`)}, raw}
@@ -669,5 +669,39 @@ func TestRawMessageSelectorRules(t *testing.T) {
 	wide.Field(0).Set(reflect.ValueOf(json.RawMessage("x")))
 	bud = &goBudget{max: 1 << 40}
 	_ = goJSONCost(bud, wide, 0)
-	require.GreaterOrEqual(t, bud.used, int64(1000), "each field looked at is charged")
+	require.GreaterOrEqual(t, bud.used, int64(1000/16), "the field list looked at is charged")
+}
+
+// jsSelf embeds an interface that can hold itself: encoding/json would
+// recurse through its MarshalJSON until the stack overflows.
+type jsSelf struct{ json.Marshaler }
+
+// TestRawMessageSearchFailsClosed: a RawMessage reached past the search's
+// bounds, and a value embedding itself through an interface, fail with a
+// limit error before encoding/json runs, rather than going uncharged (or
+// crashing); a wide struct is charged for its field list, not refused.
+func TestRawMessageSearchFailsClosed(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
+	bud := &goBudget{max: 1 << 40}
+	_ = goJSONCost(bud, reflect.ValueOf(zlAt(60, raw)), 0)
+	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "61 levels down: found")
+	require.EqualError(t, goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(zlAt(70, raw)), 0), errEmbedDeep.Error(), "71 levels down: past the bound")
+
+	self := &jsSelf{}
+	self.Marshaler = self
+	require.EqualError(t, goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(self), 0), errEmbedDeep.Error())
+	tpl, err := Parse(`{{x}}`)
+	require.NoError(t, err)
+	_, err = RenderWith(tpl, map[string]any{"s": self}, WithJSONContext())
+	require.ErrorContains(t, err, errEmbedDeep.Error())
+
+	fields := []reflect.StructField{{Name: "RawMessage", Type: rawMessageType, Anonymous: true}}
+	for i := range 17_000 {
+		fields = append(fields, reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int]()})
+	}
+	wide := reflect.New(reflect.StructOf(fields)).Elem()
+	wide.Field(0).Set(reflect.ValueOf(raw))
+	bud = &goBudget{max: 1 << 40}
+	_ = goJSONCost(bud, wide, 0)
+	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "17,000 fields: found and charged")
 }

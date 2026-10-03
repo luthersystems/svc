@@ -1059,3 +1059,41 @@ func TestNativeRawMessageCharged(t *testing.T) {
 		require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), name)
 	}
 }
+
+// selfMarshaler embeds an interface that can hold itself.
+type selfMarshaler struct{ json.Marshaler }
+
+// TestNativeEmbedSearchCharged: the search for an embedded RawMessage in
+// a Marshaler native is charged whether or not it finds one (a struct
+// declaring its own MarshalJSON, by embedding time.Time, with many plain
+// fields), and a native embedding itself through an interface fails with
+// a limit error instead of reaching encoding/json, which would overflow
+// the stack.
+func TestNativeEmbedSearchCharged(t *testing.T) {
+	steps := func(n int) int64 {
+		fields := []reflect.StructField{{Name: "Time", Type: reflect.TypeFor[time.Time](), Anonymous: true}}
+		for i := range n {
+			fields = append(fields, reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int]()})
+		}
+		native := reflect.New(reflect.StructOf(fields)).Elem().Interface()
+		require.Implements(t, (*json.Marshaler)(nil), native)
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		return steps
+	}
+	require.GreaterOrEqual(t, steps(4000)-steps(1), int64(3999/16), "the field list is charged")
+
+	self := &selfMarshaler{}
+	self.Marshaler = self
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(self))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "error while serializing: json: Marshaler embedding nests deeper than 64")
+}

@@ -130,13 +130,15 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 			// A struct embedding a RawMessage (perhaps its MarshalJSON):
 			// encoding/json checks and compacts whatever the method
 			// returns, so the bytes are charged here, method or not.
-			raw, scanned, ok := embeddedRaw(v)
-			charge := scanned
-			if ok {
+			raw, charge, found := embeddedRaw(v)
+			if found == embedFound {
 				charge += 2 * units64(int64(len(raw)), 16)
 			}
 			if err := w.c.steps(charge); err != nil {
 				return jsonTotals{steps: charge}, err
+			}
+			if found == embedTooDeep {
+				return jsonTotals{steps: charge}, errEmbedDeep
 			}
 			w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 			tot, err := w.leaf(1)
@@ -148,23 +150,65 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	return w.leaf(1) // its output is not known here: at least a byte
 }
 
-// holdsRawMessage reports whether a Marshaler v is a RawMessage, or
-// reaches one by embedding: its bytes are then the walk's to charge.
-func holdsRawMessage(v reflect.Value) bool {
-	if _, ok := rawMessage(v); ok {
-		return true
-	}
-	_, _, ok := embeddedRaw(v)
-	return ok
-}
-
 // maxEmbedRaw bounds embeddedRaw's search: its hops through interfaces
-// and its embedding depth, each; maxEmbedScan bounds the fields it looks
-// at. A RawMessage past either is not found (and not charged).
+// and its embedding depth, each; maxEmbedScan bounds the embedded fields
+// it looks at. A search that would go past one fails (errEmbedDeep), so
+// no RawMessage escapes the charge: encoding/json would follow it.
 const (
 	maxEmbedRaw  = 64
 	maxEmbedScan = 1 << 14
 )
+
+// errEmbedDeep is embeddedRaw's search past its bounds. A value that
+// embeds itself through an interface (c.M = c) is one: encoding/json
+// would recurse through its MarshalJSON until the stack overflows.
+var errEmbedDeep = &jsonFailure{fmt.Sprintf("json: Marshaler embedding nests deeper than %d", maxEmbedRaw)}
+
+type embedResult int
+
+const (
+	embedNone    embedResult = iota // no RawMessage's MarshalJSON is reached
+	embedFound                      // raw is the RawMessage reached
+	embedTooDeep                    // the search passed a bound
+)
+
+// embedInfo is what embeddedRaw needs of a struct type: its embedded
+// fields that bring a MarshalJSON, and whether each declares it.
+type embedInfo struct {
+	fields   []embedField
+	numField int
+}
+
+type embedField struct {
+	index    int
+	declares bool
+}
+
+var embedInfoCache sync.Map // reflect.Type -> *embedInfo
+
+// structEmbeds is t's embedInfo, cached; the cost is charged by the
+// caller from it, the same cached or not.
+func structEmbeds(t reflect.Type) *embedInfo {
+	if e, ok := embedInfoCache.Load(t); ok {
+		return e.(*embedInfo) //nolint:forcetypeassert // only *embedInfo is stored
+	}
+	e := &embedInfo{numField: t.NumField()}
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if f.Anonymous && hasMarshalJSON(f.Type) {
+			e.fields = append(e.fields, embedField{i, declaresMarshalJSON(f.Type)})
+		}
+	}
+	embedInfoCache.Store(t, e)
+	return e
+}
+
+// embedCost is the steps of looking at a struct type's fields: its list
+// (a step per 16 fields, as reflection builds it) and 3 for each embedded
+// field bringing MarshalJSON (method lookups on its type).
+func embedCost(e *embedInfo) int64 {
+	return 1 + int64(e.numField/16) + 3*int64(len(e.fields))
+}
 
 // embeddedRaw finds the RawMessage a Marshaler value's MarshalJSON would
 // reach by embedding. It works on the value, not on how its method was
@@ -175,40 +219,41 @@ const (
 // struct declares MarshalJSON only if none of its embedded fields brings
 // one; a RawMessage and an interface declare it, and an interface is
 // followed to its dynamic value. Whether a struct also declares its own
-// MarshalJSON is not asked: the bytes are charged either way. scanned is
-// the fields looked at.
-func embeddedRaw(v reflect.Value) (json.RawMessage, int64, bool) {
-	var scanned int64
-	for hop := 0; hop <= maxEmbedRaw; hop++ {
+// MarshalJSON is not asked: the bytes are charged either way. cost is the
+// steps of the search (see embedCost).
+func embeddedRaw(v reflect.Value) (json.RawMessage, int64, embedResult) {
+	var cost, scanned int64
+	for hop := 0; ; hop++ {
+		if hop > maxEmbedRaw {
+			return nil, cost, embedTooDeep
+		}
 		var ok bool
 		if v, ok = derefValue(v); !ok {
-			return nil, scanned, false
+			return nil, cost, embedNone
 		}
 		if v.Type() == rawMessageType {
-			return json.RawMessage(v.Bytes()), scanned, true
+			return json.RawMessage(v.Bytes()), cost, embedFound
 		}
 		if v.Kind() != reflect.Struct {
-			return nil, scanned, false
+			return nil, cost, embedNone
 		}
 		var pick reflect.Value
 		picks := 0
 		level := []reflect.Value{v}
 		for depth := 0; len(level) > 0 && picks == 0; depth++ {
 			if depth > maxEmbedRaw {
-				return nil, scanned, false
+				return nil, cost, embedTooDeep
 			}
 			var next []reflect.Value
 			for _, sv := range level {
-				for i := range sv.NumField() {
-					if scanned++; scanned > maxEmbedScan {
-						return nil, scanned, false
-					}
-					f := sv.Type().Field(i)
-					if !f.Anonymous || !hasMarshalJSON(f.Type) {
-						continue
-					}
-					fv := sv.Field(i)
-					if declaresMarshalJSON(f.Type, &scanned) {
+				e := structEmbeds(sv.Type())
+				cost += embedCost(e)
+				if scanned += int64(len(e.fields)); scanned > maxEmbedScan {
+					return nil, cost, embedTooDeep
+				}
+				for _, f := range e.fields {
+					fv := sv.Field(f.index)
+					if f.declares {
 						picks++
 						pick = fv
 						continue
@@ -224,14 +269,13 @@ func embeddedRaw(v reflect.Value) (json.RawMessage, int64, bool) {
 			level = next
 		}
 		if picks != 1 {
-			return nil, scanned, false
+			return nil, cost, embedNone
 		}
 		v = pick // a RawMessage, an interface, or a struct declaring its own
 		if t := v.Type(); t.Kind() == reflect.Struct || (t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct) {
-			return nil, scanned, false
+			return nil, cost, embedNone
 		}
 	}
-	return nil, scanned, false
 }
 
 // derefValue follows interfaces and pointers to a value; ok is false at a
@@ -263,8 +307,8 @@ func hasMarshalJSON(t reflect.Type) bool {
 // declaresMarshalJSON reports whether an embedded field of type t, which
 // has MarshalJSON, declares it under embeddedRaw's rules: anything but a
 // struct (or pointer to one) none of whose own embedded fields brings one.
-// It counts the fields it looks at in scanned.
-func declaresMarshalJSON(t reflect.Type, scanned *int64) bool {
+// It is computed once per type (structEmbeds caches it).
+func declaresMarshalJSON(t reflect.Type) bool {
 	st := t
 	if st.Kind() == reflect.Pointer {
 		st = st.Elem()
@@ -273,7 +317,6 @@ func declaresMarshalJSON(t reflect.Type, scanned *int64) bool {
 		return true
 	}
 	for i := range st.NumField() {
-		*scanned++
 		if f := st.Field(i); f.Anonymous && hasMarshalJSON(f.Type) {
 			return false
 		}

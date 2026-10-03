@@ -418,7 +418,28 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 		// MarshalJSON costs nothing: encoding/json's check of its bytes is
 		// the walk's to charge.
 		v := reflect.ValueOf(x.Native)
-		if !v.IsValid() || !v.Type().Implements(marshalerType) || holdsRawMessage(v) {
+		walk := !v.IsValid() || !v.Type().Implements(marshalerType)
+		if !walk {
+			if _, raw := rawMessage(v); raw {
+				walk = true
+			} else {
+				// A Marshaler reaching a RawMessage by embedding: its
+				// search is charged whatever it finds.
+				_, cost, found := embeddedRaw(v)
+				if lerr := w.env.ChargeSteps(cost); lerr.Type == lisp.LError {
+					return nil, true, lerr
+				}
+				switch found {
+				case embedFound:
+					walk = true
+				case embedTooDeep:
+					w.nativeErr = errEmbedDeep
+					return nil, true, nil
+				default:
+				}
+			}
+		}
+		if walk {
 			if stop, lerr := w.nativeCost(v); stop || lerr != nil {
 				return nil, true, lerr
 			}
