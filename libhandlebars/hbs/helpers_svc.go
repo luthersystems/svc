@@ -204,7 +204,7 @@ func hSelect(c *hcall) any {
 	from := c.hash["from"]
 	items, ok := from.([]any)
 	if !ok {
-		c.r.fail("select: 'from' must be an array: " + typeName(from))
+		c.r.fail(fmt.Sprintf("select: 'from' must be an array: %T", from))
 	}
 	where := c.hashStr("where")
 	// svc split on "=" and wanted exactly two parts: exactly one "=".
@@ -236,7 +236,7 @@ func hGlobal(c *hcall) any {
 	}
 	k, ok := ki.(string)
 	if !ok {
-		c.r.fail("global: invalid key type: " + typeName(ki))
+		c.r.fail(fmt.Sprintf("global: invalid key type: %T", ki))
 	}
 	// The global map hashes the namespace and key on every read or write.
 	c.r.hashKey(len(ns) + len(k))
@@ -246,7 +246,7 @@ func hGlobal(c *hcall) any {
 	}
 	v, ok := vi.(string)
 	if !ok {
-		c.r.fail("global: invalid val type: " + typeName(vi))
+		c.r.fail(fmt.Sprintf("global: invalid val type: %T", vi))
 	}
 	if c.r.global == nil {
 		c.r.global = make(map[globalKey]string)

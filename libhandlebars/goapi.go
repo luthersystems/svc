@@ -40,7 +40,7 @@ func WithJSONContext() RenderOption {
 	return func(c *renderConfig) { c.json = true }
 }
 
-// WithGoContext converts ctx natively (hbs.FromGo), whatever
+// WithGoContext renders the Go value ctx itself (see RenderWith), whatever
 // SVC_HANDLEBARS_JSON_GO_CONTEXT says.
 func WithGoContext() RenderOption {
 	return func(c *renderConfig) { c.json = false }
@@ -75,13 +75,14 @@ func jsonGoContextSetting(v string, ok bool, log logrus.FieldLogger) bool {
 // RenderWith renders tpl with the Go value ctx in hbs.ModeCompat, under
 // hbs.DefaultLimits().
 //
-// By default ctx is converted natively by hbs.FromGo, with the Go
-// semantics the raymond engine gave Go values: ints stay ints, structs are
-// looked up by field name and handlebars tag, and the output for such a
-// context is what raymond rendered (see hbs.FromGo for the few Go values,
-// such as funcs and methods, that are an error instead). WithJSONContext,
-// or SVC_HANDLEBARS_JSON_GO_CONTEXT=true, converts it through JSON instead,
-// as handlebars:render does.
+// By default the engine reads ctx itself, lazily and by reflection, with
+// the Go semantics raymond gave Go values (see "Go values in a render
+// context" in hbs/goreflect.go): ints stay ints, named types reach helpers
+// as themselves, structs are read by field name and handlebars tag, and
+// only what the template touches is read. Where raymond called Go code (a
+// method or func the template looks up) the render fails instead.
+// WithJSONContext, or SVC_HANDLEBARS_JSON_GO_CONTEXT=true, converts ctx
+// through JSON instead, as handlebars:render does.
 func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
 	cfg := renderConfig{json: jsonGoContextDefault()}
 	for _, o := range opts {
@@ -96,11 +97,12 @@ func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, er
 			return "", err
 		}
 		v, err = hbs.FromJSON(b)
+		if err != nil {
+			return "", err
+		}
 	} else {
-		v, err = hbs.FromGo(ctx, lim, nil)
-	}
-	if err != nil {
-		return "", err
+		// The engine reads a Go value lazily, by reflection, as raymond did.
+		v = ctx
 	}
 	return tpl.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: lim})
 }

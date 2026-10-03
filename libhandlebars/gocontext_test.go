@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
@@ -80,10 +81,8 @@ var goTemplates = []string{
 	`{{len st}}`,
 	`{{date-add-months d s}}`,
 	`{{not n}}`,
-	// Not {{prettyp-num-en st}}: its error holds fmt's %v of the struct,
-	// which raymond printed with unexported fields and pointer addresses;
-	// the native context prints the exported fields only (DETERMINISM.md).
 	`{{prettyp-num-en m}}`,
+	`{{prettyp-num-en st.inner}}`,
 	`{{prettyp-num-en nested}}`,
 	`{{to-str nilp}}|{{eq nilp ""}}|{{nilm}}|{{nils}}|{{nila}}|{{#each nilm}}x{{else}}e{{/each}}|{{#each nils}}x{{else}}e{{/each}}`,
 	`{{len nils}}`,
@@ -147,44 +146,61 @@ func gotRaw(err error) string {
 	return "other: " + err.Error()
 }
 
+// checkGo renders tplStr with the Go value ctx through raymond (svc's
+// old Go API) and through RenderWith with WithGoContext: the output and
+// error text must match. Where raymond panicked (it crashed the caller),
+// any render error will do.
+func checkGo(t *testing.T, tplStr string, ctx any) {
+	t.Helper()
+	tpl, err := libhandlebars.Parse(tplStr)
+	require.NoError(t, err, tplStr)
+	want, werr := hbref.RenderGo(tplStr, ctx)
+	got, gerr := libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithGoContext())
+	if werr == nil {
+		if assert.NoError(t, gerr, "native %s", tplStr) {
+			assert.Equal(t, want, got, "native %s", tplStr)
+		}
+		return
+	}
+	if !assert.Error(t, gerr, "native %s: raymond failed with %s, got %q", tplStr, refRaw(werr), got) { //nolint:testifylint // report every template
+		return
+	}
+	var e *hbref.Error
+	if errors.As(werr, &e) && e.Stage == hbref.StagePanic {
+		return
+	}
+	assert.Equal(t, refRaw(werr), gotRaw(gerr), "native %s", tplStr)
+}
+
+// checkJSON renders tplStr with ctx through JSON on both sides.
+func checkJSON(t *testing.T, tplStr string, ctx any) {
+	t.Helper()
+	tpl, err := libhandlebars.Parse(tplStr)
+	require.NoError(t, err, tplStr)
+	jsonCtx, err := json.Marshal(ctx)
+	require.NoError(t, err)
+	want, werr := hbref.RenderJSON(tplStr, jsonCtx)
+	got, gerr := libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithJSONContext())
+	if werr == nil {
+		if assert.NoError(t, gerr, "json %s", tplStr) {
+			assert.Equal(t, want, got, "json %s", tplStr)
+		}
+		return
+	}
+	if assert.Error(t, gerr, "json %s: got %q", tplStr, got) {
+		assert.Equal(t, refRaw(werr), gotRaw(gerr), "json %s", tplStr)
+	}
+}
+
 // TestGoContextDifferential renders goTemplates with Go-typed contexts
-// through raymond (svc's old Go API) and through Render: the output and
-// error text must match, in the default (native) mode with the Go value
-// itself, and in JSON mode with the context raymond sees after
+// through raymond and through Render, in the default (Go) mode with the Go
+// value itself, and in JSON mode with the context raymond sees after
 // json.Marshal and json.Unmarshal.
 func TestGoContextDifferential(t *testing.T) {
 	ctx := goContext()
-	jsonCtx, err := json.Marshal(ctx)
-	require.NoError(t, err)
 	for _, tplStr := range goTemplates {
-		tpl, err := libhandlebars.Parse(tplStr)
-		require.NoError(t, err, tplStr)
-
-		want, werr := hbref.RenderGo(tplStr, ctx)
-		got, gerr := libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithGoContext())
-		if werr != nil || gerr != nil {
-			if !assert.Error(t, werr, "native %s: raymond rendered %q", tplStr, want) { //nolint:testifylint // report every template
-				continue
-			}
-			if assert.Error(t, gerr, "native %s: got %q", tplStr, got) {
-				assert.Equal(t, refRaw(werr), gotRaw(gerr), "native %s", tplStr)
-			}
-		} else {
-			assert.Equal(t, want, got, "native %s", tplStr)
-		}
-
-		want, werr = hbref.RenderJSON(tplStr, jsonCtx)
-		got, gerr = libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithJSONContext())
-		if werr != nil || gerr != nil {
-			if !assert.Error(t, werr, "json %s: raymond rendered %q", tplStr, want) { //nolint:testifylint // report every template
-				continue
-			}
-			if assert.Error(t, gerr, "json %s: got %q", tplStr, got) {
-				assert.Equal(t, refRaw(werr), gotRaw(gerr), "json %s", tplStr)
-			}
-		} else {
-			assert.Equal(t, want, got, "json %s", tplStr)
-		}
+		checkGo(t, tplStr, ctx)
+		checkJSON(t, tplStr, ctx)
 	}
 }
 
@@ -199,59 +215,121 @@ func (goMethods) Greeting() string { return "hi" }
 
 func (*goMethods) PtrOnly() string { return "p" }
 
-// TestGoContextCycle: a cyclic Go value converts once per pointer and
-// renders as raymond rendered it.
+type goHolder struct{ Inner goMethods }
+
+// TestGoContextCycle: a cyclic Go value renders as raymond rendered it;
+// only what the template touches is read.
 func TestGoContextCycle(t *testing.T) {
 	a := &goNode{Name: "a"}
 	a.Next = &goNode{Name: "b", Next: a}
-	tplStr := `{{name}}{{next.name}}{{next.next.name}}{{next.next.next.name}}`
-	tpl, err := libhandlebars.Parse(tplStr)
-	require.NoError(t, err)
-	want, err := hbref.RenderGo(tplStr, a)
-	require.NoError(t, err)
-	got, err := libhandlebars.Render(tpl, a)
-	require.NoError(t, err)
-	require.Equal(t, want, got)
-	require.Equal(t, "abab", got)
+	checkGo(t, `{{name}}{{next.name}}{{next.next.name}}{{next.next.next.name}}{{#with next}}{{#with next}}{{name}}{{/with}}{{/with}}`, a)
 }
 
-// TestGoContextDepth: an acyclic context nested deeper than MaxDepth is a
-// limit error, not unbounded recursion.
-func TestGoContextDepth(t *testing.T) {
-	var v any = "leaf"
-	for range hbs.DefaultLimits().MaxDepth + 1 {
-		v = []any{v}
+// TestGoContextPointerLoop (review B1): a pointer cycle through interfaces
+// renders where the template does not touch it, as raymond did, and is a
+// limit error, not a hang, where it does (raymond looped forever).
+func TestGoContextPointerLoop(t *testing.T) {
+	var a any
+	a = &a
+	var b, c any
+	b, c = &c, &b
+	ctx := map[string]any{"a": a, "b": b}
+	// raymond loops forever on any lookup that reaches a or b.
+	checkGo(t, `x{{this.x}}{{#each this}}{{/each}}`, map[string]any{"x": 1})
+	tpl, err := libhandlebars.Parse(`{{a}}`)
+	require.NoError(t, err)
+	for _, s := range []string{`{{a}}`, `{{b}}`, `{{a.x}}`, `{{#each b}}{{/each}}`} {
+		tpl, err = libhandlebars.Parse(s)
+		require.NoError(t, err)
+		done := make(chan error, 1)
+		go func() { _, err := libhandlebars.Render(tpl, ctx); done <- err }()
+		select {
+		case err := <-done:
+			var herr *hbs.Error
+			if err != nil {
+				require.ErrorAs(t, err, &herr, s)
+				require.Equal(t, hbs.KindLimit, herr.Kind, s)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s: render did not finish", s)
+		}
 	}
-	tpl, err := libhandlebars.Parse(`x`)
-	require.NoError(t, err)
-	_, err = libhandlebars.Render(tpl, map[string]any{"v": v})
-	var herr *hbs.Error
-	require.ErrorAs(t, err, &herr)
-	require.Equal(t, hbs.KindLimit, herr.Kind)
-	require.Contains(t, herr.Msg, "Go context nesting exceeds the maximum depth")
-	_, err = libhandlebars.RenderWith(tpl, map[string]any{"v": v}, libhandlebars.WithJSONContext())
-	require.NoError(t, err, "JSON mode keeps json.Marshal's own bound")
 }
 
-// TestGoContextUnsupported: raymond called methods and funcs; the native
-// context fails the render where a lookup reaches one, and renders
-// everything else.
+// TestGoContextInterfaceKeys (review B2): maps whose key type a string is
+// assignable to (map[any]any from YAML, say) are looked up by string key,
+// and #each visits their string keys sorted, @last counting every key.
+func TestGoContextInterfaceKeys(t *testing.T) {
+	yaml := map[any]any{"name": "Ann", "items": []any{map[any]any{"v": 1}}, 7: "seven"}
+	mi := map[any]any{"a": 1, 2: "x", "b": nil}
+	ctx := map[string]any{"yaml": yaml, "mi": mi, "named": map[goStatus]int{"k": 1}}
+	for _, s := range []string{
+		`{{yaml.name}}{{#each yaml.items}}{{v}}{{/each}}`,
+		`{{#each mi}}{{@key}}{{@last}}{{@index}}{{/each}}`,
+		`{{#each yaml}}{{@key}}={{this}};{{/each}}`,
+		`{{named.k}}|{{#each named}}x{{/each}}|{{#if named}}t{{/if}}|{{named}}`,
+		`{{mi.a}}{{mi.[2]}}{{yaml}}`,
+		`{{len yaml}}`,
+	} {
+		checkGo(t, s, ctx)
+	}
+}
+
+type (
+	goStatusInt int
+	goAmount    int64
+	goF         float64
+	goU         uint8
+	goF32       float32
+	goB         bool
+	goList      []any
+)
+
+// TestGoContextNamedTypes (review B3): named types reach helpers as
+// themselves, so svc's type switches miss them as they did; they print and
+// test by kind.
+func TestGoContextNamedTypes(t *testing.T) {
+	ctx := map[string]any{
+		"a": goStatusInt(4), "z": goStatusInt(0), "amt": goAmount(7), "f": goF(2.5), "u": goU(3),
+		"f32": goF32(1.5), "b": goB(true), "nb": goB(false), "l": goList{"x", 1}, "d": "2020-01-31",
+		"up": uintptr(3),
+	}
+	for _, s := range []string{
+		`{{a}}|{{z}}|{{amt}}|{{f}}|{{u}}|{{f32}}|{{b}}|{{nb}}|{{l}}|{{up}}`,
+		`{{to-str a}}|{{to-str amt}}|{{to-str f}}|{{to-str up}}`,
+		`{{#if z includeZero=true}}y{{else}}n{{/if}}{{#if z}}y{{else}}n{{/if}}{{#if nb}}y{{else}}n{{/if}}{{#if up}}y{{/if}}`,
+		`{{plus a=a b=1}}|{{to-int a}}|{{times f 2}}|{{gt a 1}}|{{eq a "4"}}`,
+		`{{prettyp-num-en a}}`,
+		`{{prettyp-num-en f}}`,
+		`{{date-add-months d a}}`,
+		`{{len l}}|{{#each l}}{{this}}{{/each}}|{{not nb}}`,
+		`{{round-to-nth f 1}}`,
+		`{{mod a 3}}`,
+	} {
+		checkGo(t, s, ctx)
+	}
+}
+
+// TestGoContextUnsupported: raymond called methods and funcs; the render
+// fails where a lookup reaches one and renders everything else, with
+// raymond's addressability rule for pointer methods.
 func TestGoContextUnsupported(t *testing.T) {
 	ctx := map[string]any{
 		"m":  &goMethods{Name: "n"},
 		"mv": goMethods{Name: "v"},
+		"h":  &goHolder{Inner: goMethods{Name: "i"}},
 		"f":  func() string { return "called" },
 		"ch": make(chan int),
 		"c":  complex(1, 2),
 	}
 	for tplStr, want := range map[string]string{
-		`{{m.name}}{{mv.name}}`: "nv",
-		`{{m.greeting}}`:        "Go method calls are not supported: libhandlebars_test.goMethods.Greeting",
-		`{{m.ptrOnly}}`:         "Go method calls are not supported: libhandlebars_test.goMethods.PtrOnly",
-		`{{mv.Greeting}}`:       "Go method calls are not supported: libhandlebars_test.goMethods.Greeting",
-		`{{f}}`:                 "Go value not supported: func() string",
-		`{{ch}}`:                "Go value not supported: chan int",
-		`{{c}}`:                 "Go value not supported: complex128",
+		`{{m.name}}{{mv.name}}{{h.inner.name}}{{c}}{{#if ch}}t{{/if}}`: "nviUNPRINTABLEt",
+		`{{m.greeting}}`:      "Go method calls are not supported: *libhandlebars_test.goMethods.Greeting",
+		`{{m.ptrOnly}}`:       "Go method calls are not supported: *libhandlebars_test.goMethods.PtrOnly",
+		`{{mv.Greeting}}`:     "Go method calls are not supported: libhandlebars_test.goMethods.Greeting",
+		`{{h.inner.ptrOnly}}`: "Go method calls are not supported: *libhandlebars_test.goMethods.PtrOnly",
+		`{{f}}`:               "Go func values are not supported: f",
+		`{{ch}}`:              "Can't print value: chan int",
 	} {
 		tpl, err := libhandlebars.Parse(tplStr)
 		require.NoError(t, err)
@@ -263,13 +341,62 @@ func TestGoContextUnsupported(t *testing.T) {
 		require.Contains(t, err.Error(), want, tplStr)
 	}
 	// A pointer method is invisible on a struct raymond could not address.
-	tpl, err := libhandlebars.Parse(`{{mv.ptrOnly}}|{{mv.name}}`)
+	checkGo(t, `{{mv.ptrOnly}}|{{mv.name}}`, ctx)
+}
+
+type goPayload interface{ isPayload() }
+
+type goText struct{ Text string }
+
+func (*goText) isPayload() {}
+
+type goMsg struct {
+	ID      int
+	Payload goPayload
+}
+
+type goNamedMap map[string]int
+
+func (goNamedMap) Size() int { return 1 }
+
+// TestGoContextInterfaceFields: a value held in an interface type with
+// methods (a protobuf oneof) is not looked into by a path, only as a
+// block's context, as raymond did; a method of a named map type is found
+// (and refused) as raymond found (and called) it.
+func TestGoContextInterfaceFields(t *testing.T) {
+	ctx := map[string]any{"msg": &goMsg{ID: 1, Payload: &goText{Text: "hi"}}, "nm": goNamedMap{"a": 1}}
+	for _, s := range []string{
+		`{{msg.id}}|{{msg.payload.text}}|{{#with msg.payload}}{{text}}{{/with}}|{{#if msg.payload}}t{{/if}}`,
+		`{{nm.a}}`,
+	} {
+		checkGo(t, s, ctx)
+	}
+	tpl, err := libhandlebars.Parse(`{{nm.size}}`)
 	require.NoError(t, err)
-	want, err := hbref.RenderGo(`{{mv.ptrOnly}}|{{mv.name}}`, ctx)
+	_, err = libhandlebars.Render(tpl, ctx)
+	require.ErrorContains(t, err, "Go method calls are not supported: libhandlebars_test.goNamedMap.Size", "raymond called it")
+}
+
+type goWide struct {
+	GoEmbedded
+	A1, A2, A3 int
+	Name       string
+}
+
+// TestGoContextStructCost (review B4): struct lookups use a per-type plan
+// and are charged by the type's field count, the same whether the plan was
+// cached, and promoted fields resolve as FieldByName does.
+func TestGoContextStructCost(t *testing.T) {
+	ctx := map[string]any{"w": goWide{GoEmbedded: GoEmbedded{Promoted: "p", Shadowed: 2}, Name: "n"}}
+	checkGo(t, `{{w.promoted}}{{w.shadowed}}{{w.name}}{{#each w}}{{@key}}={{this}};{{/each}}`, ctx)
+	tpl, err := libhandlebars.Parse(`{{w.promoted}}`)
 	require.NoError(t, err)
-	got, err := libhandlebars.Render(tpl, ctx)
+	m1, m2 := &countMeter{}, &countMeter{}
+	_, err = tpl.Render(ctx, hbs.Options{Meter: m1})
 	require.NoError(t, err)
-	require.Equal(t, want, got)
+	_, err = tpl.Render(ctx, hbs.Options{Meter: m2})
+	require.NoError(t, err)
+	require.Equal(t, m1.n, m2.n, "a cached plan charges what building it did")
 }
 
 // TestGoContextTypes pins N4: a Go int is an int by default, as under
@@ -286,17 +413,25 @@ func TestGoContextTypes(t *testing.T) {
 	require.Equal(t, "no 0.000000 3.000000", res)
 }
 
-// TestGoContextSteps: the conversion is charged and bounded by MaxSteps.
+// TestGoContextSteps: reading a Go value is charged and bounded by the
+// render's own MaxSteps (one budget for the whole call).
 func TestGoContextSteps(t *testing.T) {
-	big := make([]int, 1<<20)
-	_, err := hbs.FromGo(big, hbs.Limits{MaxSteps: 1 << 20}, nil)
+	big := make([]int, 1<<16)
+	tpl, err := libhandlebars.Parse(`{{#each big}}{{this}}{{/each}}`)
+	require.NoError(t, err)
+	_, err = tpl.Render(map[string]any{"big": big}, hbs.Options{Limits: hbs.Limits{MaxSteps: 1 << 14}})
 	var herr *hbs.Error
 	require.ErrorAs(t, err, &herr)
 	require.Equal(t, hbs.KindLimit, herr.Kind)
-	m := &countMeter{}
-	_, err = hbs.FromGo(map[string]any{"a": []int{1, 2}, "b": "x"}, hbs.Limits{}, m)
+	var deep any = []int8{1}
+	for range 300 {
+		deep = []any{deep}
+	}
+	tpl, err = libhandlebars.Parse(`{{deep}}`)
 	require.NoError(t, err)
-	require.Positive(t, m.n)
+	_, err = libhandlebars.Render(tpl, map[string]any{"deep": deep})
+	require.ErrorAs(t, err, &herr, "printing nests past MaxDepth")
+	require.Equal(t, hbs.KindLimit, herr.Kind)
 }
 
 type countMeter struct{ n int64 }

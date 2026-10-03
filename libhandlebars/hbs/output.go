@@ -5,6 +5,7 @@ package hbs
 import (
 	"fmt"
 	"math/bits"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -161,7 +162,7 @@ func (r *renderer) sortKeys(keys []string) {
 // and objects count against MaxDepth, each element costs a step, and the
 // produced-bytes bound is checked as it grows.
 func (r *renderer) appendV(dst []byte, v any) []byte {
-	switch x := unlist(v).(type) {
+	switch x := v.(type) {
 	case nil:
 		return append(dst, "<nil>"...)
 	case string:
@@ -214,30 +215,26 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 		}
 		r.leave()
 		return append(dst, ']')
-	case *goStruct:
-		// fmt's {v1 v2 ...}, over the exported fields.
-		r.enter()
-		dst = append(dst, '{')
-		for i, f := range x.fields {
-			r.step()
-			if i > 0 {
-				dst = append(dst, ' ')
-			}
-			dst = r.appendV(dst, f.val)
-			r.checkProduced(len(dst))
-		}
-		r.leave()
-		return append(dst, '}')
-	case *goOpaque:
-		r.checkProduced(len(dst) + len(x.v))
-		r.read(len(x.v))
-		return append(dst, x.v...)
-	case *goUnsupported:
-		return append(dst, x.typ...)
 	default:
-		// Booleans and numbers only: fmt has no recursion here.
-		return fmt.Appendf(dst, "%v", v)
+		switch reflect.ValueOf(v).Kind() {
+		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+			reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+			// fmt has no recursion here.
+			return fmt.Appendf(dst, "%v", v)
+		default:
+			return r.goAppendV(dst, v) // a Go composite
+		}
 	}
+}
+
+// appendStrR is appendStr for any value a render meets: a Go value is
+// printed by reflection, as raymond's strValue did, charged and bounded.
+func (r *renderer) appendStrR(dst []byte, v any) []byte {
+	if isGo(v) {
+		return r.goAppendStr(dst, reflect.ValueOf(v))
+	}
+	return appendStr(dst, v)
 }
 
 // checkProduced fails the render if a string being built has n bytes,
@@ -269,9 +266,9 @@ func (r *renderer) str(v any) string {
 		r.read(len(s))
 		return s
 	}
-	a, ok := unlist(v).([]any)
+	a, ok := v.([]any)
 	if !ok {
-		r.scratch = appendStr(r.scratch[:0], v)
+		r.scratch = r.appendStrR(r.scratch[:0], v)
 		r.formatted(len(r.scratch))
 		r.produced(len(r.scratch))
 		return string(r.scratch)
@@ -293,7 +290,7 @@ func (r *renderer) measureLeaves(a []any, n int) int {
 	r.enter()
 	for _, e := range a {
 		r.step()
-		switch x := unlist(e).(type) {
+		switch x := e.(type) {
 		case string:
 			r.read(len(x))
 			n += len(x)
@@ -311,13 +308,13 @@ func (r *renderer) measureLeaves(a []any, n int) int {
 // they are added.
 func (r *renderer) copyLeaves(b *strings.Builder, a []any) {
 	for _, e := range a {
-		switch x := unlist(e).(type) {
+		switch x := e.(type) {
 		case string:
 			b.WriteString(x)
 		case []any:
 			r.copyLeaves(b, x)
 		default:
-			r.scratch = appendStr(r.scratch[:0], x)
+			r.scratch = r.appendStrR(r.scratch[:0], x)
 			r.formatted(len(r.scratch))
 			r.checkProduced(b.Len() + len(r.scratch))
 			b.Write(r.scratch)
@@ -425,7 +422,7 @@ func appendEscaped(dst []byte, s string, i int) []byte {
 
 // writeValue appends raymond's string form of v, escaped when esc is set.
 func (r *renderer) writeValue(v any, esc bool) {
-	switch x := unlist(v).(type) {
+	switch x := v.(type) {
 	case nil:
 		return
 	case string:
@@ -443,6 +440,16 @@ func (r *renderer) writeValue(v any, esc bool) {
 		}
 		r.leave()
 	default:
+		if isGo(v) {
+			// A Go slice of strings prints them; escape as a string.
+			s := string(r.goAppendStr(r.scratch[:0], reflect.ValueOf(v)))
+			if esc {
+				r.writeEscaped(s)
+			} else {
+				r.writeString(s)
+			}
+			return
+		}
 		// Numbers, booleans and UNPRINTABLE contain no escapable byte.
 		r.scratch = appendStr(r.scratch[:0], v)
 		r.formatted(len(r.scratch)) // a float can print hundreds of digits

@@ -4,6 +4,7 @@ package hbs
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
@@ -289,10 +290,10 @@ func stripBrackets(part string) string {
 // evalField looks name up in ctx. ok is false when there is no such field
 // (raymond's invalid reflect.Value); a field holding null is (nil, true).
 func (r *renderer) evalField(ctx any, name string) (any, bool) {
-	switch c := unlist(ctx).(type) {
+	switch c := ctx.(type) {
 	case map[string]any:
 		v, ok := r.lookup(c, name)
-		return r.goChecked(v), ok
+		return v, ok
 	case []any:
 		r.scanBytes(len(name))
 		i, err := strconv.Atoi(name)
@@ -300,10 +301,8 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 			if i < 0 {
 				r.errorf("array index out of range: %d", i)
 			}
-			return r.goChecked(c[i]), true
+			return c[i], true
 		}
-	case *goStruct:
-		return r.structField(c, name)
 	case bpContext:
 		if r.compare(c.name, name) {
 			return c.val, true
@@ -317,14 +316,23 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 // the result exists and whether at least one part resolved.
 func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 	resolved := false
-	for _, part := range parts {
+	for i, part := range parts {
 		r.step()
+		if isGo(ctx) {
+			return r.goPath(reflect.ValueOf(ctx), parts[i:], resolved)
+		}
 		v, ok := r.evalField(ctx, stripBrackets(part))
 		if !ok {
 			return nil, false, resolved
 		}
 		ctx = v
 		resolved = true
+	}
+	if len(parts) > 0 {
+		// A Go value found in an engine container: the next part (handled
+		// by goPath above) kept it unfollowed, so a pointer's methods count;
+		// the result is followed, as raymond's evalField returns it.
+		ctx = r.goResult(ctx, parts[len(parts)-1])
 	}
 	return ctx, true, resolved
 }
@@ -333,11 +341,22 @@ func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 // its elements and yields a []any, which is nil (but typed) when nothing
 // resolved. Each element costs a step, even for an empty path.
 func (r *renderer) evalCtxPath(ctx any, parts []string) (any, bool) {
-	if arr, ok := unlist(ctx).([]any); ok {
+	if arr, ok := ctx.([]any); ok {
 		var results []any
 		for _, e := range arr {
 			r.step()
 			if v, valid, _ := r.evalPath(e, parts); valid {
+				results = append(results, v)
+			}
+		}
+		return results, false
+	}
+	if list, ok := goList(ctx); ok {
+		// raymond maps a path over a Go slice's elements alike.
+		var results []any
+		for i := range list.Len() {
+			r.step()
+			if v, valid, _ := r.goPath(list.Index(i), parts, false); valid {
 				results = append(results, v)
 			}
 		}
@@ -452,8 +471,14 @@ func (r *renderer) evalExpr(node *ast.Expression, direct bool) any {
 		r.formatted(len(lit)) // a number literal is formatted to look it up
 		cur, ok := r.ancestorCtx(0)
 		if ok {
+			if isGo(cur) {
+				if v := r.goField(reflect.ValueOf(cur), lit); v.IsValid() {
+					return r.goInterface(v)
+				}
+				return nil
+			}
 			if v, found := r.evalField(cur, lit); found {
-				return v
+				return r.goResult(v, lit)
 			}
 		}
 		return nil
@@ -544,7 +569,7 @@ func (r *renderer) visitBlock(node *ast.BlockStatement) {
 		}
 	} else if isTrue(v) {
 		if node.Program != nil {
-			if arr, ok := unlist(v).([]any); ok {
+			if arr, ok := v.([]any); ok {
 				frame := &dataFrame{parent: r.frame, iter: true}
 				boxKey := len(node.Program.BlockParams) > 1
 				for i, e := range arr {
@@ -555,6 +580,19 @@ func (r *renderer) visitBlock(node *ast.BlockStatement) {
 						key = i
 					}
 					r.evalProgram(node.Program, e, frame, key)
+				}
+			} else if list, ok := goList(v); ok {
+				// raymond iterates a Go slice by kind alike.
+				frame := &dataFrame{parent: r.frame, iter: true}
+				boxKey := len(node.Program.BlockParams) > 1
+				for i := range list.Len() {
+					r.step()
+					frame.setIter(list.Len(), i, nil)
+					var key any
+					if boxKey {
+						key = i
+					}
+					r.evalProgram(node.Program, r.goInterface(list.Index(i)), frame, key)
 				}
 			} else {
 				r.evalProgram(node.Program, v, nil, nil)

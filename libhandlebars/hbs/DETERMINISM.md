@@ -139,7 +139,7 @@ The ELPS entry points add:
 | Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder fails (invalid value, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
 | Decoding the context | `hbs.FromJSONMetered` | before decoding: 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
 | Retyping ELPS ints (`render-fixed` only) | `intTyper` | 1 per value walked |
-| Converting a Go context (Go API) | `hbs.FromGo` | 4 per value, 1 per struct field and per map entry, hash(len) per map key and exported field name; nesting past MaxDepth and steps past MaxSteps are limit errors |
+| Reading a Go value (Go API) | `goreflect.go` | each pointer or interface followed 1 (more than MaxDepth in a row is a limit error); a struct lookup 1 + 1 per started 16 of the type's visible and direct fields (its cached plan, charged alike on a hit) + hash(len(name)) + fmt-unit(len(name)) for `strings.Title`; a method check hash(len(name)); a map key hash(len); a slice index scan(len); printing, `#each`, array blocks and `%v` 1 per element, depth-bounded |
 
 `TestBuiltinCostCeiling` (`libhandlebars/ceiling_test.go`) runs these end to
 end through `handlebars:must-parse` and `handlebars:render` on tag-dense 1
@@ -177,20 +177,20 @@ arrive, so the output is a function of the value and the entry point:
   as `3`), so the ELPS value is the only record of which numbers were ints.
   The walk only retypes numbers: structure, errors and limits are the JSON
   route's. A bytes (JSON text) context has no ELPS ints and stays float64.
-- `libhandlebars.Render` / `RenderWith` (Go API, ModeCompat) convert a Go
-  value with `FromGo` by default: Go's int, uint and float types keep their
-  type and structs keep raymond's lookup rules, so a Go caller renders what
-  raymond rendered for the same value (`TestGoContextDifferential` compares
-  both against the frozen raymond with Go-typed contexts). `FromGo` charges
-  `goValueCost` steps a value and hashing for each key and field name,
-  bounds nesting by MaxDepth (a limit error, never deeper recursion),
-  converts a shared or cyclic pointer, map or slice once, and stops at
-  MaxSteps. Where raymond called Go code (methods, funcs) or panicked
-  printing (channels, complex), the lookup that reaches the value fails the
-  render with an error naming it. Not kept: raymond's refusal to look into a
-  value held in an interface type with methods except as a block context,
-  its calls to methods of named map and slice types, and its `%v` of a
-  struct's unexported fields in `prettyp-num-en`'s error. `WithJSONContext()`, or
+- `libhandlebars.Render` / `RenderWith` (Go API, ModeCompat) pass the Go
+  value itself, and the engine reads it lazily by reflection, as raymond
+  did (`goreflect.go`, ported from raymond's evalField, indirect,
+  isTrueValue, strValue and eachHelper): Go's number types and named types
+  reach helpers as themselves, structs and `interface{}`-keyed maps are
+  looked up by raymond's rules, and only what the template touches is read
+  (`TestGoContextDifferential` and the blocker tests compare against the
+  frozen raymond with Go-typed contexts). Every read is charged against the
+  render's own MaxSteps and bounded by MaxDepth. Where raymond called Go
+  code (a method or func a lookup reaches) the render fails with an error
+  naming it, and where raymond panicked or looped forever (an unexported
+  value, a nil embedded pointer, printing a channel, a pointer cycle the
+  template touches) it fails with an error. `WithJSONContext()`, or
   `SVC_HANDLEBARS_JSON_GO_CONTEXT=true` read once per process (exactly
   `true`; any other value is logged and ignored), selects the JSON route
-  instead.
+  instead. Output for a Go value is deterministic except where raymond's was
+  not: `%v` of a pointer in `prettyp-num-en`'s error text prints its address.
