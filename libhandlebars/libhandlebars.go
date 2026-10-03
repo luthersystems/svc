@@ -132,14 +132,15 @@ func builtInVersion(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 }
 
 // parse charges the parse and parses tpl through the process-wide cache.
-// The charge, one step per started KiB of template, is made on every
-// call, so a cache hit and a miss cost the same steps.
+// The charge, hbs.ParseCost of the template's length and lexer tokens, is
+// made on every call, so a cache hit and a miss cost the same steps.
 func parse(env *lisp.LEnv, tpl string) (*hbs.Program, *lisp.LVal) {
-	if lerr := lisp.ChargeStartedKiB(env, len(tpl)); lerr.Type == lisp.LError {
-		return nil, lerr
-	}
-	prog, err := hbs.ParseCached(tpl, hbs.DefaultLimits())
+	m := &envMeter{env: env}
+	prog, err := hbs.ParseCachedMetered(tpl, hbs.DefaultLimits(), m)
 	if err != nil {
+		if errors.Is(err, errBudget) {
+			return nil, m.lerr
+		}
 		// Syntax errors and template limits (size, nesting) alike.
 		return nil, env.ErrorConditionf(condParse, "error parsing template: %v", err)
 	}
@@ -221,14 +222,16 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 // capped walk returns the same encoder error Dump would, so the unbounded
 // Dump never runs.
 func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
+	// json:dump-bytes charges a successful encode by the bytes it writes,
+	// but its walk costs per value (shared structure writes little and
+	// walks much) and a failed encode charges nothing. Charge the walk
+	// first, value by value, so neither runs uncharged.
+	if lerr := chargeEncode(env, v); lerr != nil {
+		return nil, lerr
+	}
 	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
 	if res.Type != lisp.LError {
 		return res.Bytes(), nil
-	}
-	// json:dump-bytes charges only a successful encode. Charge the walk
-	// that failed, so a failure costs what the work before it did.
-	if lerr := chargeFailedEncode(env, v); lerr != nil {
-		return nil, lerr
 	}
 	if isLimitError(res) || len(res.Cells) == 0 {
 		return nil, res
@@ -236,12 +239,13 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 	return nil, env.Errorf("error while serializing: %s", res.Cells[0].Str)
 }
 
-// chargeFailedEncode charges, one step per started KiB, the JSON a failed
-// encode of v wrote before it stopped, estimated by walking v in the
-// encoder's order: it stops at the first value JSON cannot hold, or once
-// the estimate passes the runtime's allocation cap, where the encoder
-// stopped too. It returns the budget error if the budget runs out first.
-func chargeFailedEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
+// chargeEncode charges encoding v to JSON before the encoder runs:
+// encodeValueCost steps per value and one step per started KiB of the
+// JSON, estimated by walking v in the encoder's order. The walk stops where
+// the encoder would: at the first value JSON cannot hold, or once the
+// estimate passes the runtime's allocation cap. It returns the budget error
+// if the budget runs out first.
+func chargeEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 	limit := int64(env.Runtime.MaxAllocBytes())
 	var size, charged int64
 	add := func(n int64) *lisp.LVal {
@@ -306,9 +310,16 @@ func chargeFailedEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 		if lerr := add(n); lerr != nil {
 			return lerr
 		}
+		if lerr := env.ChargeSteps(encodeValueCost); lerr.Type == lisp.LError {
+			return lerr
+		}
 	}
 	return nil
 }
+
+// encodeValueCost is the steps encoding one value costs beyond its bytes:
+// about 200 ns a value on a structure that shares one value many times.
+const encodeValueCost = 3
 
 func appendReversed(stack, cells []*lisp.LVal) []*lisp.LVal {
 	for i := len(cells) - 1; i >= 0; i-- {

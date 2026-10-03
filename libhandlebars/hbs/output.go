@@ -150,7 +150,7 @@ func (r *renderer) sortKeys(keys []string) {
 	rounds := int64(bits.Len(uint(len(keys))))
 	var cost int64
 	for _, k := range keys {
-		cost += max(1, int64(len(k)-1)>>10+1)
+		cost += max(1, units(len(k), hashUnit))
 	}
 	r.steps1(cost * max(1, rounds))
 	sort.Strings(keys)

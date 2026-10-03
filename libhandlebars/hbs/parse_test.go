@@ -44,7 +44,7 @@ func TestParseTemplateSize(t *testing.T) {
 			at, over := build(limit), build(limit+1)
 			require.Len(t, at, limit, name)
 			require.Len(t, over, limit+1, name)
-			for _, parse := range []func(string, Limits) (*Program, error){Parse, c.parse} {
+			for _, parse := range []func(string, Limits) (*Program, error){Parse, func(s string, l Limits) (*Program, error) { return c.parse(s, l, nil) }} {
 				p, err := parse(at, lim)
 				require.NoError(t, err, "%s at %d bytes", name, limit)
 				require.Equal(t, limit, p.SourceLen())
@@ -140,9 +140,9 @@ func TestParseDepthLimit(t *testing.T) {
 
 			// the cache gives the same verdicts
 			c := newParseCache(cacheMaxBytes)
-			_, err = c.parse(at, lim)
+			_, err = c.parse(at, lim, nil)
 			require.NoError(t, err, "%s at depth %d", name, limit)
-			_, err = c.parse(over, lim)
+			_, err = c.parse(over, lim, nil)
 			require.Equal(t, msg, requireKind(t, err, KindLimit), name)
 		}
 	}
@@ -268,7 +268,7 @@ func TestParseLeaksNoGoroutines(t *testing.T) {
 		_, err := Parse(src, DefaultLimits())
 		requireKind(t, err, KindParse, src)
 		// a different source each time, so the cache misses
-		_, err = c.parse(src+strings.Repeat(" ", i%64), DefaultLimits())
+		_, err = c.parse(src+strings.Repeat(" ", i%64), DefaultLimits(), nil)
 		requireKind(t, err, KindParse, src)
 		_, err = parser.Parse(src)
 		require.Error(t, err, src)

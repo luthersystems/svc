@@ -62,23 +62,29 @@ func FromJSON(data []byte) (Value, error) {
 	return FromJSONMetered(data, nil)
 }
 
-// FromJSONMetered is FromJSON with its number parsing charged to m (nil:
-// none): strconv.ParseFloat takes about 20 us on some 6-byte inputs (see
-// floatCost). Each number token is charged in document order, whether or
-// not its literal repeats, and each distinct literal is parsed once. The
-// result and the error text are FromJSON's; a Meter error is returned
-// unchanged.
+// FromJSONMetered is FromJSON with its decoding charged to m (nil: none),
+// by a pass over the bytes before json decodes them: JSON's structure and
+// strings cost tens of ns a token, and strconv.ParseFloat takes about 20 us
+// on some 6-byte inputs (see floatCost). The result and the error text are
+// FromJSON's; a Meter error is returned unchanged, before decoding.
+//
+// Charges, in document order: 2 steps per { or [, 1 per , or : and per
+// null, true or false, 1 plus a step per started 8 bytes per string, and
+// numberCost plus floatCost per number token. Each distinct number literal
+// is parsed once. A document that is invalid or not an object, which json
+// rejects without decoding its numbers, costs a step per started 8 bytes.
 func FromJSONMetered(data []byte, m Meter) (Value, error) {
-	// Invalid JSON and roots that are not objects never reach a number
-	// parse: decode them as before, for the same error text.
 	if !json.Valid(data) || !objectRoot(data) {
+		if err := charge(m, units(len(data), 8)); err != nil {
+			return nil, err
+		}
 		var v map[string]any
 		if err := json.Unmarshal(data, &v); err != nil {
 			return nil, err
 		}
 		return v, nil
 	}
-	nums, err := parseNumbers(data, m)
+	nums, err := scanJSON(data, m)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +97,11 @@ func FromJSONMetered(data []byte, m Meter) (Value, error) {
 	convertNumbers(v, nums)
 	return v, nil
 }
+
+// numberCost is the steps a number token costs beyond floatCost: the
+// decoder boxes it, and a distinct literal is parsed and stored (about
+// 900 ns in all).
+const numberCost = 8
 
 // objectRoot reports whether valid JSON data is an object.
 func objectRoot(data []byte) bool {
@@ -105,13 +116,13 @@ func objectRoot(data []byte) bool {
 	return false
 }
 
-// parseNumbers parses every number token of valid JSON data in document
-// order, charging each by floatCost. The first literal out of float64's
+// scanJSON charges valid JSON data as FromJSONMetered describes and parses
+// its number tokens in document order. The first literal out of float64's
 // range is json.Unmarshal's error for it.
-func parseNumbers(data []byte, m Meter) (map[string]float64, error) {
+func scanJSON(data []byte, m Meter) (map[string]float64, error) {
 	nums := map[string]float64{}
 	var pending int64
-	charge := func(force bool) error {
+	flush := func(force bool) error {
 		if m == nil || pending == 0 || (!force && pending < meterBatch) {
 			return nil
 		}
@@ -122,9 +133,20 @@ func parseNumbers(data []byte, m Meter) (map[string]float64, error) {
 	for i := 0; i < len(data); i++ {
 		switch c := data[i]; {
 		case c == '"':
+			start := i
 			for i++; i < len(data) && data[i] != '"'; i++ {
 				if data[i] == '\\' {
 					i++
+				}
+			}
+			pending += 1 + units(i-start-1, 8)
+		case c == '{' || c == '[':
+			pending += 2
+		case c == ',' || c == ':' || c == 'n' || c == 't' || c == 'f':
+			pending++
+			if c != ',' && c != ':' {
+				for i+1 < len(data) && data[i+1] >= 'a' && data[i+1] <= 'z' {
+					i++ // the rest of null, true or false
 				}
 			}
 		case c == '-' || (c >= '0' && c <= '9'):
@@ -132,22 +154,26 @@ func parseNumbers(data []byte, m Meter) (map[string]float64, error) {
 			for j < len(data) && strings.IndexByte("+-.eE0123456789", data[j]) >= 0 {
 				j++
 			}
-			lit := string(data[i:j])
-			pending += floatCost(lit)
-			if err := charge(false); err != nil {
+			lit := data[i:j]
+			pending += numberCost + floatCost(string(lit))
+			if err := flush(false); err != nil {
 				return nil, err
 			}
-			if _, done := nums[lit]; !done {
-				f, err := strconv.ParseFloat(lit, 64)
+			if _, done := nums[string(lit)]; !done {
+				f, err := strconv.ParseFloat(string(lit), 64)
 				if err != nil {
-					return nil, &json.UnmarshalTypeError{Value: "number " + lit, Type: reflect.TypeFor[float64](), Offset: int64(j)}
+					return nil, &json.UnmarshalTypeError{Value: "number " + string(lit), Type: reflect.TypeFor[float64](), Offset: int64(j)}
 				}
-				nums[lit] = f
+				nums[string(lit)] = f
 			}
 			i = j - 1
+			continue
+		}
+		if err := flush(false); err != nil {
+			return nil, err
 		}
 	}
-	return nums, charge(true)
+	return nums, flush(true)
 }
 
 // convertNumbers replaces the json.Number values of v with their parsed

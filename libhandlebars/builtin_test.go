@@ -104,27 +104,31 @@ func TestRenderModes(t *testing.T) {
 	}
 }
 
-// TestParseSteps: parse costs one step per started KiB of template on every
-// call, cache hit or miss.
+// TestParseSteps: parse costs hbs.ParseCost on every call, cache hit or
+// miss: 6 steps per lexer token and a step per started 16 bytes.
 func TestParseSteps(t *testing.T) {
 	env := newEnv(t)
 	tag := t.Name() // not in the process-wide parse cache yet
-	steps := func(n int) int64 {
-		tpl := tag + strings.Repeat("x", n-len(tag))
+	steps := func(tpl string) int64 {
 		_, miss := eval(t, env, "(handlebars:must-parse "+strconv.Quote(tpl)+")")
 		_, hit := eval(t, env, "(handlebars:must-parse "+strconv.Quote(tpl)+")")
-		require.Equal(t, miss, hit, "cache hit and miss must cost the same, n=%d", n)
+		require.Equal(t, miss, hit, "cache hit and miss must cost the same: %.40q", tpl)
 		return miss
 	}
-	base := steps(1024)
-	require.Equal(t, base+1, steps(1025))
-	require.Equal(t, base+1, steps(2048))
-	require.Equal(t, base+2, steps(2049))
-	require.Equal(t, base+99, steps(100*1024))
+	text := func(n int) int64 { return steps(tag + strings.Repeat("x", n-len(tag))) }
+	base := text(1024) // one content token and EOF: 12 + 64
+	require.Equal(t, base+1, text(1025))
+	require.Equal(t, base+64, text(2048))
+	require.Equal(t, base+65, text(2049))
+	require.Equal(t, base+6336, text(100*1024))
 
-	// A failed parse costs the same as a good one of the same length.
-	_, bad := eval(t, env, "(handlebars:must-parse "+strconv.Quote(tag+"{{{"+strings.Repeat("x", 1021-len(tag)))+")")
-	require.Equal(t, base, bad)
+	// Each {{a}} is 3 tokens (open, id, close) and 5 bytes: 1000 more cost
+	// 18,000 steps for the tokens and 312 or 313 for the 5,000 bytes.
+	dense := func(k int) int64 { return steps(tag + "|" + strings.Repeat("{{a}}", k)) }
+	require.InDelta(t, dense(1000)+6*3*1000+312, dense(2000), 1)
+
+	// A failed parse costs what the tokens up to the error do, hit or miss.
+	steps(tag + "{{{" + strings.Repeat("x", 1021-len(tag)))
 }
 
 // TestRenderSteps: render charges the context's JSON, the parse, then the
@@ -141,14 +145,16 @@ func TestRenderSteps(t *testing.T) {
 	}
 	empty := call("")
 	require.Equal(t, empty, call(""), "same input, same steps")
-	// The context's JSON, {"s":"..."}, is len(s)+8 bytes. Writing it costs
-	// a step per whole KiB (as json:dump-bytes charges), decoding it a step
-	// per started KiB. The output costs a step per started KiB, and escaping
-	// it a step per started 16 bytes scanned. Against the empty string:
-	require.Equal(t, empty+2, call("x"))                             // output 1, scan 1
-	require.Equal(t, empty+1+1+64, call(strings.Repeat("x", 1016)))  // ctx 1+1-1, output 1, scan 64
-	require.Equal(t, empty+2+1+64, call(strings.Repeat("x", 1024)))  // ctx 1+2-1, output 1, scan 64
-	require.Equal(t, empty+8+5+257, call(strings.Repeat("x", 4097))) // ctx 4+5-1, output 5, scan 257
+	// The context's JSON, {"s":"..."}, is len(s)+8 bytes.
+	//
+	// Measured against the empty string, as the sum of: the encode walk's
+	// estimate (a step per started KiB), json:dump-bytes (per whole KiB),
+	// the decode pass (1 + a step per started 8 bytes of the string), the
+	// output (per started KiB) and the escape scan (per started 16 bytes).
+	require.Equal(t, empty+3, call("x"))
+	require.Equal(t, empty+194, call(strings.Repeat("x", 1016)))
+	require.Equal(t, empty+196, call(strings.Repeat("x", 1024)))
+	require.Equal(t, empty+787, call(strings.Repeat("x", 4097)))
 
 	// Iterations cost steps.
 	each := func(n int) int64 {

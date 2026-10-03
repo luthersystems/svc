@@ -5,6 +5,7 @@ package hbs
 import (
 	"container/list"
 	"crypto/sha256"
+	"errors"
 	"sync"
 )
 
@@ -31,10 +32,12 @@ type cacheKey struct {
 
 // cacheEntry is a cached verdict: a program, or the error Parse returned.
 type cacheEntry struct {
-	prog *Program
-	err  *Error
-	key  cacheKey
-	cost int
+	prog   *Program
+	err    *Error
+	key    cacheKey
+	cost   int
+	srcLen int
+	tokens int // what the miss charged, so a hit charges the same
 }
 
 // parseCache is a byte-bounded LRU of parse verdicts.
@@ -62,23 +65,38 @@ func newParseCache(maxBytes int) *parseCache {
 // Callers that meter work must charge for a parse on a hit as on a miss,
 // so the cache cannot change what a transaction costs.
 func ParseCached(src string, lim Limits) (*Program, error) {
-	return defaultCache.parse(src, lim)
+	return defaultCache.parse(src, lim, nil)
 }
 
-func (c *parseCache) parse(src string, lim Limits) (*Program, error) {
+// ParseCachedMetered is ParseCached charging ParseCost to m on every call,
+// cache hit or miss alike: a hit charges the token count the miss
+// measured. A Meter error is returned unchanged.
+func ParseCachedMetered(src string, lim Limits, m Meter) (*Program, error) {
+	return defaultCache.parse(src, lim, m)
+}
+
+func (c *parseCache) parse(src string, lim Limits, m Meter) (*Program, error) {
 	if len(src) > cacheMaxEntryBytes {
-		return Parse(src, lim)
+		p, _, err := parseMetered(src, lim, m)
+		return p, err
 	}
 
 	maxBytes, maxDepth := parseLimits(lim)
 	key := cacheKey{sum: sha256.Sum256([]byte(src)), maxBytes: maxBytes, maxDepth: maxDepth}
 
 	if e, ok := c.get(key); ok {
+		if err := charge(m, ParseCost(e.srcLen, e.tokens)); err != nil {
+			return nil, err
+		}
 		return e.result()
 	}
 
-	prog, err := Parse(src, lim)
-	e := &cacheEntry{key: key, prog: prog}
+	prog, tokens, err := parseMetered(src, lim, m)
+	var he *Error
+	if err != nil && !errors.As(err, &he) {
+		return nil, err // a Meter error: nothing to cache
+	}
+	e := &cacheEntry{key: key, prog: prog, srcLen: len(src), tokens: tokens}
 	if err == nil {
 		e.cost = len(src) + astBytesPerToken*prog.tokens + cacheEntryOverhead
 	} else {

@@ -72,11 +72,13 @@ func TestHelperCharges(t *testing.T) {
 	// bound before formatting; then its result (1,000,001 bytes) and the
 	// output (the same) are charged at their exact length: a step per started
 	// KiB of the running total, 2,000,002 bytes or 1954 KiB, 1953 more than
-	// the small case's 1; and escaping the output scans it, a step per
-	// started 16 bytes: 62,501, 62,500 more than the small case's 1.
+	// the small case's 1; escaping the output scans it, a step per started
+	// 16 bytes: 62,501, 62,500 more than the small case's 1; and formatting
+	// is charged on the precision, a step per started 8 digits: 125,000,
+	// 124,999 more than the small case's 1.
 	base := steps(t, `{{round-to-nth "1" "2"}}`, `{}`)
-	require.Equal(t, base+1953+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
-	require.Equal(t, base+1953+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
+	require.Equal(t, base+1953+62500+124999, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
+	require.Equal(t, base+1953+62500+124999, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
 
 	// A string argument costs a step per started 256 bytes read; a
 	// non-string one, a step per started KiB of the string built.

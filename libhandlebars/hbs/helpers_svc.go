@@ -273,6 +273,7 @@ func hRoundToNth(c *hcall) any {
 	// result is (callFunc).
 	if fmtPrecisionOK(nn) {
 		c.r.reserveProduced(int(nn))
+		c.r.steps1(units(int(nn), fmtUnit)) // formatting nn digits
 	}
 	return fmt.Sprintf(fmt.Sprintf("%%.%df", nn), xf)
 }

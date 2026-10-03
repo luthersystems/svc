@@ -56,10 +56,34 @@ func parseLimits(lim Limits) (int, int) {
 // Limit errors are parse-time errors: the ELPS binding reports them as
 // handlebars-parse "error parsing template: <Msg>", like syntax errors.
 func Parse(src string, lim Limits) (*Program, error) {
+	p, _, err := parseMetered(src, lim, nil)
+	return p, err
+}
+
+// ParseCost is the steps parsing an n-byte template of the given lexer
+// tokens costs: about 450 ns a token at worst (tag-dense templates) and
+// about 2 ns a byte (plain text, and the SHA-256 the cache keys on).
+func ParseCost(n, tokens int) int64 {
+	return parseTokenCost*int64(tokens) + units(n, parseByteUnit)
+}
+
+const (
+	parseTokenCost = 6
+	parseByteUnit  = 16
+)
+
+// parseMetered is Parse charging ParseCost to m (nil: none) once the
+// prescan has counted the tokens, before the recursive parse. It returns
+// the token count, which the cache keeps so a hit costs what a miss did.
+// A template over the size limit is charged ParseCost(len, 0).
+func parseMetered(src string, lim Limits, m Meter) (*Program, int, error) {
 	maxBytes, maxDepth := parseLimits(lim)
 
 	if len(src) > maxBytes {
-		return nil, errorf(KindLimit, "template is %d bytes, limit is %d", len(src), maxBytes)
+		if err := charge(m, ParseCost(len(src), 0)); err != nil {
+			return nil, 0, err
+		}
+		return nil, 0, errorf(KindLimit, "template is %d bytes, limit is %d", len(src), maxBytes)
 	}
 
 	// The prescan finds a depth excess without recursion; the parser then
@@ -67,15 +91,26 @@ func Parse(src string, lim Limits) (*Program, error) {
 	// whichever comes first in the source: a syntax error, as raymond did,
 	// or the depth limit.
 	tokens, derr := parser.Depth(src, maxDepth)
+	if err := charge(m, ParseCost(len(src), tokens)); err != nil {
+		return nil, tokens, err
+	}
 	prog, err := parser.ParseLimit(src, maxDepth)
 	if err != nil {
-		return nil, toError(err)
+		return nil, tokens, toError(err)
 	}
 	if derr != nil {
-		return nil, toError(derr)
+		return nil, tokens, toError(derr)
 	}
 
-	return &Program{ast: prog, srcLen: len(src), tokens: tokens}, nil
+	return &Program{ast: prog, srcLen: len(src), tokens: tokens}, tokens, nil
+}
+
+// charge charges n steps to m, if any.
+func charge(m Meter, n int64) error {
+	if m == nil || n == 0 {
+		return nil
+	}
+	return m.Charge(n)
 }
 
 // toError classifies a parser error.

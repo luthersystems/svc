@@ -121,17 +121,24 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 | fmt `%v` text (`prettyp-num-en` errors) | `appendV` | 1 per element, leaves and keys checked and charged before copying, depth-bounded |
 | `select` / `in-string-array` element scanned | helpers | hash(len(key)) / 1, plus compares; `where` parsed without allocation |
 | `global` read or write | `hGlobal` | hash(len(ns) + len(key)) |
-| `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting |
+| `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound and charged fmt(precision) before formatting |
 | Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
 | Escaped output | `writeEscaped` | scan(n) of the escaped length (or of the input when nothing needs escaping), rejected before scanning if it cannot fit |
 | Produced bytes: output, captured sections, helper results, error text | `wrote`, `produced`, `fail`, `errorf` | KiB of the running total; bounded by 8 x MaxOutputBytes |
 
-The ELPS binding adds: parsing, 1 step per started KiB of template on every
-call; encoding the context (as `json:dump-bytes`, under `Runtime.MaxAlloc`),
-1 step per whole KiB written; decoding it, 1 step per started KiB, plus each
-number token's `floatCost` (`FromJSONMetered`: tokens charged in document
-order, each distinct literal parsed once). An encode that fails is charged
-1 step per started KiB of the JSON it got through (`chargeFailedEncode`).
+The ELPS entry points add:
+
+| Operation | Where | Charge |
+|---|---|---|
+| Parsing a template (`must-parse`, `render`), cache hit or miss alike | `hbs.ParseCachedMetered`, `hbs.ParseCost` | 6 per lexer token + 1 per started 16 bytes (SHA-256 and plain text), charged after the depth prescan counts the tokens and before the recursive parse; a cache hit charges the count its miss measured |
+| Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder would (invalid value, `Runtime.MaxAlloc`); then `json:dump-bytes`'s own 1 per whole KiB written |
+| Decoding the context | `hbs.FromJSONMetered` | before decoding: 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
+
+`TestBuiltinCostCeiling` (`libhandlebars/ceiling_test.go`) runs these end to
+end through `handlebars:must-parse` and `handlebars:render` on tag-dense 1
+MiB templates (miss and hit), structural JSON, distinct number literals and
+an ELPS context sharing one value a million times, with the same 200 ns
+ceiling; they measure at most about 100 ns a step.
 
 `TestCostModelSites` (`costguard_test.go`) times length-sensitive sites at
 1 KiB and 256 KiB and bounds allocation per step; `TestCostModelGuard` does
