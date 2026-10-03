@@ -132,9 +132,8 @@ func builtInMustParse(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		return env.Errorf("non-string template: %v", template.Type)
 	}
 
-	_, err := raymond.Parse(template.Str)
-	if err != nil {
-		return env.ErrorConditionf("handlebars-parse", "error parsing template: %v", err)
+	if v := mustParseVerdictOf(template.Str); v.failed {
+		return env.ErrorConditionf("handlebars-parse", "error parsing template: %v", v.errMsg)
 	}
 
 	return lisp.Nil()
