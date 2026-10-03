@@ -2,6 +2,7 @@ package libhandlebars
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -312,17 +313,17 @@ func addHelpers(tpl *raymond.Template) {
 		}
 		key := kv[0]
 		val := kv[1]
-		var res string
+		var res strings.Builder
 		for _, mi := range items {
 			m, ok := mi.(map[string]interface{})
 			if !ok {
 				continue
 			}
 			if m[key] == val {
-				res += raymond.Str(options.FnWith(m))
+				res.WriteString(raymond.Str(options.FnWith(m)))
 			}
 		}
-		return res
+		return res.String()
 	})
 
 	global := make(map[globalKeyspace]string)
@@ -331,7 +332,7 @@ func addHelpers(tpl *raymond.Template) {
 		h := options.Hash()
 		ki, ok := h["key"]
 		if !ok {
-			panic(fmt.Errorf("global: missing key"))
+			panic(errors.New("global: missing key"))
 		}
 		k, ok := ki.(string)
 		if !ok {
@@ -401,7 +402,7 @@ func addHelpers(tpl *raymond.Template) {
 		}
 		d, err := parseDate(date)
 		if err != nil {
-			panic(fmt.Errorf("date-beautify: expecting date format YYYY-MM-DD, got: %v", err))
+			panic(fmt.Errorf("date-beautify: expecting date format YYYY-MM-DD, got: %w", err))
 		}
 		return d.Format(layoutUK)
 	})
@@ -412,7 +413,7 @@ func addHelpers(tpl *raymond.Template) {
 		}
 		d, err := parseDate(date)
 		if err != nil {
-			panic(fmt.Errorf("date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: %v", err))
+			panic(fmt.Errorf("date-DDMMYY-slash: expecting date format YYYY-MM-DD, got: %w", err))
 		}
 		return d.Format(layoutDMYSlashShort)
 	})
@@ -423,7 +424,7 @@ func addHelpers(tpl *raymond.Template) {
 		}
 		d, err := parseDate(date)
 		if err != nil {
-			panic(fmt.Errorf("date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: %v", err))
+			panic(fmt.Errorf("date-DDMMYYYY-slash: expecting date format YYYY-MM-DD, got: %w", err))
 		}
 		return d.Format(layoutDMYSlashLong)
 	})
@@ -434,7 +435,7 @@ func addHelpers(tpl *raymond.Template) {
 		}
 		d, err := parseDate(date)
 		if err != nil {
-			panic(fmt.Errorf("date-DDMMYYYY: expecting date format YYYY-MM-DD, got: %v", err))
+			panic(fmt.Errorf("date-DDMMYYYY: expecting date format YYYY-MM-DD, got: %w", err))
 		}
 		return d.Format(layoutDMYLong)
 	})
@@ -588,15 +589,17 @@ func dateAfterHelper(testDate, referenceDate string) bool {
 }
 
 func dateDifferenceInMonths(startDate time.Time, endDate time.Time) int {
-	y, m, d, hour, min, sec := dateDifference(startDate, endDate)
+	y, m, d, hour, minute, sec := dateDifference(startDate, endDate)
 	months := 12*y + m
-	if d > 0 || hour > 0 || min > 0 || sec > 0 {
+	if d > 0 || hour > 0 || minute > 0 || sec > 0 {
 		months++
 	}
 	return months
 }
 
-func dateDifference(a, b time.Time) (year, month, day, hour, min, sec int) {
+// dateDifference returns the years, months, days, hours, minutes and
+// seconds between a and b, in that order.
+func dateDifference(a, b time.Time) (int, int, int, int, int, int) {
 	if a.Location() != b.Location() {
 		b = b.In(a.Location())
 	}
@@ -609,20 +612,20 @@ func dateDifference(a, b time.Time) (year, month, day, hour, min, sec int) {
 	h1, m1, s1 := a.Clock()
 	h2, m2, s2 := b.Clock()
 
-	year = int(y2 - y1)
-	month = int(M2 - M1)
-	day = int(d2 - d1)
-	hour = int(h2 - h1)
-	min = int(m2 - m1)
-	sec = int(s2 - s1)
+	year := y2 - y1
+	month := int(M2 - M1)
+	day := d2 - d1
+	hour := h2 - h1
+	minute := m2 - m1
+	sec := s2 - s1
 
 	// Normalize negative values
 	if sec < 0 {
 		sec += 60
-		min--
+		minute--
 	}
-	if min < 0 {
-		min += 60
+	if minute < 0 {
+		minute += 60
 		hour--
 	}
 	if hour < 0 {
@@ -640,7 +643,7 @@ func dateDifference(a, b time.Time) (year, month, day, hour, min, sec int) {
 		year--
 	}
 
-	return
+	return year, month, day, hour, minute, sec
 }
 
 func dateAddMonths(startDate time.Time, months int) time.Time {

@@ -25,6 +25,8 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
 	"github.com/luthersystems/svc/midware"
 	"github.com/luthersystems/svc/svcerr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -47,7 +49,9 @@ func (orc *Oracle) addServerHeader() midware.Middleware {
 // error.
 func (orc *Oracle) healthCheckHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+		// This endpoint bypasses the grpc server and its otel handler, so
+		// continue any trace the caller sent here (luthersystems/svc#55).
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 		sendResponse := func(resp *healthcheck.GetHealthCheckResponse, responseCode int) {
 			err := writeProtoHTTP(w, responseCode, resp)
 			if err != nil {

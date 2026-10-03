@@ -202,17 +202,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		panic(err)
 	}
 
-	grpcServer := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			grpclogging.LogrusMethodInterceptor(
-				orc.logBase,
-				grpclogging.UpperBoundTimer(time.Millisecond),
-				grpclogging.RealTime()),
-			orc.txctxInterceptor, // Ensures transaction context is set
-			svcerr.AppErrorUnaryInterceptor(orc.Log),
-		)),
-	)
+	grpcServer := orc.newGRPCServer()
 
 	grpcConfig.RegisterServiceServer(grpcServer)
 
@@ -221,13 +211,13 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 	// Start a grpc server listening on the unix socket at grpcAddr
 	grpcAddr := fmt.Sprintf("/tmp/oracle.grpc.%d.sock", nBig.Int64())
 
-	listener, err := net.Listen("unix", grpcAddr)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "unix", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("grpc listen: %w", err)
 	}
 	defer func() {
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			orc.Log(ctx).WithError(err).Warn("failed to close listener")
+		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			orc.Log(ctx).WithError(closeErr).Warn("failed to close listener")
 		}
 	}()
 
@@ -325,4 +315,21 @@ func getGRPCHeader(ctx context.Context, grpcHeaderKey string) string {
 		return ""
 	}
 	return values[0]
+}
+
+// newGRPCServer builds the oracle's grpc server. Its otel handler continues a
+// trace found in the request metadata using the global propagator, which
+// opttrace.Tracer.SetGlobalTracer installs when tracing is configured.
+func (orc *Oracle) newGRPCServer() *grpc.Server {
+	return grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			grpclogging.LogrusMethodInterceptor(
+				orc.logBase,
+				grpclogging.UpperBoundTimer(time.Millisecond),
+				grpclogging.RealTime()),
+			orc.txctxInterceptor, // Ensures transaction context is set
+			svcerr.AppErrorUnaryInterceptor(orc.Log),
+		)),
+	)
 }

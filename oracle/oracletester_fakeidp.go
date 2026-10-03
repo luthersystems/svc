@@ -96,8 +96,8 @@ func (f *FakeIDP) fakeIDPAuthHTTPClient(t *testing.T) (*http.Client, *httptest.S
 	server := httptest.NewServer(f.fakeIDPAuthToken(f.fakeIDPAuthJWKS(handler)))
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
-				return net.Dial(network, server.Listener.Addr().String())
+			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 			},
 		},
 	}

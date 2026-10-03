@@ -26,7 +26,7 @@ func newTestWriter(t *testing.T) *testWriter {
 	return &testWriter{t: t, b: &b}
 }
 
-func (tw testWriter) Write(p []byte) (n int, err error) {
+func (tw testWriter) Write(p []byte) (int, error) {
 	tw.t.Helper()
 	for _, b := range p {
 		if b == '\n' {
@@ -37,7 +37,7 @@ func (tw testWriter) Write(p []byte) (n int, err error) {
 		// bytes.Buffer panics on error
 		tw.b.WriteByte(b)
 	}
-	return n, nil
+	return len(p), nil
 }
 
 // Snapshot takes a snapshot of the current oracle.
@@ -69,8 +69,8 @@ func WithSnapshot(b []byte) TestOpt {
 	}
 }
 
-func getFreeAddr() (string, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0") // OS assigns an available port
+func getFreeAddr(ctx context.Context) (string, error) {
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0") // OS assigns an available port
 	if err != nil {
 		return "", fmt.Errorf("failed to get a free port: %w", err)
 	}
@@ -90,7 +90,7 @@ func NewTestOracle(t *testing.T, cfg *Config, testOpts ...TestOpt) (*Oracle, fun
 		cfg.Version = "latest"
 	}
 
-	port, err := getFreeAddr()
+	port, err := getFreeAddr(t.Context())
 	require.NoError(t, err)
 
 	if cfg.ListenAddress == "" {

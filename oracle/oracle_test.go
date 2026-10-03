@@ -3,6 +3,7 @@ package oracle
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -62,7 +63,7 @@ func makeTestOracleServer(t *testing.T) (*Oracle, func()) {
 	stop := func() {
 		cancel() // Stop the server
 		err := <-errCh
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("StartGateway returned an error: %v", err)
 		}
 	}
@@ -117,7 +118,7 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	hellov1.RegisterHelloServiceServer(grpcServer, srv)
 
-	grpcLis, err := net.Listen("tcp", "127.0.0.1:0")
+	grpcLis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	go func() {
@@ -138,7 +139,7 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 	require.NoError(t, err)
 
 	// 7) Spin up an HTTP server to serve the gateway
-	gwLis, err := net.Listen("tcp", "127.0.0.1:0")
+	gwLis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	gwSrv := &http.Server{
 		Handler:           gwMux,
@@ -150,7 +151,11 @@ func TestCookieAndHeaderForwarders(t *testing.T) {
 
 	// 8) Make an HTTP request that hits POST /v1/hello with a JSON body
 	reqBody := bytes.NewBufferString(`{"name": "Bob"}`)
-	resp, err := http.Post("http://"+gwLis.Addr().String()+"/v1/hello", "application/json", reqBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		"http://"+gwLis.Addr().String()+"/v1/hello", reqBody)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {

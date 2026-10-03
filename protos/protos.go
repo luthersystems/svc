@@ -18,7 +18,7 @@ func removeSensitive(msg protoreflect.Message) protoreflect.Message {
 		if fd.IsList() {
 			// Handle repeated fields
 			list := msgCopy.NewField(fd).List()
-			for i := 0; i < value.List().Len(); i++ {
+			for i := range value.List().Len() {
 				item := value.List().Get(i)
 				if fd.Kind() == protoreflect.MessageKind {
 					list.Append(protoreflect.ValueOfMessage(

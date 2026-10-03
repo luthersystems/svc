@@ -65,10 +65,12 @@ func UpperBoundTimer(resolution time.Duration) Timer {
 		stop := SimpleTimer().StartTimer(now)
 		return func() time.Duration {
 			d := stop()
-			// Adding (resolution - 1) to d ensures that integer division by
-			// resolution yields the ceiling of the floating point computation
-			// of d/resolution.
-			return ((d + resolution - 1) / resolution) * resolution
+			// Round d up to a multiple of resolution. Adding (resolution - 1)
+			// and dropping the remainder is the ceiling of d/resolution times
+			// resolution: Go defines x == (x/r)*r + x%r for every x, so
+			// x - x%r is exactly (x/r)*r without multiplying two durations.
+			x := d + resolution - 1
+			return x - x%resolution
 		}
 	})
 }
