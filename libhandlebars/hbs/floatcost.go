@@ -7,9 +7,13 @@ package hbs
 // class strconv.ParseFloat parses slowly (see slowFloat). The slow path
 // takes about 20 us for a subnormal like 5e-324 however short, and grows
 // with the digits.
-func floatCost(s string) int64 {
+func floatCost(s string) int64 { return floatCostBits(s, 64) }
+
+// floatCostBits is floatCost for strconv.ParseFloat(s, bitSize): float32's
+// fast paths give up much closer to zero and infinity.
+func floatCostBits(s string, bitSize int) int64 {
 	c := max(1, units(len(s), scanUnit))
-	if slowFloat(s) {
+	if slowFloatBits(s, bitSize) {
 		c += slowFloatPremium + int64(len(s))
 	}
 	return c
@@ -22,7 +26,14 @@ const slowFloatPremium = 512
 // significant digits, or a decimal exponent near or past float64's range
 // (subnormals and overflow). Anything that is not a plain decimal (hex,
 // Inf, NaN, malformed) is fast or fails fast.
-func slowFloat(s string) bool {
+func slowFloat(s string) bool { return slowFloatBits(s, 64) }
+
+// slowFloatBits is slowFloat for a bitSize of 32 or 64. float32's fast
+// paths (exact and Eisel-Lemire) give up on float32 subnormals, underflow
+// and overflow, and the fallback then works through a long decimal (about
+// 20 us for "1e-300"): a first significant digit at 10^-37 or below, or at
+// 10^38 or above, is slow.
+func slowFloatBits(s string, bitSize int) bool {
 	// ParseFloat converts the longest numeric prefix before it rejects a
 	// malformed suffix, so the prefix is what is classified.
 	i := 0
@@ -80,6 +91,9 @@ mantissa:
 	dec := e - leadFrac
 	if intDigits > 0 {
 		dec = e + intDigits
+	}
+	if bitSize == 32 && (dec <= -37 || dec >= 39) {
+		return true
 	}
 	return sig > 19 || dec <= -307 || dec >= 310
 }

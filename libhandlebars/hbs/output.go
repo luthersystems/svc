@@ -133,7 +133,7 @@ func (r *renderer) hashKey(n int) { r.steps1(max(1, units(n, hashUnit))) }
 
 // parseFloat is strconv.ParseFloat, charged by floatCost.
 func (r *renderer) parseFloat(s string, bitSize int) (float64, error) {
-	r.steps1(floatCost(s))
+	r.steps1(floatCostBits(s, bitSize))
 	return strconv.ParseFloat(s, bitSize)
 }
 

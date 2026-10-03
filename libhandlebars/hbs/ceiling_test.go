@@ -28,6 +28,10 @@ var ceilingCases = []struct {
 	{"toFloat long halfway", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "1." + strings.Repeat("0", 1060) + "5e-1"}, false, 332811},
 	{"plus 50 subnormal keys", `{{#each a}}{{plus ` + plusKeys(50) + `}}{{/each}}`, map[string]any{"x": "5e-324"}, false, 5329674},
 	{"times subnormal printed", `{{#each a}}{{times ../den 1}}{{/each}}`, map[string]any{"den": "5e-324"}, false, 114874},
+	{"round-to-nth float32 underflow", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e-300"}, false, 107012},
+	{"round-to-nth float32 overflow", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e300"}, true, 541},
+	{"round-to-nth float32 subnormal", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e-40"}, false, 106812},
+	{"partial error 512 KiB name", `{{> ` + strings.Repeat("p", 512<<10) + `}}`, nil, true, 66570},
 	{"round-to-nth subnormal", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e-320"}, false, 107012},
 	{"round-to-nth long zeros n", `{{#each a}}{{round-to-nth "1" ../z}}{{/each}}`, map[string]any{"z": strings.Repeat("0", 1<<14) + "2"}, false, 221012},
 	{"to-int long zeros", `{{#each a}}{{to-int ../z}}{{/each}}`, map[string]any{"z": strings.Repeat("0", 1<<16) + "1"}, false, 821611},
@@ -165,5 +169,25 @@ func TestCostCeiling(t *testing.T) {
 	t.Logf("%-28s %6.0f ns/step", "FromJSON subnormals", best)
 	if best > ceilingNs {
 		t.Errorf("FromJSON subnormals: %.0f ns per charged step, want at most %d", best, ceilingNs)
+	}
+
+	// Whitespace: every pass reads it, so it is charged by length.
+	for name, data := range map[string][]byte{
+		"FromJSON 1 MiB whitespace":         []byte("{" + strings.Repeat(" ", 1<<20) + "}"),
+		"FromJSON 1 MiB whitespace invalid": []byte("{" + strings.Repeat(" ", 1<<20)),
+	} {
+		best := 0.0
+		for range 3 {
+			m := &stepMeter{}
+			start := time.Now()
+			_, _ = hbs.FromJSONMetered(data, m)
+			if ns := float64(time.Since(start).Nanoseconds()) / float64(m.used); best == 0 || ns < best {
+				best = ns
+			}
+		}
+		t.Logf("%-28s %6.0f ns/step", name, best)
+		if best > ceilingNs {
+			t.Errorf("%s: %.0f ns per charged step, want at most %d", name, best, ceilingNs)
+		}
 	}
 }

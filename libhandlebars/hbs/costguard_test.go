@@ -246,3 +246,28 @@ func TestCostModelSites(t *testing.T) {
 		}
 	}
 }
+
+// TestHelperArgsAllocCharged: a helper call's parameters and hash are
+// collected as each is evaluated and charged, so a call with 400,000
+// parameters or 100,000 hash pairs that fails early allocates within the
+// bound for its steps.
+func TestHelperArgsAllocCharged(t *testing.T) {
+	for _, tpl := range []string{
+		`{{eq (len 1)` + strings.Repeat(" 1", 400_000) + `}}`,
+		`{{and a=(len 1)` + strings.Repeat(" x=true", 100_000) + `}}`,
+	} {
+		p, err := hbs.Parse(tpl, hbs.DefaultLimits())
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := &stepMeter{}
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		_, _ = p.Render(map[string]any{}, hbs.Options{Meter: m})
+		runtime.ReadMemStats(&after)
+		if got, limit := after.TotalAlloc-before.TotalAlloc, allocBound(m.used, 0); got > limit {
+			t.Errorf("%.20s...: %d bytes allocated for %d steps, want at most %d", tpl, got, m.used, limit)
+		}
+	}
+}

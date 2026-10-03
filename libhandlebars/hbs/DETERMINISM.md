@@ -95,11 +95,11 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 
 | Operation | Where | Charge |
 |---|---|---|
-| Each AST node evaluated | `eval.go` `at` | 1 |
+| Each AST node evaluated | `eval.go` `at` | 1 (helper parameters and hash pairs are collected as each is evaluated and charged, never allocated for all up front) |
 | A number literal used as a lookup key (`{{1e-320}}`) | `evalExpr` | fmt(len of its canonical form) |
 | Each `@../` frame a data path climbs | `evalDataPathExpression` | 1 |
 | `mod` | `hMod` | 1 per 8 bits the operands' exponents differ by (math.Mod's reduction loop) |
-| Evaluation error text | `errorf` | its string arguments checked against the produced-bytes bound before formatting; the whole text then charged as produced |
+| Evaluation error text | `errorf`, `dumpLen` | the whole message's length, node dump included (computed without building it, exact: `TestDumpLen`), checked against the produced-bytes bound and charged scan(len) before it is built; then charged as produced |
 | Each path segment resolved | `evalPath` | 1, plus the key lookup |
 | Each context a lookup tries (mustache climb) | `evalDepthPath` | 1 |
 | Each array element a path is mapped over | `evalCtxPath` | 1 |
@@ -111,7 +111,7 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 | Collecting an object's keys | `helperEach`, `appendV` | 1 per key, before collecting |
 | `#each` iteration; helper call | `visitBlock`, `helperEach`, `callHelper` | 1 |
 | String argument read by a helper | `read` via `convertArg`, `hashStr` | hash(n); an empty string 0 (the call's own step covers it) |
-| Parsing a number from a string (`toFloat`: `gt`, `plus`, `times`..., `round-to-nth`, `prettyp-num-en`) | `parseFloat`, `floatCost` | scan(n), plus 512 + n when the literal is in `ParseFloat`'s slow class (more than 19 significant digits, or a decimal exponent <= -307 or >= 310, judged on the numeric prefix ParseFloat parses before rejecting a malformed suffix; about 20 us however short) |
+| Parsing a number from a string (`toFloat`: `gt`, `plus`, `times`..., `round-to-nth`, `prettyp-num-en`) | `parseFloat`, `floatCost` | scan(n), plus 512 + n when the literal is in `ParseFloat`'s slow class for its bit size: more than 19 significant digits, or a decimal exponent <= -307 or >= 310 (float64), or a first significant digit at 10^-37 or below or 10^38 or above (float32: `round-to-nth` in ModeCompat parses with bitSize 32, whose fast paths give up on float32 subnormals, underflow and overflow), judged on the numeric prefix ParseFloat parses before rejecting a malformed suffix; about 20 us however short |
 | Parsing an integer from a string (`to-int`, `round-to-nth`'s precision) | `toInt`, `hRoundToNth` | scan(n) |
 | Formatting a number (printing, `str`, `%v`, `to-str` in ModeFixed) | `formatted` | fmt(len) |
 | `to-str` of a float in ModeCompat (`%f`) | `hToStr` | ceil(len/2) |
@@ -136,8 +136,8 @@ The ELPS entry points add:
 | Operation | Where | Charge |
 |---|---|---|
 | Parsing a template (`must-parse`, `render`), cache hit or miss alike | `hbs.ParseCachedMetered`, `hbs.ParseCost` | 6 per lexer token + 1 per started 16 bytes (SHA-256 and plain text) + `floatCost` of each number literal, charged after the depth prescan counts the tokens and before the recursive parse; a cache hit charges what its miss did |
-| Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder fails (invalid value, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
-| Decoding the context | `hbs.FromJSONMetered` | before decoding: 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
+| Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON (strings at their exact escaped length, after a scan charged 1 per started 64 bytes; a `json.Marshaler` native at its JSON's length plus `JSONCost`, as the encoder decodes it to check it loads; a sorted map's entries 1 + log2(n) each for the encoder's collect and sort, before the cap is checked), stopping where the encoder fails (invalid value, NaN or infinity, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
+| Decoding the context | `hbs.FromJSONMetered` | before validating: 1 per started 16 bytes and 1 per started 4 whitespace bytes (every pass reads them); then 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
 | Retyping ELPS ints (`render-fixed` only) | `intTyper` | 1 per value walked |
 | Reading a Go value (Go API) | `goreflect.go` | each pointer or interface followed 1 (more than MaxDepth in a row is a limit error); a struct lookup 1 + 1 per started 16 of the type's visible and direct fields (its cached plan, charged alike on a hit) + hash(len(name)) + fmt-unit(len(name)) for `strings.Title`; a method check hash(len(name)); a map key hash(len); a slice index scan(len); printing, `#each`, array blocks and `%v` 1 per element, depth-bounded |
 

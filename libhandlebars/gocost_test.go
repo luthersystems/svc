@@ -46,6 +46,14 @@ func TestGoContextCostCeiling(t *testing.T) {
 	for i := range wides {
 		wides[i] = reflect.New(wide).Elem().Interface()
 	}
+	tagged := reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`big:"` + strings.Repeat("x", 1<<20) + `"`)},
+		{Name: "B", Type: reflect.TypeFor[string]()},
+	})
+	taggedItems := make([]any, 50)
+	for i := range taggedItems {
+		taggedItems[i] = reflect.New(tagged).Elem().Interface()
+	}
 	structs := make([]goCostItem, 20000)
 	long := strings.Repeat("é", 1000)
 	cases := []struct {
@@ -55,6 +63,7 @@ func TestGoContextCostCeiling(t *testing.T) {
 		{"wide each", `{{#each xs}}{{f4999}}{{/each}}`, map[string]any{"xs": wides}},
 		{"deep path", `{{#each xs}}{{` + deepPath.String() + `}}{{/each}}`, map[string]any{"xs": []any{reflect.New(cur).Elem().Interface(), reflect.New(cur).Elem().Interface()}}},
 		{"long name", `{{#each xs}}{{` + long + `}}{{/each}}`, map[string]any{"xs": structs[:2000]}},
+		{"1 MiB tag", `{{#each xs}}{{b}}{{/each}}`, map[string]any{"xs": taggedItems}},
 		{"[]struct", `{{#each xs}}{{name}}{{/each}}`, map[string]any{"xs": structs}},
 		{"each struct", `{{#each xs}}{{#each this}}{{this}}{{/each}}{{/each}}`, map[string]any{"xs": structs}},
 		{"str slice", `{{#each xs}}{{../ys}}{{/each}}`, map[string]any{"xs": make([]int, 200), "ys": make([]int, 2000)}},

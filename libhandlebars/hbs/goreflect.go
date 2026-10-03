@@ -97,8 +97,10 @@ func planFor(t reflect.Type) *structPlan {
 	for _, f := range visible {
 		p.byName[f.Name] = f
 	}
+	tagBytes := 0
 	for i := range t.NumField() {
 		f := t.Field(i)
+		tagBytes += len(f.Tag)
 		if tag := f.Tag.Get("handlebars"); tag != "" {
 			if p.byTag == nil {
 				p.byTag = map[string]int{}
@@ -111,9 +113,10 @@ func planFor(t reflect.Type) *structPlan {
 			p.exported = append(p.exported, i)
 		}
 	}
-	// Building the plan is linear in the fields; charging it on every
-	// lookup keeps a cache hit and a miss alike.
-	p.cost = 1 + units(len(visible)+t.NumField(), scanUnit)
+	// Building the plan is linear in the fields and their tags' bytes
+	// (Tag.Get parses a tag byte by byte); charging that on every lookup
+	// keeps a cache hit and a miss alike.
+	p.cost = 1 + units(len(visible)+t.NumField(), scanUnit) + units(tagBytes, scanUnit)
 	actual, _ := structPlans.LoadOrStore(t, p)
 	return actual.(*structPlan) //nolint:forcetypeassert // only *structPlan is stored
 }

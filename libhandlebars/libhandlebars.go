@@ -1,9 +1,13 @@
 package libhandlebars
 
 import (
+	"encoding/json"
 	"errors"
+	"math"
+	"math/bits"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/luthersystems/elps/elpsutil"
 	"github.com/luthersystems/elps/lisp"
@@ -366,6 +370,49 @@ func (w *encodeWalk) add(n int64) *lisp.LVal {
 	return nil
 }
 
+// scan charges reading n bytes of a string to size its JSON escaping: a
+// step per started 64 bytes.
+func (w *encodeWalk) scan(n int) *lisp.LVal {
+	if n == 0 {
+		return nil
+	}
+	if lerr := w.env.ChargeSteps(int64((n-1)/64 + 1)); lerr.Type == lisp.LError {
+		return lerr
+	}
+	return nil
+}
+
+// jsonStringLen is the length of s as libjson writes it, quotes included:
+// encoding/json's escaping (\uXXXX for controls, <, >, &, U+2028, U+2029
+// and each invalid UTF-8 byte; two bytes for \, ", \b, \f, \n, \r, \t).
+func jsonStringLen(s string) int64 {
+	n := int64(2)
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < utf8.RuneSelf {
+			switch {
+			case c == '\\' || c == '"' || c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t':
+				n += 2
+			case c < 0x20 || c == '<' || c == '>' || c == '&':
+				n += 6
+			default:
+				n++
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1, r == '\u2028', r == '\u2029':
+			n += 6
+		default:
+			n += int64(size)
+		}
+		i += size
+	}
+	return n
+}
+
 // walk charges x and its contents. It reports true where the encoder
 // fails, and the budget error if the budget runs out.
 func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
@@ -385,9 +432,41 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		var buf [24]byte
 		n = int64(len(strconv.AppendInt(buf[:0], int64(x.Int), 10)))
 	case lisp.LFloat:
+		if math.IsInf(x.Float, 0) || math.IsNaN(x.Float) {
+			return true, nil // the encoder refuses it
+		}
 		n = 24
-	case lisp.LString, lisp.LSymbol:
-		n = int64(len(x.Str)) + 2
+	case lisp.LSymbol:
+		switch x.Str {
+		case lisp.TrueSymbol, lisp.FalseSymbol, "json:null":
+			n = 5
+		default:
+			if lerr := w.scan(len(x.Str)); lerr != nil {
+				return true, lerr
+			}
+			n = jsonStringLen(x.Str)
+		}
+	case lisp.LString:
+		if lerr := w.scan(len(x.Str)); lerr != nil {
+			return true, lerr
+		}
+		n = jsonStringLen(x.Str)
+	case lisp.LNative:
+		// The encoder writes a json.Marshaler's bytes, compacted, and then
+		// decodes them to check they load: charge that decode by the JSON's
+		// tokens, as FromJSONMetered does.
+		mj, ok := x.Native.(json.Marshaler)
+		if !ok {
+			return true, nil // marshalled by reflection: not estimated
+		}
+		b, err := mj.MarshalJSON()
+		if err != nil {
+			return true, nil
+		}
+		if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
+			return true, lerr
+		}
+		n = int64(len(b))
 	case lisp.LBytes:
 		n = int64(len(x.Bytes()))*4/3 + 4
 	case lisp.LSExpr:
@@ -400,9 +479,17 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		}
 	case lisp.LSortMap:
 		m := x.Map()
-		// Charge the entries before allocating room for them.
+		// The encoder collects and sorts the entries before it writes any
+		// (and before its allocation cap can stop it): charge that, and stop
+		// at the cap, before allocating room for them here.
+		if lerr := w.env.ChargeSteps(int64(m.Len()) * int64(1+bits.Len(uint(m.Len())))); lerr.Type == lisp.LError {
+			return true, lerr
+		}
 		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
 			return true, lerr
+		}
+		if w.size > w.limit {
+			return true, nil
 		}
 		buf := make([]*lisp.LVal, m.Len())
 		if e := m.Entries(buf); e.Type == lisp.LError {

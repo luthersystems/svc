@@ -95,9 +95,11 @@ func (r *renderer) callHelper(name string, h *helper, node *ast.Expression, dire
 	r.step()
 	var params []any
 	if len(node.Params) > 0 {
-		params = make([]any, len(node.Params))
-		for i, p := range node.Params {
-			params[i] = r.evalParam(p)
+		// Grown as each charged parameter is evaluated, not allocated for
+		// all of them up front.
+		params = make([]any, 0, min(len(node.Params), 8))
+		for _, p := range node.Params {
+			params = append(params, r.evalParam(p))
 		}
 	}
 	var hash map[string]any

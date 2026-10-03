@@ -5,6 +5,8 @@ package libhandlebars_test
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -432,6 +434,64 @@ func TestGoContextSteps(t *testing.T) {
 	_, err = libhandlebars.Render(tpl, map[string]any{"deep": deep})
 	require.ErrorAs(t, err, &herr, "printing nests past MaxDepth")
 	require.Equal(t, hbs.KindLimit, herr.Kind)
+}
+
+// TestGoContextReview covers the Go-path cases from review: steps and
+// output do not depend on map order, struct tags and long names are
+// charged by length, a named []interface{} type works with len, and %v of
+// a map with int keys matches raymond.
+func TestGoContextReview(t *testing.T) {
+	m := map[string]any{"x": 1, "y": []int{1, 2}, "z": map[string]any{"q": "r"}}
+	var nested any = m
+	for range 255 {
+		nested = []any{nested}
+	}
+	ctx := map[string]any{"a": m, "b": nested}
+	tpl, err := libhandlebars.Parse(`{{#each a}}{{@key}}{{this}}{{/each}}{{#each b}}{{this}}{{/each}}{{a.y}}`)
+	require.NoError(t, err)
+	var firstOut string
+	var firstErr error
+	var firstSteps int64
+	for i := range 20 {
+		cm := &countMeter{}
+		out, err := tpl.Render(ctx, hbs.Options{Meter: cm})
+		if i == 0 {
+			firstOut, firstErr, firstSteps = out, err, cm.n
+			continue
+		}
+		require.Equal(t, firstOut, out)
+		require.Equal(t, firstErr, err)
+		require.Equal(t, firstSteps, cm.n, "run %d", i)
+	}
+
+	tag := reflect.StructTag(`handlebars:"t" big:"` + strings.Repeat("x", 1<<20) + `"`)
+	typ := reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[int](), Tag: tag},
+		{Name: "B", Type: reflect.TypeFor[string]()},
+	})
+	n := reflect.New(typ).Elem()
+	n.Field(1).SetString("b")
+	long := strings.Repeat("é", 500<<10) // about 1 MB, under the template limit
+	for _, c := range []struct {
+		tpl  string
+		min  int64
+		what string
+	}{
+		{`{{n.b}}`, 1 << 16, "the 1 MiB tag"},
+		{`{{m.[` + long + `]}}`, 1 << 17, "the 1 MB name"},
+	} {
+		tpl, err := libhandlebars.Parse(c.tpl)
+		require.NoError(t, err)
+		cm := &countMeter{}
+		_, err = tpl.Render(map[string]any{"n": n.Interface(), "m": goNamedMap{}}, hbs.Options{Meter: cm})
+		if err != nil {
+			require.ErrorContains(t, err, "not supported")
+		}
+		require.GreaterOrEqual(t, cm.n, c.min, c.what)
+	}
+
+	checkGo(t, `{{len n}}`, map[string]any{"n": goList{1, 2}})
+	checkGo(t, `{{prettyp-num-en n}}`, map[string]any{"n": map[int]string{1: "one"}})
 }
 
 type countMeter struct{ n int64 }

@@ -3,6 +3,8 @@
 package libhandlebars_test
 
 import (
+	"encoding/json"
+	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -156,14 +158,16 @@ func TestRenderSteps(t *testing.T) {
 	// The context's JSON, {"s":"..."}, is len(s)+8 bytes.
 	//
 	// Measured against the empty string, as the sum of: the encode walk's
-	// estimate (a step per started KiB), json:dump-bytes (per whole KiB),
-	// the decode pass (1 + a step per started 8 bytes of the string), the
-	// output (per started KiB), the escape scan (per started 16 bytes) and
-	// the copy (per whole 16 bytes).
-	require.Equal(t, empty+3, call("x"))
-	require.Equal(t, empty+257, call(strings.Repeat("x", 1016)))
-	require.Equal(t, empty+260, call(strings.Repeat("x", 1024)))
-	require.Equal(t, empty+1043, call(strings.Repeat("x", 4097)))
+	// estimate (a step per started KiB) and its escape scan (per started 64
+	// bytes of the string), json:dump-bytes (per whole KiB), the decode's
+	// byte scan (per started 16 bytes of the JSON) and token pass (1 + a
+	// step per started 8 bytes of the string), the output (per started
+	// KiB), the escape scan (per started 16 bytes) and the copy (per whole
+	// 16 bytes).
+	require.Equal(t, empty+4, call("x"))
+	require.Equal(t, empty+336, call(strings.Repeat("x", 1016)))
+	require.Equal(t, empty+340, call(strings.Repeat("x", 1024)))
+	require.Equal(t, empty+1364, call(strings.Repeat("x", 4097)))
 
 	// Iterations cost steps.
 	each := func(n int) int64 {
@@ -288,4 +292,94 @@ func TestEncodeWalkStopsWhereEncoderDoes(t *testing.T) {
 	require.Equal(t, lisp.LError, got.Type)
 	require.NotEqual(t, lisp.CondStepBudgetExceeded, got.Str, got.Cells[0].Str)
 	require.Equal(t, want.Cells[0].Str, strings.TrimPrefix(got.Cells[0].Str, "error while serializing: "))
+}
+
+// allocDuring returns the bytes allocated by f.
+func allocDuring(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// encodeAllocBound is the most a context encode may allocate for the steps
+// it was charged: 8 bytes for each byte of charged work (a step stands for
+// at most about a KiB) and of its input, plus 1 MiB.
+func encodeAllocBound(steps int64, input int) uint64 {
+	return 8*(uint64(steps)*1024+uint64(input)) + 1<<20 //nolint:gosec // non-negative
+}
+
+// TestEncodeWalkReview covers the context-encode gaps found in review: a
+// string charged at its escaped length, a native's JSON charged by its
+// tokens, a large map's collection charged before the allocation cap
+// stops it, and an invalid number ending the walk where the encoder fails.
+func TestEncodeWalkReview(t *testing.T) {
+	fn := lisp.FunInPackage("user", "f", lisp.Formals(), func(*lisp.LEnv, *lisp.LVal) *lisp.LVal { return lisp.Nil() })
+
+	t.Run("escaped string then a function", func(t *testing.T) {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.String(strings.Repeat("\x01", 1<<20)))
+		ctx.MapSetString("b", fn)
+		env.Put(lisp.Symbol("ctx"), ctx)
+		var res *lisp.LVal
+		var steps int64
+		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		require.Equal(t, lisp.LError, res.Type)
+		require.GreaterOrEqual(t, steps, int64(6<<10), "6 MiB of escapes")
+		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 1<<20), "%d bytes for %d steps", alloc, steps)
+	})
+
+	t.Run("native JSON then an invalid number", func(t *testing.T) {
+		env := newEnv(t)
+		raw := json.RawMessage("[" + strings.TrimSuffix(strings.Repeat("{},", 100_000), ",") + "]")
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(raw))
+		ctx.MapSetString("b", lisp.Float(math.NaN()))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		var res *lisp.LVal
+		var steps int64
+		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		require.Equal(t, lisp.LError, res.Type)
+		require.Contains(t, res.Cells[0].Str, "NaN")
+		require.GreaterOrEqual(t, steps, int64(300_000), "the native's 100k objects")
+		require.LessOrEqual(t, alloc, encodeAllocBound(steps, len(raw)), "%d bytes for %d steps", alloc, steps)
+	})
+
+	t.Run("large map over the allocation cap", func(t *testing.T) {
+		env := newEnv(t)
+		m := lisp.SortedMap()
+		for i := range 10_000 {
+			m.MapSetString(strconv.Itoa(i), lisp.Int(i))
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("m", m)
+		env.Put(lisp.Symbol("ctx"), ctx)
+		env.Runtime.MaxAlloc = 1024
+		var res *lisp.LVal
+		var steps int64
+		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		require.Equal(t, lisp.LError, res.Type)
+		require.GreaterOrEqual(t, steps, int64(10_000*14), "collecting and sorting 10k entries")
+		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 0), "%d bytes for %d steps", alloc, steps)
+	})
+
+	t.Run("invalid number before a large list", func(t *testing.T) {
+		env := newEnv(t)
+		cells := make([]*lisp.LVal, 10_000)
+		for i := range cells {
+			cells[i] = lisp.Int(i)
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Float(math.NaN()))
+		ctx.MapSetString("b", lisp.QExpr(cells))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		env.Runtime.SetStepBudget(1000)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type)
+		require.NotEqual(t, lisp.CondStepBudgetExceeded, res.Str)
+		require.Contains(t, res.Cells[0].Str, "unable to encode number NaN")
+	})
 }

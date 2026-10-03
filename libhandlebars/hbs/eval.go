@@ -109,17 +109,24 @@ func (r *renderer) at(n ast.Node) {
 
 // errorf fails the render with raymond's evaluation error text.
 //
-// The message, which can hold template text, counts as produced bytes.
+// The message, which can hold template text (a name, and the node dump
+// repeating it), counts as produced bytes. Its length is bounded before it
+// is built: the format, its string arguments, 24 bytes for any other
+// argument, and the node dump's exact length; that bound is checked against
+// the produced-bytes limit and charged a step per scanUnit bytes, the cost
+// of formatting it.
 func (r *renderer) errorf(format string, args ...any) {
-	// Bound the formatted arguments before building them (they can hold a
-	// long name from the template); the node dump is then charged as built.
-	n := len(format)
+	n := len("Evaluation error: \nCurrent node:\n\t") + len(format) + dumpLen(r.curNode)
 	for _, a := range args {
 		if s, ok := a.(string); ok {
 			n += len(s)
+		} else {
+			n += 24
 		}
 	}
 	r.reserveProduced(n)
+	r.steps1(units(n, scanUnit))
+	r.flush()
 	msg := fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", fmt.Sprintf(format, args...), r.curNode)
 	r.produced(len(msg))
 	panic(&Error{Kind: KindRender, Msg: msg})
@@ -518,7 +525,7 @@ func (r *renderer) evalParam(n ast.Node) any {
 
 func (r *renderer) evalHash(node *ast.Hash) map[string]any {
 	r.at(node)
-	hash := make(map[string]any, len(node.Pairs))
+	hash := make(map[string]any, min(len(node.Pairs), 8)) // grown as charged pairs are added
 	for _, pair := range node.Pairs {
 		r.at(pair)
 		if v := r.evalParam(pair.Val); v != nil {

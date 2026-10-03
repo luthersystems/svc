@@ -157,4 +157,11 @@ func TestSlowFloatClasses(t *testing.T) {
 	} {
 		require.Equal(t, slow, slowFloat(s), "%.40q", s)
 	}
+	for s, slow := range map[string]bool{
+		"1.5": false, "1e-30": false, "3e37": false, "1e37": false, "-2e-36": false, "1.2e-37": false,
+		"1e-300": true, "1e300": true, "1e-40": true, "1e-38": true, "1e39": true, "5e38": true, "3.4e38": true, // conservative: 87 ns, charged as slow
+		"123456789012345678901": true,
+	} {
+		require.Equal(t, slow, slowFloatBits(s, 32), "float32 %q", s)
+	}
 }

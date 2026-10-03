@@ -73,12 +73,21 @@ func FromJSON(data []byte) (Value, error) {
 // on some 6-byte inputs (see floatCost). The result and the error text are
 // FromJSON's; a Meter error is returned unchanged, before decoding.
 //
-// Charges, in document order: 2 steps per { or [, 1 per , or : and per
+// Charges: first a step per started 16 bytes of data and a step per
+// started 4 whitespace bytes (every pass reads whitespace too), then, in
+// document order: 2 steps per { or [, 1 per , or : and per
 // null, true or false, 1 plus a step per started 8 bytes per string, and
 // numberCost plus floatCost per number token. Each distinct number literal
 // is parsed once. A document that is invalid or not an object, which json
 // rejects without decoding its numbers, costs a step per started 8 bytes.
 func FromJSONMetered(data []byte, m Meter) (Value, error) {
+	// Validation, the token scan and the decoder each pass over every byte,
+	// whitespace included, at up to about 15 ns a byte of whitespace: a step
+	// per started scanUnit bytes, plus a step per started 4 whitespace
+	// bytes, up front.
+	if err := charge(m, bytesCost(data)); err != nil {
+		return nil, err
+	}
 	if !json.Valid(data) || !objectRoot(data) {
 		if err := charge(m, units(len(data), 8)); err != nil {
 			return nil, err
@@ -101,6 +110,59 @@ func FromJSONMetered(data []byte, m Meter) (Value, error) {
 	}
 	convertNumbers(v, nums)
 	return v, nil
+}
+
+// bytesCost is what reading every byte of JSON data costs, before its
+// tokens: a step per started scanUnit bytes, and a step per started 4
+// whitespace bytes.
+func bytesCost(data []byte) int64 {
+	ws := 0
+	for _, c := range data {
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			ws++
+		}
+	}
+	return units(len(data), scanUnit) + units(ws, 4)
+}
+
+// JSONCost is the steps FromJSONMetered charges for valid JSON data,
+// without decoding it: for a caller about to have other code decode JSON
+// (libjson checks a native value's JSON loads). Invalid JSON costs a step
+// per started 8 bytes, as there.
+func JSONCost(data []byte) int64 {
+	c := bytesCost(data)
+	if !json.Valid(data) {
+		return c + units(len(data), 8)
+	}
+	for i := 0; i < len(data); i++ {
+		switch ch := data[i]; {
+		case ch == '"':
+			start := i
+			for i++; i < len(data) && data[i] != '"'; i++ {
+				if data[i] == '\\' {
+					i++
+				}
+			}
+			c += 1 + units(i-start-1, 8)
+		case ch == '{' || ch == '[':
+			c += 2
+		case ch == ',' || ch == ':' || ch == 'n' || ch == 't' || ch == 'f':
+			c++
+			if ch != ',' && ch != ':' {
+				for i+1 < len(data) && data[i+1] >= 'a' && data[i+1] <= 'z' {
+					i++
+				}
+			}
+		case ch == '-' || (ch >= '0' && ch <= '9'):
+			j := i
+			for j < len(data) && strings.IndexByte("+-.eE0123456789", data[j]) >= 0 {
+				j++
+			}
+			c += numberCost + floatCost(string(data[i:j]))
+			i = j - 1
+		}
+	}
+	return c
 }
 
 // numberCost is the steps a number token costs beyond floatCost: the
