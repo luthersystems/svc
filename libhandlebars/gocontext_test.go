@@ -601,3 +601,33 @@ func TestGoContextNaNKeys(t *testing.T) {
 type countMeter struct{ n int64 }
 
 func (m *countMeter) Charge(n int64) error { m.n += n; return nil }
+
+type stringerWithNaNs struct {
+	m map[float64]int // fmt never reaches it: String is called
+}
+
+func (stringerWithNaNs) String() string { return "hello" }
+
+// TestGoContextVStringer: %v sizing treats a value fmt prints with its
+// String method as opaque, as fmt does not look inside it.
+func TestGoContextVStringer(t *testing.T) {
+	v := stringerWithNaNs{m: map[float64]int{math.NaN(): 1, math.NaN(): 2}}
+	checkGo(t, `{{prettyp-num-en v}}`, map[string]any{"v": v})
+	checkGo(t, `{{prettyp-num-en v}}`, map[string]any{"v": []any{v, 1}})
+}
+
+// TestGoContextTypeErrorText: a helper's type error naming a Go type with
+// megabytes of struct tags is charged by its length before it is built.
+func TestGoContextTypeErrorText(t *testing.T) {
+	big := reflect.New(reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`big:"` + strings.Repeat("x", 4<<20) + `"`)},
+	})).Elem().Interface()
+	for _, src := range []string{`{{global "n" key=k}}`, `{{select from=k where="x=y"}}`, `{{len k}}`} {
+		tpl, err := libhandlebars.Parse(src)
+		require.NoError(t, err)
+		m := &countMeter{}
+		_, err = tpl.Render(map[string]any{"k": big}, hbs.Options{Meter: m})
+		require.Error(t, err, src)
+		require.GreaterOrEqual(t, m.n, int64(4<<20)/16, "%s: the type name is charged", src)
+	}
+}

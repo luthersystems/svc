@@ -1,6 +1,7 @@
 package libhandlebars
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"math"
@@ -318,12 +319,22 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 	if lerr != nil {
 		return nil, lerr
 	}
+	if w.capErr {
+		// The encoder would pass the allocation cap: its error, as
+		// json:dump-bytes raises it (a cancelled context first).
+		if cerr := env.CheckContext(); cerr.Type == lisp.LError {
+			return nil, cerr
+		}
+		return nil, env.Errorf("allocation size exceeds maximum (%d)", env.Runtime.MaxAllocBytes())
+	}
 	if w.nativeErr != nil {
 		// Where the encoder would have failed, with its text.
 		return nil, env.Errorf("error while serializing: %s", w.nativeErr.Error())
 	}
 	if len(w.natives) > 0 {
-		v = w.withNatives(v)
+		if v, lerr = w.withNatives(v); lerr != nil {
+			return nil, lerr
+		}
 	}
 	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
 	if res.Type != lisp.LError {
@@ -360,7 +371,11 @@ type encodeWalk struct {
 	env         *lisp.LEnv
 	path        map[*lisp.LVal]struct{}
 	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once
+	hasNative   map[*lisp.LVal]bool   // the containers on the way to a marshalled native
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
+	stack       []*lisp.LVal          // the containers the walk is inside
+	lower       int64                 // a lower bound of the JSON's length so far
+	capErr      bool                  // lower passed the allocation cap at a native
 	limit, size int64
 	charged     int64
 	depth       int
@@ -375,10 +390,17 @@ type encodeWalk struct {
 // once. stop is set where the encoder would fail.
 func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 	b, done := w.natives[x]
+	before := w.lower
 	if !done {
 		if v := reflect.ValueOf(x.Native); !v.IsValid() || !v.Type().Implements(marshalerType) {
 			if stop, lerr := w.nativeCost(v); stop || lerr != nil {
 				return nil, true, lerr
+			}
+			// Past the allocation cap even by a lower bound: the encoder
+			// would fail there, so do not marshal it.
+			if w.lower > w.limit {
+				w.capErr = true
+				return nil, true, nil
 			}
 		}
 		var err error
@@ -390,6 +412,12 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 			w.natives = map[*lisp.LVal][]byte{}
 		}
 		w.natives[x] = b
+		w.markPath()
+	}
+	w.lower = before + int64(len(b))
+	if w.lower > w.limit {
+		w.capErr = true
+		return nil, true, nil
 	}
 	if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
 		return nil, true, lerr
@@ -408,6 +436,7 @@ type walkCoster struct {
 var errWalkBudget = errors.New("budget")
 
 func (c *walkCoster) charge(values, bytes int64) error {
+	c.w.lower += bytes // goJSONCost's estimates never exceed what is written
 	if lerr := c.w.addN(values, bytes); lerr != nil {
 		c.lerr = lerr
 		return errWalkBudget
@@ -440,12 +469,35 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	}
 }
 
+// markPath marks the containers the walk is inside as leading to a
+// marshalled native, stopping at one already marked (so each is marked
+// once).
+func (w *encodeWalk) markPath() {
+	if w.hasNative == nil {
+		w.hasNative = map[*lisp.LVal]bool{}
+	}
+	for i := len(w.stack) - 1; i >= 0 && !w.hasNative[w.stack[i]]; i-- {
+		w.hasNative[w.stack[i]] = true
+	}
+}
+
 // withNatives returns v with each native the walk marshalled replaced by a
 // native json.RawMessage of its bytes, so the encoder writes the same JSON
 // without marshalling it again. Containers on the way are copied; the rest
 // is shared.
-func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
+func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 	memo := map[*lisp.LVal]*lisp.LVal{}
+	var lerr *lisp.LVal
+	// copying charges a copied container's cells, a step per 16, before
+	// the copy: the walk may have stopped partway through it.
+	copying := func(n int) bool {
+		if lerr == nil {
+			if e := w.env.ChargeSteps(int64(n/16 + 1)); e.Type == lisp.LError {
+				lerr = e
+			}
+		}
+		return lerr == nil
+	}
 	var sub func(x *lisp.LVal) *lisp.LVal
 	sub = func(x *lisp.LVal) *lisp.LVal {
 		if x == nil {
@@ -453,6 +505,11 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
 		}
 		if r, ok := memo[x]; ok {
 			return r
+		}
+		// Only the containers the charged walk marked lead to a
+		// replacement; nothing past where it stopped is visited.
+		if x.Type != lisp.LNative && !w.hasNative[x] {
+			return x
 		}
 		memo[x] = x // a cycle back to x keeps the original
 		var out *lisp.LVal
@@ -462,6 +519,9 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
 				out = lisp.Native(json.RawMessage(b))
 			}
 		case lisp.LSortMap:
+			if !copying(2 * x.Map().Len()) {
+				break
+			}
 			ents := x.MapEntries()
 			if ents.Type == lisp.LError {
 				break
@@ -479,6 +539,9 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
 				}
 			}
 		case lisp.LSExpr, lisp.LQuote, lisp.LTaggedVal, lisp.LArray:
+			if !copying(len(x.Cells)) {
+				break
+			}
 			var cells []*lisp.LVal
 			for i, c := range x.Cells {
 				if s := sub(c); s != c {
@@ -501,7 +564,8 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
 		memo[x] = out
 		return out
 	}
-	return sub(v)
+	out := sub(v)
+	return out, lerr
 }
 
 // add charges n more estimated bytes and one value.
@@ -572,6 +636,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		return true, nil
 	}
 	if x.IsNil() {
+		w.lower += 4
 		return false, w.add(4)
 	}
 	if depth >= w.depth {
@@ -579,6 +644,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	}
 	var n int64
 	var children []*lisp.LVal
+	lower := int64(-1) // n unless set: the bytes surely written
 	switch x.Type {
 	case lisp.LInt:
 		var buf [24]byte
@@ -587,11 +653,11 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if math.IsInf(x.Float, 0) || math.IsNaN(x.Float) {
 			return true, nil // the encoder refuses it
 		}
-		n = 24
+		n, lower = 24, 1
 	case lisp.LSymbol:
 		switch x.Str {
 		case lisp.TrueSymbol, lisp.FalseSymbol, "json:null":
-			n = 5
+			n, lower = 5, 4
 		default:
 			if lerr := w.scan(len(x.Str)); lerr != nil {
 				return true, lerr
@@ -608,16 +674,17 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if stop || lerr != nil {
 			return true, lerr
 		}
-		n = int64(len(b))
+		n, lower = int64(len(b)), 0 // native() counted it
 	case lisp.LBytes:
-		n = int64(len(x.Bytes()))*4/3 + 4
+		n, lower = int64(len(x.Bytes()))*4/3+4, int64(base64.StdEncoding.EncodedLen(len(x.Bytes())))
 	case lisp.LSExpr:
-		n, children = int64(len(x.Cells))+2, x.Cells
+		n, children, lower = int64(len(x.Cells))+2, x.Cells, 2
 	case lisp.LQuote, lisp.LTaggedVal:
-		n, children = 1, x.Cells[:1]
+		n, children, lower = 1, x.Cells[:1], 0
 	case lisp.LArray:
+		lower = 0
 		if len(x.Cells) == 2 {
-			n, children = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells
+			n, children, lower = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells, 2
 		}
 	case lisp.LSortMap:
 		m := x.Map()
@@ -630,6 +697,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
 			return true, lerr
 		}
+		lower = 2 + int64(m.Len()) // braces and colons
 		if w.size > w.limit {
 			return true, nil
 		}
@@ -645,6 +713,10 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	default:
 		return true, nil // the encoder stops here
 	}
+	if lower < 0 {
+		lower = n
+	}
+	w.lower += lower
 	if lerr := w.add(n); lerr != nil {
 		return true, lerr
 	}
@@ -655,7 +727,11 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		return true, nil
 	}
 	w.path[x] = struct{}{}
-	defer delete(w.path, x)
+	w.stack = append(w.stack, x)
+	defer func() {
+		delete(w.path, x)
+		w.stack = w.stack[:len(w.stack)-1]
+	}()
 	for _, c := range children {
 		if stop, lerr := w.walk(c, depth+1); stop || lerr != nil {
 			return true, lerr

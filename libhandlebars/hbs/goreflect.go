@@ -53,10 +53,11 @@ func isGo(v any) bool {
 }
 
 var (
-	errorType    = reflect.TypeFor[error]()
-	stringerType = reflect.TypeFor[fmt.Stringer]()
-	anySlice     = reflect.TypeFor[[]any]()
-	stringType   = reflect.TypeFor[string]()
+	errorType     = reflect.TypeFor[error]()
+	stringerType  = reflect.TypeFor[fmt.Stringer]()
+	formatterType = reflect.TypeFor[fmt.Formatter]()
+	anySlice      = reflect.TypeFor[[]any]()
+	stringType    = reflect.TypeFor[string]()
 )
 
 // goIndirect is raymond's indirect: it follows pointers and empty
@@ -95,11 +96,7 @@ func planFor(t reflect.Type) *structPlan {
 	if p, ok := structPlans.Load(t); ok {
 		return p.(*structPlan) //nolint:forcetypeassert // only *structPlan is stored
 	}
-	visible := reflect.VisibleFields(t)
-	p := &structPlan{byName: make(map[string]reflect.StructField, len(visible))}
-	for _, f := range visible {
-		p.byName[f.Name] = f
-	}
+	p := &structPlan{byName: fieldsByName(t)}
 	for i := range t.NumField() {
 		f := t.Field(i)
 		// raymond compared every field's tag, an absent one being "", so
@@ -131,7 +128,7 @@ func (r *renderer) plan(t reflect.Type) *structPlan {
 			r.planned = map[reflect.Type]bool{}
 		}
 		r.planned[t] = true
-		r.chargePlan(t, map[reflect.Type]bool{})
+		r.chargePlan(t, map[reflect.Type]bool{}, 0)
 		r.flush()
 	}
 	return planFor(t)
@@ -143,13 +140,14 @@ const planFieldCost = 12
 // allocates (zeroing) and copies, about 0.5 ns a byte for large values.
 const boxUnit = 128
 
-func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool) {
+func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool, depth int) {
 	if seen[t] {
 		return
 	}
 	seen[t] = true
 	for i := range t.NumField() {
-		r.steps1(planFieldCost)
+		// Resolving the field copies its index path, depth+1 long.
+		r.steps1(planFieldCost + int64(depth))
 		f := t.Field(i)
 		r.steps1(units(len(f.Tag), scanUnit))
 		if f.Anonymous {
@@ -158,10 +156,78 @@ func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool) {
 				ft = ft.Elem()
 			}
 			if ft.Kind() == reflect.Struct {
-				r.chargePlan(ft, seen)
+				r.chargePlan(ft, seen, depth+1)
 			}
 		}
 	}
+}
+
+// fieldsByName is what t.FieldByName finds for every name, computed in one
+// breadth-first pass with reflect's own rules (FieldByNameFunc): the
+// shallowest depth wins, two fields of one name at that depth (or one
+// field of a struct type embedded twice at that depth) hide each other and
+// everything deeper of that name, and each embedded struct type is visited
+// once. reflect.VisibleFields instead revisits a type through every
+// embedding path, which is exponential for diamonds.
+func fieldsByName(t reflect.Type) map[string]reflect.StructField {
+	type scan struct {
+		typ   reflect.Type
+		index []int
+	}
+	found := map[string]reflect.StructField{}
+	hidden := map[string]bool{}
+	visited := map[reflect.Type]bool{}
+	var current []scan
+	next := []scan{{typ: t}}
+	var count, nextCount map[reflect.Type]int
+	for len(next) > 0 {
+		current, next = next, current[:0]
+		count, nextCount = nextCount, map[reflect.Type]int{}
+		hits := map[string][]reflect.StructField{}
+		for _, s := range current {
+			if visited[s.typ] {
+				continue
+			}
+			visited[s.typ] = true
+			for i := range s.typ.NumField() {
+				f := s.typ.Field(i)
+				f.Index = append(append([]int(nil), s.index...), i)
+				if _, done := found[f.Name]; !done && !hidden[f.Name] {
+					hits[f.Name] = append(hits[f.Name], f)
+					if count[s.typ] > 1 {
+						hits[f.Name] = append(hits[f.Name], f) // the type twice: ambiguous
+					}
+				}
+				if !f.Anonymous {
+					continue
+				}
+				ft := f.Type
+				if ft.Kind() == reflect.Pointer {
+					ft = ft.Elem()
+				}
+				if ft.Kind() != reflect.Struct {
+					continue
+				}
+				if nextCount[ft] > 0 {
+					nextCount[ft] = 2
+					continue
+				}
+				nextCount[ft] = 1
+				if count[s.typ] > 1 {
+					nextCount[ft] = 2
+				}
+				next = append(next, scan{typ: ft, index: f.Index})
+			}
+		}
+		for name, fs := range hits {
+			if len(fs) == 1 {
+				found[name] = fs[0]
+			} else {
+				hidden[name] = true
+			}
+		}
+	}
+	return found
 }
 
 // title is strings.Title, the casing raymond applied to field and method
@@ -229,6 +295,24 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 		r.errorf("Go func values are not supported: %s", name)
 	}
 	return result
+}
+
+// typeString is fmt's %T of v, without copying the type's name (a Go
+// type's name can hold its struct tags, megabytes long).
+func typeString(v any) string {
+	if v == nil {
+		return "<nil>"
+	}
+	return reflect.TypeOf(v).String()
+}
+
+// failType fails with prefix and v's type, sized, checked and charged
+// before the text is built.
+func (r *renderer) failType(prefix string, v any) {
+	ts := typeString(v)
+	r.steps1(units(len(prefix)+len(ts), scanUnit))
+	r.flush()
+	r.failWith(prefix, ts)
 }
 
 // goResult finishes a lookup that found v as raymond's evalField did: a Go
@@ -462,6 +546,15 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 	if depth > z.r.maxDepth {
 		z.deep = true
 		return 0
+	}
+	// fmt prints a value with a Format, Error or String method by calling
+	// it (at the top, and below wherever it can take the value), so it does
+	// not look inside: neither does the walk. The method's cost is the
+	// caller's.
+	if v.IsValid() && v.Kind() != reflect.Interface && (depth == 0 || v.CanInterface()) {
+		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
+			return 64
+		}
 	}
 	switch v.Kind() {
 	case reflect.Invalid:

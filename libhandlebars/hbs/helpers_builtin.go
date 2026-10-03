@@ -3,7 +3,6 @@
 package hbs
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 
@@ -176,7 +175,7 @@ func (r *renderer) convertArg(name string, i int, kind argKind, p any) any {
 			return rv.Convert(anySlice).Interface()
 		}
 	}
-	r.errorf("Helper %s called with argument %d with type %s but it should be %s", name, i, fmt.Sprintf("%T", p), kind.typeName())
+	r.errorf("Helper %s called with argument %d with type %s but it should be %s", name, i, typeString(p), kind.typeName())
 	return nil
 }
 

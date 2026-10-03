@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,7 +93,20 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, text bool) (jsonTotals, erro
 	if v.Kind() != reflect.Pointer || !v.IsNil() {
 		w.skipped = append(w.skipped, skippedMarshaler{v, text})
 	}
-	return w.leaf(4)
+	return w.leaf(1) // its output is not known here: at least a byte
+}
+
+// fail returns encoding/json's error text made of parts, charging its
+// length first: a type's name can hold megabytes of struct tags.
+func (w *jsonWalker) fail(parts ...string) error {
+	n := 0
+	for _, p := range parts {
+		n += len(p)
+	}
+	if err := w.c.steps(int64(n/16 + 1)); err != nil {
+		return err
+	}
+	return &jsonFailure{strings.Join(parts, "")}
 }
 
 // firstMarshalerError calls the methods the walk passed over, in
@@ -103,7 +117,7 @@ func (w *jsonWalker) firstMarshalerError() error {
 	for _, m := range w.skipped {
 		if m.text {
 			if _, err := m.v.Interface().(encoding.TextMarshaler).MarshalText(); err != nil { //nolint:forcetypeassert // recorded as one
-				return &jsonFailure{"json: error calling MarshalText for type " + m.v.Type().String() + ": " + err.Error()}
+				return w.fail("json: error calling MarshalText for type ", m.v.Type().String(), ": ", err.Error())
 			}
 			continue
 		}
@@ -114,7 +128,7 @@ func (w *jsonWalker) firstMarshalerError() error {
 			err = json.Compact(&buf, b)
 		}
 		if err != nil {
-			return &jsonFailure{"json: error calling MarshalJSON for type " + m.v.Type().String() + ": " + err.Error()}
+			return w.fail("json: error calling MarshalJSON for type ", m.v.Type().String(), ": ", err.Error())
 		}
 	}
 	return nil
@@ -165,15 +179,26 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 	if t.Implements(textMarshalerType) {
 		return w.marshalerLeaf(v, true)
 	}
+	// Leaves are sized at the bytes encoding/json surely writes (exact, or
+	// a lower bound for a float), so a sum past the allocation cap means
+	// the encoder would pass it too.
 	switch t.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return w.leaf(24)
+	case reflect.Bool:
+		if v.Bool() {
+			return w.leaf(4)
+		}
+		return w.leaf(5)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var buf [24]byte
+		return w.leaf(int64(len(strconv.AppendInt(buf[:0], v.Int(), 10))))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		var buf [24]byte
+		return w.leaf(int64(len(strconv.AppendUint(buf[:0], v.Uint(), 10))))
 	case reflect.Float32, reflect.Float64:
 		if f := v.Float(); math.IsInf(f, 0) || math.IsNaN(f) {
 			return jsonTotals{}, &jsonFailure{"json: unsupported value: " + strconv.FormatFloat(f, 'g', -1, t.Bits())}
 		}
-		return w.leaf(24)
+		return w.leaf(1)
 	case reflect.String:
 		s := v.String()
 		if t == jsonNumberType {
@@ -184,6 +209,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 			if !validNumber(num) {
 				return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: invalid number literal %q", num)}
 			}
+			return w.leaf(int64(len(num))) // written unquoted
 		}
 		scan := int64(0)
 		if len(s) > 0 {
@@ -211,7 +237,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 				if v.IsNil() {
 					return w.leaf(4)
 				}
-				return w.leaf(int64(v.Len())*4/3 + 4) // base64
+				return w.leaf(int64(base64.StdEncoding.EncodedLen(v.Len())) + 2) // base64, quoted
 			}
 		}
 		if v.IsNil() {
@@ -237,7 +263,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 			return w.typed(v.Elem(), t.Elem(), true, depth)
 		})
 	default: // Complex, Chan, Func, UnsafePointer
-		return jsonTotals{}, &jsonFailure{"json: unsupported type: " + t.String()}
+		return jsonTotals{}, w.fail("json: unsupported type: ", t.String())
 	}
 }
 
@@ -253,7 +279,7 @@ func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTota
 		n := len(w.pathType) - start
 		at := max(1000, start)
 		typ := w.pathType[start+(at-start)%n]
-		return jsonTotals{}, &jsonFailure{"json: unsupported value: encountered a cycle via " + typ.String()}
+		return jsonTotals{}, w.fail("json: unsupported value: encountered a cycle via ", typ.String())
 	}
 	mk := jsonMemoKey{t: v.Type(), p: key}
 	if w.maxDepth > 0 {
@@ -307,7 +333,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 	default:
 		if !t.Key().Implements(textMarshalerType) {
-			return jsonTotals{}, &jsonFailure{"json: unsupported type: " + t.String()}
+			return jsonTotals{}, w.fail("json: unsupported type: ", t.String())
 		}
 	}
 	if v.IsNil() {
@@ -336,7 +362,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 		for it.Next() {
 			ks, err := mapKeyString(it.Key())
 			if err != nil {
-				return tot, &jsonFailure{fmt.Sprintf("json: encoding error for type %q: %q", t.String(), err.Error())}
+				return tot, w.fail("json: encoding error for type ", strconv.Quote(t.String()), ": ", strconv.Quote(err.Error()))
 			}
 			kvs = append(kvs, kv{ks, it.Value()})
 		}
@@ -345,7 +371,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			if kvs[i].ks == kvs[i-1].ks {
 				// encoding/json writes both, in Go's map order, and a
 				// decoder keeps the last: the result would vary by run.
-				return tot, &jsonFailure{fmt.Sprintf("json: map %s has two keys that encode as %q", t.String(), kvs[i].ks)}
+				return tot, w.fail("json: map ", t.String(), " has two keys that encode as ", strconv.Quote(kvs[i].ks))
 			}
 		}
 		for _, e := range kvs {

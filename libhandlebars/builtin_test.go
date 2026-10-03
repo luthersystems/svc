@@ -596,3 +596,57 @@ func TestNativeCostCeiling(t *testing.T) {
 		}
 	}
 }
+
+// TestEncodeNativesBounded covers the native-encode review cases: nothing
+// past where the charged walk stopped is visited uncharged, a native past
+// the allocation cap fails as json:dump-bytes does without being
+// marshalled, and a type-name error text is charged by its length.
+func TestEncodeNativesBounded(t *testing.T) {
+	t.Run("native then NaN then a large list", func(t *testing.T) {
+		env := newEnv(t)
+		cells := make([]*lisp.LVal, 1_000_000)
+		for i := range cells {
+			cells[i] = lisp.Int(i)
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(1))
+		ctx.MapSetString("b", lisp.Float(math.NaN()))
+		ctx.MapSetString("c", lisp.QExpr(cells))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		start := time.Now()
+		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+		d := time.Since(start)
+		require.Equal(t, lisp.LError, res.Type)
+		require.Contains(t, res.Cells[0].Str, "NaN")
+		// The million cells past the NaN are never visited (they took
+		// about 10 ms, for 44 steps): the call is a fixed overhead.
+		require.Less(t, d, 3*time.Millisecond, "%v for %d steps", d, steps)
+	})
+	t.Run("native past the allocation cap", func(t *testing.T) {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(make([]byte, 8<<20)))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		env.Runtime.MaxAlloc = 1024
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type)
+		var res *lisp.LVal
+		var steps int64
+		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		require.Equal(t, lisp.LError, res.Type)
+		require.Equal(t, dump.Cells[0].Str, res.Cells[0].Str)
+		require.Less(t, steps, int64(20_000), "its estimate's KiB, not its encoding")
+		require.Less(t, alloc, uint64(4<<20), "the 8 MiB native is not marshalled")
+	})
+	t.Run("type name with a 1 MiB tag", func(t *testing.T) {
+		env := newEnv(t)
+		elem := reflect.StructOf([]reflect.StructField{{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`big:"` + strings.Repeat("x", 1<<20) + `"`)}})
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(reflect.MakeChan(reflect.ChanOf(reflect.BothDir, elem), 0).Interface()))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type)
+		require.Contains(t, res.Cells[0].Str, "json: unsupported type: chan struct")
+		require.GreaterOrEqual(t, steps, int64(1<<16), "the 1 MiB name is charged")
+	})
+}

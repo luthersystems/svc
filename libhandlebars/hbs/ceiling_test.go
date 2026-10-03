@@ -107,6 +107,37 @@ func manyKeys(n, size int) map[string]any {
 // timeout. The test allows 200 to absorb CI noise and parallel tests.
 const ceilingNs = 200
 
+// baselineFactor is how much slower per step than the plain evaluator a
+// case may be once it is over ceilingNs: real cost-model gaps are hundreds
+// of times slower, while contention from parallel tests slows both alike.
+const baselineFactor = 6
+
+// baselineNs is the plain evaluator's time per step now: a loop printing a
+// context value, best of five.
+func baselineNs(t *testing.T) float64 {
+	t.Helper()
+	p, err := hbs.Parse(`{{#each a}}{{x}}{{/each}}`, hbs.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := hbs.FromJSON([]byte(`{"x": "abc", "a": [` + strings.TrimSuffix(strings.Repeat("1,", 20000), ",") + `]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	best := 0.0
+	for range 5 {
+		m := &stepMeter{}
+		start := time.Now()
+		if _, err := p.Render(v, hbs.Options{Meter: m}); err != nil {
+			t.Fatal(err)
+		}
+		if ns := float64(time.Since(start).Nanoseconds()) / float64(m.used); best == 0 || ns < best {
+			best = ns
+		}
+	}
+	return best
+}
+
 // TestCostCeiling checks that no operation is much slower per charged step
 // than the evaluator itself (DETERMINISM.md, "Cost model").
 func TestCostCeiling(t *testing.T) {
@@ -156,7 +187,14 @@ func TestCostCeiling(t *testing.T) {
 			worst, worstName = best, c.name
 		}
 		if best > ceilingNs {
-			t.Errorf("%s: %.0f ns per charged step, want at most %d", c.name, best, ceilingNs)
+			// Over the ceiling: fail only if the machine was not slow at
+			// the time too (other packages' tests run in parallel), judged
+			// by the plain evaluator measured now.
+			if base := baselineNs(t); best > baselineFactor*base {
+				t.Errorf("%s: %.0f ns per charged step, want at most %d (baseline %.0f)", c.name, best, ceilingNs, base)
+			} else {
+				t.Logf("%s: %.0f ns/step over the ceiling, but the baseline is %.0f ns/step: contention", c.name, best, base)
+			}
 		}
 	}
 	t.Logf("worst: %s, %.0f ns/step", worstName, worst)
