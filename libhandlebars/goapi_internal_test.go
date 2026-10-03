@@ -634,6 +634,40 @@ func TestRawMessageEmbedded(t *testing.T) {
 	bud := &goBudget{max: 1 << 40}
 	require.NoError(t, goJSONCost(bud, reflect.ValueOf(own), 0), "its own method encodes")
 	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "and is charged all the same")
-	_, _, ok := embeddedRaw(reflect.ValueOf(jsEmbRawPtr{}), 0)
+	_, _, ok := embeddedRaw(reflect.ValueOf(jsEmbRawPtr{}))
 	require.False(t, ok, "a nil embedded pointer is left to encoding/json")
+}
+
+type jsPrecA struct{ json.RawMessage }
+
+// jsPrecB has MarshalJSON from its own RawMessage (depth 1), which shadows
+// jsPrecA's (depth 2).
+type jsPrecB struct {
+	jsPrecA
+	json.RawMessage
+}
+
+// TestRawMessageSelectorRules: the RawMessage whose MarshalJSON Go selects
+// (the shallowest) is the one charged; a struct with many fields is
+// charged for the fields the search looks at.
+func TestRawMessageSelectorRules(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
+	v := jsPrecB{jsPrecA{json.RawMessage(`1`)}, raw}
+	_, merr := json.Marshal(v)
+	require.Error(t, merr)
+	bud := &goBudget{max: 1 << 40}
+	if err := goJSONCost(bud, reflect.ValueOf(v), 0); err != nil {
+		require.EqualError(t, err, merr.Error())
+	}
+	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "the depth-1 RawMessage's bytes")
+
+	fields := []reflect.StructField{{Name: "RawMessage", Type: rawMessageType, Anonymous: true}}
+	for i := range 1000 {
+		fields = append(fields, reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int]()})
+	}
+	wide := reflect.New(reflect.StructOf(fields)).Elem()
+	wide.Field(0).Set(reflect.ValueOf(json.RawMessage("x")))
+	bud = &goBudget{max: 1 << 40}
+	_ = goJSONCost(bud, wide, 0)
+	require.GreaterOrEqual(t, bud.used, int64(1000), "each field looked at is charged")
 }

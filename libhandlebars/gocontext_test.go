@@ -18,6 +18,7 @@ import (
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 	"github.com/luthersystems/svc/libhandlebars/internal/hbref"
+	raymondref "github.com/luthersystems/svc/libhandlebars/internal/raymondref"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -819,5 +820,28 @@ func TestGoContextZeroSizedKeyArray(t *testing.T) {
 	}
 	if !raceEnabled {
 		require.Less(t, best, 20*time.Millisecond, "not walked past the budget")
+	}
+}
+
+// TestGoContextSafeString: raymond's SafeString in a Go context prints as
+// its text, unescaped at the top level (escaped inside a slice, which
+// raymond printed as a whole), and behaves as a string in blocks and
+// helpers, as raymond rendered it.
+func TestGoContextSafeString(t *testing.T) {
+	safe := raymondref.SafeString("<b>&</b>")
+	ctx := map[string]any{
+		"x":   safe,
+		"xs":  []raymondref.SafeString{safe, "<i>"},
+		"any": []any{safe, "<u>"},
+		"m":   map[string]any{"k": safe},
+		"p":   &safe,
+		"e":   raymondref.SafeString(""),
+	}
+	for _, tpl := range []string{
+		`{{x}}`, `{{{x}}}`, `{{xs}}`, `{{any}}`, `{{m.k}}`, `{{p}}`, `{{e}}`,
+		`{{#if x}}y{{/if}}`, `{{#if e}}y{{else}}n{{/if}}`, `{{#each xs}}[{{this}}]{{/each}}`,
+		`{{#with x}}{{this}}{{/with}}`, `{{x.length}}`, `{{upper x}}`, `{{equal x "<b>&</b>"}}`,
+	} {
+		checkGo(t, tpl, ctx)
 	}
 }

@@ -441,6 +441,21 @@ func goTruth(v any) bool {
 	}
 }
 
+// legacySafeStrings are the packages whose SafeString type raymond's
+// strValue printed (and whose top-level value it did not escape): raymond
+// itself, which Go callers built contexts with, and the frozen reference
+// copy the differential harness renders with.
+var legacySafeStrings = map[string]bool{
+	"github.com/luthersystems/raymond":                               true,
+	"github.com/luthersystems/svc/libhandlebars/internal/raymondref": true,
+}
+
+// isLegacySafeString reports whether t is raymond's SafeString, a string
+// type it prints as its text and does not escape.
+func isLegacySafeString(t reflect.Type) bool {
+	return t.Kind() == reflect.String && t.Name() == "SafeString" && legacySafeStrings[t.PkgPath()]
+}
+
 // goAppendStr appends raymond's strValue of a Go value: arrays and slices
 // concatenate their elements (a step each, nested ones against MaxDepth),
 // numbers print by kind, strings print, and anything else is UNPRINTABLE.
@@ -497,7 +512,7 @@ func (r *renderer) goAppendKind(dst []byte, val reflect.Value) []byte {
 	case reflect.Float32, reflect.Float64:
 		dst = strconv.AppendFloat(dst, val.Float(), 'f', -1, 64)
 	default:
-		if val.Type() != stringType {
+		if val.Type() != stringType && !isLegacySafeString(val.Type()) {
 			return append(dst, "UNPRINTABLE"...)
 		}
 		s := val.String()

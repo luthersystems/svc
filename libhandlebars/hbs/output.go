@@ -450,7 +450,12 @@ func (r *renderer) writeValue(v any, esc bool) {
 		r.leave()
 	default:
 		if isGo(v) {
-			// A Go slice of strings prints them; escape as a string.
+			// A Go slice of strings prints them; escape as a string. A
+			// raymond SafeString (itself, not inside a slice) is not
+			// escaped, as raymond's isSafeString decided.
+			if esc && isLegacySafeString(reflect.TypeOf(v)) {
+				esc = false
+			}
 			r.writeGo(string(r.goAppendStr(r.scratch[:0], reflect.ValueOf(v))), esc)
 			return
 		}

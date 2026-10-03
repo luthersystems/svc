@@ -130,7 +130,7 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 			// A struct embedding a RawMessage (perhaps its MarshalJSON):
 			// encoding/json checks and compacts whatever the method
 			// returns, so the bytes are charged here, method or not.
-			raw, scanned, ok := embeddedRaw(v, 0)
+			raw, scanned, ok := embeddedRaw(v)
 			charge := scanned
 			if ok {
 				charge += 2 * units64(int64(len(raw)), 16)
@@ -154,29 +154,35 @@ func holdsRawMessage(v reflect.Value) bool {
 	if _, ok := rawMessage(v); ok {
 		return true
 	}
-	_, _, ok := embeddedRaw(v, 0)
+	_, _, ok := embeddedRaw(v)
 	return ok
 }
 
-// maxEmbedRaw bounds embeddedRaw's search: a RawMessage embedded deeper
-// is not found (and not charged).
-const maxEmbedRaw = 64
+// maxEmbedRaw bounds embeddedRaw's search: its hops through interfaces
+// and its embedding depth, each; maxEmbedScan bounds the fields it looks
+// at. A RawMessage past either is not found (and not charged).
+const (
+	maxEmbedRaw  = 64
+	maxEmbedScan = 1 << 14
+)
 
-// embeddedRaw finds the RawMessage a value's MarshalJSON would reach by
-// embedding, by the value, not its type (so a type built by
-// reflect.StructOf is treated as a compiled one): through interfaces and
-// pointers to their values, and in a struct through its one embedded field
-// whose type has MarshalJSON (two at the first level are ambiguous: none).
-// It does not ask whether the struct declares its own MarshalJSON: the
-// bytes are charged either way. scanned is the fields it looked at.
-func embeddedRaw(v reflect.Value, depth int) (json.RawMessage, int64, bool) {
+// embeddedRaw finds the RawMessage a Marshaler value's MarshalJSON would
+// reach by embedding. It works on the value, not on how its method was
+// compiled (so a type from reflect.StructOf is treated as a declared one,
+// in any build), resolving MarshalJSON by Go's selector rules: the
+// shallowest embedded field whose type has the method and declares it
+// wins, and two at that depth are ambiguous (none). Under these rules a
+// struct declares MarshalJSON only if none of its embedded fields brings
+// one; a RawMessage and an interface declare it, and an interface is
+// followed to its dynamic value. Whether a struct also declares its own
+// MarshalJSON is not asked: the bytes are charged either way. scanned is
+// the fields looked at.
+func embeddedRaw(v reflect.Value) (json.RawMessage, int64, bool) {
 	var scanned int64
-	for ; depth <= maxEmbedRaw; depth++ {
-		for v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer {
-			if v.IsNil() {
-				return nil, scanned, false
-			}
-			v = v.Elem()
+	for hop := 0; hop <= maxEmbedRaw; hop++ {
+		var ok bool
+		if v, ok = derefValue(v); !ok {
+			return nil, scanned, false
 		}
 		if v.Type() == rawMessageType {
 			return json.RawMessage(v.Bytes()), scanned, true
@@ -184,31 +190,95 @@ func embeddedRaw(v reflect.Value, depth int) (json.RawMessage, int64, bool) {
 		if v.Kind() != reflect.Struct {
 			return nil, scanned, false
 		}
-		found := -1
-		for i := range v.NumField() {
-			scanned++
-			f := v.Type().Field(i)
-			if !f.Anonymous {
-				continue
+		var pick reflect.Value
+		picks := 0
+		level := []reflect.Value{v}
+		for depth := 0; len(level) > 0 && picks == 0; depth++ {
+			if depth > maxEmbedRaw {
+				return nil, scanned, false
 			}
-			ft := f.Type
-			_, has := ft.MethodByName("MarshalJSON")
-			if !has && ft.Kind() != reflect.Pointer && ft.Kind() != reflect.Interface {
-				_, has = reflect.PointerTo(ft).MethodByName("MarshalJSON")
-			}
-			if has {
-				if found >= 0 {
-					return nil, scanned, false
+			var next []reflect.Value
+			for _, sv := range level {
+				for i := range sv.NumField() {
+					if scanned++; scanned > maxEmbedScan {
+						return nil, scanned, false
+					}
+					f := sv.Type().Field(i)
+					if !f.Anonymous || !hasMarshalJSON(f.Type) {
+						continue
+					}
+					fv := sv.Field(i)
+					if declaresMarshalJSON(f.Type, &scanned) {
+						picks++
+						pick = fv
+						continue
+					}
+					// A struct bringing MarshalJSON from its own embedding:
+					// look one level deeper (a nil pointer brings nothing
+					// encoding/json could call).
+					if dv, ok := derefValue(fv); ok {
+						next = append(next, dv)
+					}
 				}
-				found = i
 			}
+			level = next
 		}
-		if found < 0 {
+		if picks != 1 {
 			return nil, scanned, false
 		}
-		v = v.Field(found)
+		v = pick // a RawMessage, an interface, or a struct declaring its own
+		if t := v.Type(); t.Kind() == reflect.Struct || (t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct) {
+			return nil, scanned, false
+		}
 	}
 	return nil, scanned, false
+}
+
+// derefValue follows interfaces and pointers to a value; ok is false at a
+// nil one.
+func derefValue(v reflect.Value) (reflect.Value, bool) {
+	for v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return v, false
+		}
+		v = v.Elem()
+	}
+	return v, true
+}
+
+// hasMarshalJSON reports whether an embedded field of type t brings a
+// MarshalJSON (a value field's pointer methods count: encoding/json calls
+// them on an addressable value).
+func hasMarshalJSON(t reflect.Type) bool {
+	if _, ok := t.MethodByName("MarshalJSON"); ok {
+		return true
+	}
+	if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface {
+		_, ok := reflect.PointerTo(t).MethodByName("MarshalJSON")
+		return ok
+	}
+	return false
+}
+
+// declaresMarshalJSON reports whether an embedded field of type t, which
+// has MarshalJSON, declares it under embeddedRaw's rules: anything but a
+// struct (or pointer to one) none of whose own embedded fields brings one.
+// It counts the fields it looks at in scanned.
+func declaresMarshalJSON(t reflect.Type, scanned *int64) bool {
+	st := t
+	if st.Kind() == reflect.Pointer {
+		st = st.Elem()
+	}
+	if st.Kind() != reflect.Struct {
+		return true
+	}
+	for i := range st.NumField() {
+		*scanned++
+		if f := st.Field(i); f.Anonymous && hasMarshalJSON(f.Type) {
+			return false
+		}
+	}
+	return true
 }
 
 var rawMessageType = reflect.TypeFor[json.RawMessage]()
