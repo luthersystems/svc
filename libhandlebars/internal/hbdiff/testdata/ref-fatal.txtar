@@ -1,7 +1,12 @@
 Templates that kill the reference process with a Go stack overflow
-(fatal error, not recoverable). They never run through hbref; with a
+(fatal error, not recoverable) or never finish. They never run through hbref; with a
 candidate built in, TestRefFatal requires an error from it (render or
 limit), not a crash. Contexts are {} unless a .json section gives one.
+
+unless-in-with, equal-in-each and select-sexpr-in-if are the same loop
+through Fn instead of Inverse: the helper evaluates the enclosing block's
+program, which holds the call. The first two overflow the Go stack within
+seconds; select-sexpr-in-if had not finished after 5 minutes.
 
 unless-in-inverse needs a truthy t: with {} the reference renders "" (unless
 calls Fn, and the {{^x}} block has no program), which the engine matches.
@@ -23,3 +28,15 @@ the reference must fail the call instead).
 {{#if x}}{{else}}{{eq (if a) ""}}{{/if}}
 -- with-in-caret.hbs --
 {{#if x}}{{^}}{{&with (a)}}{{/if}}
+-- unless-in-with.hbs --
+{{#with o}}{{unless f}}{{/with}}
+-- unless-in-with.json --
+{"o": {"a": 1}, "f": false}
+-- equal-in-each.hbs --
+{{#each a}}{{equal 1 1}}{{/each}}
+-- equal-in-each.json --
+{"a": [1]}
+-- select-sexpr-in-if.hbs --
+{{#if t}}{{to-str (select a)}}{{/if}}
+-- select-sexpr-in-if.json --
+{"t": true, "a": [1]}
