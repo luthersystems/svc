@@ -213,15 +213,40 @@ func (r *renderer) compare(a, b string) bool {
 	return a == b
 }
 
-// str is str(v) with its cost: reading a string, or building one.
+// str is str(v) with its cost: reading a string, or building one. An array
+// is built once, into a builder sized from its string leaves, so each leaf
+// is copied once.
 func (r *renderer) str(v any) string {
 	if s, ok := v.(string); ok {
 		r.read(len(s))
 		return s
 	}
-	b := r.appendStrBounded(nil, v)
-	r.produced(len(b))
-	return string(b)
+	var b strings.Builder
+	if a, ok := v.([]any); ok {
+		b.Grow(min(stringLeavesLen(a, 0), int(r.maxProduced-r.written)))
+	}
+	r.appendStrBounded(&b, v)
+	r.produced(b.Len())
+	return b.String()
+}
+
+// stringLeavesLen returns the total length of the string leaves of a,
+// nested up to 64 levels: a sizing hint only, so deeper leaves are not
+// counted.
+func stringLeavesLen(a []any, depth int) int {
+	if depth > 64 {
+		return 0
+	}
+	n := 0
+	for _, e := range a {
+		switch x := e.(type) {
+		case string:
+			n += len(x)
+		case []any:
+			n += stringLeavesLen(x, depth+1)
+		}
+	}
+	return n
 }
 
 // appendStrBounded is appendStr that fails the render as soon as the string
@@ -230,24 +255,29 @@ func (r *renderer) str(v any) string {
 //
 // Each element costs a step, and nested arrays count against MaxDepth, so
 // the walk is bounded in time and stack.
-func (r *renderer) appendStrBounded(dst []byte, v any) []byte {
+func (r *renderer) appendStrBounded(b *strings.Builder, v any) {
 	a, ok := v.([]any)
 	if !ok {
 		// A string leaf can be large: check and charge it before copying.
 		if s, isStr := v.(string); isStr {
-			r.checkProduced(len(dst) + len(s))
+			r.checkProduced(b.Len() + len(s))
 			r.read(len(s))
+			b.WriteString(s)
+			return
 		}
-		return appendStr(dst, v)
+		// Numbers can print hundreds of digits (1e308): format into one
+		// reused buffer.
+		r.scratch = appendStr(r.scratch[:0], v)
+		b.Write(r.scratch)
+		return
 	}
 	r.enter()
 	defer r.leave()
 	for _, e := range a {
 		r.step()
-		dst = r.appendStrBounded(dst, e)
-		r.checkProduced(len(dst))
+		r.appendStrBounded(b, e)
+		r.checkProduced(b.Len())
 	}
-	return dst
 }
 
 // wrote accounts for n bytes produced: one step for every started KiB of

@@ -33,6 +33,7 @@ type renderer struct {
 	frame   *dataFrame
 	global  map[globalKey]string
 	out     []byte
+	scratch []byte // formatting buffer for str
 	ctx     []any
 	blocks  []*ast.BlockStatement
 	bparams []blockParams

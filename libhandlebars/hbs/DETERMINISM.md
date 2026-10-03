@@ -97,7 +97,7 @@ primitives in `output.go`, so steps bound wall time and memory. `KiB(n)` is
 | `#each` iteration | `visitBlock`, `helperEach` | 1 |
 | Helper call | `callHelper` | 1 |
 | String argument of n bytes read by a helper | `read` via `convertArg`, `hashStr`, `toFloat`, `toInt` | KiB(n) |
-| String built from a non-string value (`str`), element by element | `appendStrBounded` | 1 per element, plus produced bytes |
+| String built from a non-string value (`str`), element by element, into one buffer sized from the string leaves | `appendStrBounded` | 1 per element, plus produced bytes |
 | `select` / `in-string-array` element scanned | helpers | KiB(len(key)) / 1, plus compares |
 | `global` read or write | `hGlobal` | KiB(len(ns) + len(key)) |
 | `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound before formatting; result charged as produced |

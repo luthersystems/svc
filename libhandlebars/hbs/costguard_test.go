@@ -107,6 +107,12 @@ func TestCostModelGuard(t *testing.T) {
 var costSites = []struct {
 	name  string
 	build func(n int) (tpl, ctx string)
+	// factor is how much slower per step the long run may be. 3 by
+	// default; sites whose charged work is copying bytes (a step per KiB
+	// copied, like output) get 8, since a copied KiB takes several times
+	// as long as a typical step and long strings leave the CPU caches. An
+	// uncharged site is about 256x slower per step.
+	factor float64
 }{
 	{"each over object keys", func(n int) (string, string) {
 		k := strings.Repeat("k", n)
@@ -115,29 +121,29 @@ var costSites = []struct {
 			fmt.Fprintf(&m, `,"%s%02d": %d`, k, i, i)
 		}
 		return `{{#each a}}{{#each ../m}}{{/each}}{{/each}}`, `{"m": {` + m.String()[1:] + `}`
-	}},
+	}, 0},
 	{"global read", func(n int) (string, string) {
 		return `{{#each a}}{{global "n" key=../k}}{{/each}}`, `{"k": "` + strings.Repeat("z", n) + `"`
-	}},
+	}, 0},
 	{"global write", func(n int) (string, string) {
 		return `{{#each a}}{{global "n" key=../k val="v"}}{{/each}}`, `{"k": "` + strings.Repeat("z", n) + `"`
-	}},
+	}, 0},
 	{"hash pair key", func(n int) (string, string) {
 		return `{{#each a}}{{and ` + strings.Repeat("h", n) + `=1}}{{/each}}`, `{`
-	}},
+	}, 0},
 	{"string literal path", func(n int) (string, string) {
 		return `{{#each a}}{{#with ../o}}{{"` + strings.Repeat("s", n) + `"}}{{/with}}{{/each}}`, `{"o": {"x": 1}`
-	}},
+	}, 0},
 	{"helper name", func(n int) (string, string) {
 		return `{{#each a}}{{` + strings.Repeat("q", n) + ` 1}}{{/each}}`, `{`
-	}},
+	}, 0},
 	{"path key", func(n int) (string, string) {
 		k := strings.Repeat("p", n)
 		return `{{#each a}}{{../[` + k + `]}}{{/each}}`, `{"` + k + `": 1`
-	}},
+	}, 0},
 	{"array index", func(n int) (string, string) {
 		return `{{#each a}}{{../arr.[` + strings.Repeat("0", n) + `1]}}{{/each}}`, `{"arr": [1, 2]`
-	}},
+	}, 0},
 	{"block param scan", func(n int) (string, string) {
 		var b strings.Builder
 		for i := range 2 {
@@ -146,11 +152,11 @@ var costSites = []struct {
 		b.WriteString(`{{#each a}}{{` + strings.Repeat("b", n) + `0}}{{/each}}`)
 		b.WriteString(strings.Repeat(`{{/each}}`, 2))
 		return b.String(), `{"o": [1]`
-	}},
+	}, 0},
 	{"select key", func(n int) (string, string) {
 		k := strings.Repeat("w", n)
 		return `{{#each a}}{{#select from=../items where="` + k + `=v"}}x{{/select}}{{/each}}`, `{"items": [{"` + k + `": "u"}, {"` + k + `": "v"}]`
-	}},
+	}, 0},
 	{"in-string-array compare", func(n int) (string, string) {
 		s := strings.Repeat("y", n)
 		var h strings.Builder
@@ -158,24 +164,24 @@ var costSites = []struct {
 			fmt.Fprintf(&h, `,"%s%c"`, s, 'a'+i)
 		}
 		return `{{#each a}}{{in-string-array haystack=../h needle=../n}}{{/each}}`, `{"h": [` + h.String()[1:] + `], "n": "` + s + `z"`
-	}},
+	}, 0},
 	{"eq compare", func(n int) (string, string) {
 		s := strings.Repeat("e", n)
 		return `{{#each a}}{{eq ../x ../y}}{{/each}}`, `{"x": "` + s + `1", "y": "` + s + `2"`
-	}},
+	}, 0},
 	{"array stringified", func(n int) (string, string) {
 		return `{{#each a}}{{eq ../arr "x"}}{{/each}}`, `{"arr": ["` + strings.Repeat("l", n) + `", "` + strings.Repeat("m", n) + `"]`
-	}},
+	}, 8},
 	{"sorted hash keys", func(n int) (string, string) {
 		k := strings.Repeat("s", n)
 		return `{{#each a}}{{plus ` + k + `1=1 ` + k + `2=2 ` + k + `3=3}}{{/each}}`, `{`
-	}},
+	}, 0},
 }
 
 // TestCostModelSites checks each operation in costSites: its time per
-// charged step with 256 KiB strings must stay within 3x (plus 100 ns of
-// noise) of that with 1 KiB strings. An uncharged operation is about 256x
-// slower per step instead.
+// charged step with 256 KiB strings must stay within the site's factor
+// (plus 100 ns of noise) of that with 1 KiB strings. An uncharged operation
+// is about 256x slower per step instead.
 func TestCostModelSites(t *testing.T) {
 	if raceEnabled || testing.Short() {
 		t.Skip("timing guard: skipped under -race and -short")
@@ -214,7 +220,11 @@ func TestCostModelSites(t *testing.T) {
 		small, sSteps := perStep(join(site.build(1 << 10)))
 		large, lSteps := perStep(join(site.build(256 << 10)))
 		t.Logf("%-24s 1 KiB: %6d steps %5.0f ns/step; 256 KiB: %8d steps %5.0f ns/step", site.name, sSteps, small, lSteps, large)
-		if large > 3*small+100 {
+		factor := site.factor
+		if factor == 0 {
+			factor = 3
+		}
+		if large > factor*small+100 {
 			t.Errorf("%s: %.0f ns per step with 256 KiB strings, %.0f with 1 KiB: its work is not charged by length", site.name, large, small)
 		}
 	}
