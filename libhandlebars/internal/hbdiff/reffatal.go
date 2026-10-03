@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 package hbdiff
 
 import "github.com/luthersystems/svc/libhandlebars/internal/raymondref/lexer"

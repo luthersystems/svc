@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 package hbs
 
 // Name and Version identify the engine to phyla: handlebars:libname and

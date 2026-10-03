@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 package libhandlebars_test
 
 import (

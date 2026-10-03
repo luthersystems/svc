@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 // Command hbdiff is the private mode of the handlebars differential
 // harness (libhandlebars/internal/hbdiff). It renders templates and
 // contexts that must never enter this repository through the frozen

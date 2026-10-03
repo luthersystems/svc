@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 // Command hbshape turns private handlebars templates into anonymous
 // skeletons with generated contexts, for the checked-in shape corpus of
 // the differential harness (libhandlebars/internal/hbdiff).

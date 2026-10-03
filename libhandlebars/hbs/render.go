@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 package hbs
 
 import "github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"

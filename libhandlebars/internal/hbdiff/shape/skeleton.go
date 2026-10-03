@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 // Package shape turns a private handlebars template into a skeleton that
 // keeps everything the engine's behaviour depends on (block structure,
 // else chains, ../ depth, triple vs double stash, ~ and standalone

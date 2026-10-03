@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 // Package hbdiff is the differential harness for the native handlebars
 // engine (libhandlebars/hbs). It renders each case through the frozen
 // reference pipeline (internal/hbref) and through a Candidate, and reports

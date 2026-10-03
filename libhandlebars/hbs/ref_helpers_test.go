@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 //nolint:errorlint,forcetypeassert,nonamedreturns,perfsprint,predeclared,unconvert // verbatim copy of svc's helpers
 package hbs_test
 

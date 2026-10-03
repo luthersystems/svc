@@ -1,3 +1,5 @@
+// Copyright © 2026 Luther Systems, Ltd. All right reserved.
+
 // Package hbs is a Handlebars engine for ELPS embedding in Fabric chaincode.
 //
 // It renders the Handlebars 3 dialect that luthersystems/raymond rendered,
