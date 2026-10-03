@@ -2,6 +2,8 @@ module github.com/luthersystems/svc
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.12-20250430044901-c62151e471be.2
 	github.com/Azure/azure-storage-blob-go v0.15.0
