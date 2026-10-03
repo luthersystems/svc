@@ -1097,3 +1097,37 @@ func TestNativeEmbedSearchCharged(t *testing.T) {
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
 	require.Contains(t, res.String(), "error while serializing: json: Marshaler embedding nests deeper than 64")
 }
+
+// TestNativeMarshalerChainFailsClosed: a RawMessage wrapped in
+// struct{json.Marshaler} past the search's 64 interface hops fails with
+// the limit error before encoding/json runs (it went uncharged); within
+// the bound it is charged.
+func TestNativeMarshalerChainFailsClosed(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
+	chain := func(n int) json.Marshaler {
+		var m json.Marshaler = raw
+		for range n {
+			m = struct{ json.Marshaler }{m}
+		}
+		return m
+	}
+	render := func(n int) (*lisp.LVal, int64) {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(chain(n)))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		return eval(t, env, `(handlebars:render "x" ctx)`)
+	}
+	res, steps := render(60)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), "within the bound: charged")
+	for _, n := range []int{65, 128} {
+		res, _ = render(n)
+		require.Equal(t, lisp.LError, res.Type, "%v", res)
+		require.Contains(t, res.String(), "json: Marshaler embedding nests deeper than 64", "%d wrappers", n)
+		tpl, err := libhandlebars.Parse(`x`)
+		require.NoError(t, err)
+		_, err = libhandlebars.RenderWith(tpl, map[string]any{"n": chain(n)}, libhandlebars.WithJSONContext())
+		require.ErrorContains(t, err, "json: Marshaler embedding nests deeper than 64", "Go API, %d wrappers", n)
+	}
+}
