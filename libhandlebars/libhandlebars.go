@@ -341,8 +341,17 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 	if lerr != nil {
 		return nil, lerr
 	}
+	if w.capErr && !w.capNative {
+		// The bytes written by the time the encoder reaches a value pass
+		// the cap: the encoder fails there, or at an error before it.
+		// Let it decide, up to that point: the walk charged everything
+		// before it, in the encoder's order, and the encoder writes no
+		// further.
+		return w.encodeUpTo(env, v)
+	}
 	if w.capErr {
-		// The encoder would pass the allocation cap: its error, as
+		// At a native the encoder would marshal whole before its next cap
+		// check (its skipped marshalers succeed): the cap's error, as
 		// json:dump-bytes raises it (a cancelled context first).
 		if cerr := env.CheckContext(); cerr.Type == lisp.LError {
 			return nil, cerr
@@ -398,6 +407,29 @@ func (w *encodeWalk) nativeFailure(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 	}
 }
 
+// encodeUpTo runs the encoder over v (natives replaced by their bytes)
+// where the walk stopped at the allocation cap, and returns its result as
+// dumpContext would: its allocation error, or an error it meets first.
+func (w *encodeWalk) encodeUpTo(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
+	if len(w.natives) > 0 {
+		var lerr *lisp.LVal
+		if v, lerr = w.withNatives(v); lerr != nil {
+			return nil, lerr
+		}
+	}
+	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
+	switch {
+	case res.Type != lisp.LError:
+		return res.Bytes(), nil
+	case isLimitError(res) || len(res.Cells) == 0:
+		return nil, res
+	case strings.HasPrefix(res.Cells[0].Str, "allocation size exceeds maximum"):
+		return nil, env.Errorf("%s", res.Cells[0].Str)
+	default:
+		return nil, env.Errorf("error while serializing: %s", res.Cells[0].Str)
+	}
+}
+
 // chargeEncode charges encoding v to JSON before the encoder runs:
 // encodeValueCost steps per value and one step per started KiB of the
 // JSON, estimated by walking v in the encoder's order. The walk stops where
@@ -428,7 +460,8 @@ type encodeWalk struct {
 	failed      *lisp.LVal            // that native
 	stack       []*lisp.LVal          // the containers the walk is inside
 	lower       int64                 // a lower bound of the JSON's length so far
-	capErr      bool                  // lower passed the allocation cap at a native
+	capErr      bool                  // lower passed the allocation cap
+	capNative   bool                  // at a native, before marshalling it
 	limit, size int64
 	charged     int64
 	depth       int
@@ -481,7 +514,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 			// Past the allocation cap even by a lower bound: the encoder
 			// would fail there, so do not marshal it.
 			if w.lower > w.limit {
-				w.capErr = true
+				w.capErr, w.capNative = true, true
 				return nil, true, nil
 			}
 		}
@@ -503,7 +536,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 	}
 	w.lower = before + int64(len(b))
 	if w.lower > w.limit {
-		w.capErr = true
+		w.capErr, w.capNative = true, true
 		return nil, true, nil
 	}
 	return b, false, nil
