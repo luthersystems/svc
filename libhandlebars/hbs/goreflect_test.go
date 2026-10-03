@@ -166,4 +166,19 @@ func TestMapKeyWalksBounded(t *testing.T) {
 	shallow := walk()
 	shallow.cmp(deep(40, 1.0), 0)
 	require.False(t, shallow.deep)
+
+	// A key with a billion paths (each level's 32 elements share the one
+	// below): nan stops at the limit, as cmp does.
+	var dag [32]any
+	var box any = 1.0
+	for range 6 {
+		for i := range dag {
+			dag[i] = box
+		}
+		box = dag
+	}
+	bounded := &keyWalk{limit: 1000, maxDepth: 100}
+	require.False(t, bounded.nan(reflect.ValueOf(dag), 0))
+	require.Equal(t, int64(1001), bounded.visits, "stops past the limit")
+	require.Less(t, bounded.cmp(reflect.ValueOf(dag), 0), int64(2000), "and cmp near it")
 }

@@ -607,6 +607,10 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			if kw.nan(k, depth+1) {
 				nans++
 			}
+			if kw.visits > kw.limit {
+				z.steps = max(z.steps, z.limit) // past MaxSteps: a step-limit error
+				break
+			}
 			z.steps += logn * kw.cmp(k, depth+1)
 			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
@@ -642,7 +646,8 @@ const cmpUnit = 256
 type keyWalk struct {
 	limit    int64 // stop counting past it
 	maxDepth int
-	deep     bool // a key goes past maxDepth
+	deep     bool  // a key goes past maxDepth
+	visits   int64 // values nan has visited, all keys together
 }
 
 // past reports whether depth is past maxDepth, recording it.
@@ -697,8 +702,11 @@ func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
 // nan reports whether map key k is unequal to itself (k.Equal(k) is
 // false): a NaN, or an array, struct or interface holding one. Unlike
 // Value.Equal, it stops past maxDepth.
+//
+// Its visits are uncharged (cmp charges the same values), but bounded:
+// past the limit it stops, and over reports it.
 func (kw *keyWalk) nan(k reflect.Value, depth int) bool {
-	if kw.past(depth) {
+	if kw.visits++; kw.visits > kw.limit || kw.past(depth) {
 		return false
 	}
 	switch k.Kind() {
@@ -716,14 +724,14 @@ func (kw *keyWalk) nan(k reflect.Value, depth int) bool {
 		default: // no element can hold a NaN
 			return false
 		}
-		for i := range k.Len() {
+		for i := 0; i < k.Len() && kw.visits <= kw.limit; i++ {
 			if kw.nan(k.Index(i), depth+1) {
 				return true
 			}
 		}
 		return false
 	case reflect.Struct:
-		for i := range k.NumField() {
+		for i := 0; i < k.NumField() && kw.visits <= kw.limit; i++ {
 			if kw.nan(k.Field(i), depth+1) {
 				return true
 			}

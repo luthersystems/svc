@@ -110,21 +110,22 @@ func (w *jsonWalker) q() int64 {
 // skippedMarshaler is a MarshalJSON or MarshalText the walk did not call.
 type skippedMarshaler struct {
 	v    reflect.Value
+	typ  reflect.Type // the type encoding/json names in its error (v's, or the value's v points to)
 	text bool
 }
 
 // marshalerLeaf records a Marshaler or TextMarshaler value encoding/json
 // would call (a nil pointer it writes as null, without calling).
-func (w *jsonWalker) marshalerLeaf(v reflect.Value, text bool) (jsonTotals, error) {
+func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool) (jsonTotals, error) {
 	// encoding/json writes a nil pointer or a nil interface as null,
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		if !text {
 			if raw, ok := rawMessage(v); ok {
-				return w.rawLeaf(raw, v.Type())
+				return w.rawLeaf(raw, typ)
 			}
 		}
-		w.skipped = append(w.skipped, skippedMarshaler{v, text})
+		w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 	}
 	return w.leaf(1) // its output is not known here: at least a byte
 }
@@ -189,7 +190,7 @@ func (w *jsonWalker) firstMarshalerError() error {
 		if m.text {
 			b, err := m.v.Interface().(encoding.TextMarshaler).MarshalText() //nolint:forcetypeassert // recorded as one
 			if err != nil {
-				return w.fail("json: error calling MarshalText for type ", m.v.Type().String(), ": ", err.Error())
+				return w.fail("json: error calling MarshalText for type ", m.typ.String(), ": ", err.Error())
 			}
 			// encoding/json escapes the text: a step per 16 bytes.
 			if cerr := w.c.steps(units64(int64(len(b)), 16)); cerr != nil {
@@ -208,7 +209,7 @@ func (w *jsonWalker) firstMarshalerError() error {
 			err = json.Compact(&buf, b)
 		}
 		if err != nil {
-			return w.fail("json: error calling MarshalJSON for type ", m.v.Type().String(), ": ", err.Error())
+			return w.fail("json: error calling MarshalJSON for type ", m.typ.String(), ": ", err.Error())
 		}
 	}
 	return nil
@@ -294,16 +295,18 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 
 func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
 	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(marshalerType) && v.CanAddr() {
-		return w.marshalerLeaf(v.Addr(), false)
+		// encoding/json's addrMarshalerEncoder: it calls the pointer's
+		// method and names v's own type in its error.
+		return w.marshalerLeaf(v.Addr(), t, false)
 	}
 	if t.Implements(marshalerType) {
-		return w.marshalerLeaf(v, false)
+		return w.marshalerLeaf(v, t, false)
 	}
 	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(textMarshalerType) && v.CanAddr() {
-		return w.marshalerLeaf(v.Addr(), true)
+		return w.marshalerLeaf(v.Addr(), t, true)
 	}
 	if t.Implements(textMarshalerType) {
-		return w.marshalerLeaf(v, true)
+		return w.marshalerLeaf(v, t, true)
 	}
 	// Leaves are sized at the bytes encoding/json surely writes (exact, or
 	// a lower bound for a float), so a sum past the allocation cap means

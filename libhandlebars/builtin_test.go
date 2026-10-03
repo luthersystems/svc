@@ -616,14 +616,23 @@ func TestEncodeNativesBounded(t *testing.T) {
 		ctx.MapSetString("b", lisp.Float(math.NaN()))
 		ctx.MapSetString("c", lisp.QExpr(cells))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		start := time.Now()
-		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
-		d := time.Since(start)
-		require.Equal(t, lisp.LError, res.Type)
-		require.Contains(t, res.Cells[0].Str, "NaN")
 		// The million cells past the NaN are never visited (they took
-		// about 10 ms, for 44 steps): the call is a fixed overhead.
-		require.Less(t, d, 3*time.Millisecond, "%v for %d steps", d, steps)
+		// about 10 ms, for 44 steps): the call is a fixed overhead. Best
+		// of 5, so a GC or a busy machine does not decide it.
+		var best time.Duration
+		var steps int64
+		for i := range 5 {
+			start := time.Now()
+			var res *lisp.LVal
+			res, steps = eval(t, env, `(handlebars:render "" ctx)`)
+			d := time.Since(start)
+			require.Equal(t, lisp.LError, res.Type)
+			require.Contains(t, res.Cells[0].Str, "NaN")
+			if i == 0 || d < best {
+				best = d
+			}
+		}
+		require.Less(t, best, 3*time.Millisecond, "%v for %d steps", best, steps)
 	})
 	t.Run("native past the allocation cap", func(t *testing.T) {
 		env := newEnv(t)
@@ -1005,4 +1014,20 @@ func TestNativeEscapedNameUnderCap(t *testing.T) {
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
 	require.Contains(t, res.String(), "allocation size exceeds maximum")
 	require.Less(t, alloc, uint64(16<<20), "rejected before the encoder runs")
+}
+
+// TestNativeAddressableMarshalerText: an addressable RawMessage (a slice
+// element) fails with json.Marshal's own text, which names the value's
+// type, not its pointer's.
+func TestNativeAddressableMarshalerText(t *testing.T) {
+	native := []json.RawMessage{json.RawMessage("x")}
+	_, merr := json.Marshal(native)
+	require.Error(t, merr)
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(native))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "error while serializing: "+merr.Error())
 }

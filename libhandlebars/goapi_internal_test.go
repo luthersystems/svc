@@ -221,28 +221,37 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 		"bad pointer RawMessage": struct {
 			B *json.RawMessage
 		}{B: func() *json.RawMessage { r := json.RawMessage(`[1,`); return &r }()},
-		"bad RawMessage in interface": []any{1, json.RawMessage(`1 2`)},
-		"three-type cycle":            ca,
-		"cycle after prefix":          map[string]any{"x": []any{[]any{ca.B}}},
-		"unexported and -":            jsHidden{Ok: 1},
-		"embedded conflicts":          jsEmbed{},
-		"text keys":                   map[jsText]int{{"a"}: 1, {"b"}: 2},
-		"int keys":                    map[int]string{3: "c", 1: "a", 20: "b"},
-		"bad key type":                map[[2]int]int{{1, 2}: 3},
-		"NaN":                         map[string]any{"a": 1, "b": []any{2.0, math.NaN()}},
-		"Inf float32":                 []float32{float32(math.Inf(-1))},
-		"number ok":                   json.Number("1.5e3"),
-		"number bad":                  map[string]any{"n": json.Number("abc")},
-		"chan":                        map[string]any{"z": 1, "a": make(chan int)},
-		"func in slice":               []any{1, func() {}},
-		"complex":                     struct{ C complex64 }{1},
-		"omitempty chan":              jsHolder{},
-		"addressable text":            &jsHolder{V: jsPtrText{"v"}, PV: &jsPtrText{"pv"}},
-		"unaddressable text":          jsHolder{V: jsPtrText{"v"}},
-		"deep":                        deep,
-		"dag":                         dag,
-		"bytes":                       map[string]any{"b": []byte("hello"), "n": []byte(nil)},
-		"nil things":                  map[string]any{"m": map[string]int(nil), "s": []int(nil), "p": (*int)(nil), "i": nil},
+		"bad RawMessage in interface":           []any{1, json.RawMessage(`1 2`)},
+		"addressable bad RawMessage":            []json.RawMessage{json.RawMessage("x")},
+		"addressable bad field":                 &struct{ A json.RawMessage }{json.RawMessage("1 2")},
+		"addressable empty RawMessage":          []json.RawMessage{{}},
+		"addressable deep RawMessage":           []json.RawMessage{json.RawMessage(strings.Repeat("[", 10001) + strings.Repeat("]", 10001))},
+		"addressable failing value marshaler":   []any{[]jsErrM{{}}, func() {}},
+		"addressable failing pointer marshaler": []any{[]jsPtrErrM{{}}, func() {}},
+		"addressable bad-output marshaler":      []any{[]jsBadOutM{{}}, func() {}},
+		"embedded RawMessage":                   []any{[]jsEmbedRaw{{json.RawMessage("{")}}, func() {}},
+		"addressable failing text":              []any{[]jsPtrErrText{{}}, func() {}},
+		"three-type cycle":                      ca,
+		"cycle after prefix":                    map[string]any{"x": []any{[]any{ca.B}}},
+		"unexported and -":                      jsHidden{Ok: 1},
+		"embedded conflicts":                    jsEmbed{},
+		"text keys":                             map[jsText]int{{"a"}: 1, {"b"}: 2},
+		"int keys":                              map[int]string{3: "c", 1: "a", 20: "b"},
+		"bad key type":                          map[[2]int]int{{1, 2}: 3},
+		"NaN":                                   map[string]any{"a": 1, "b": []any{2.0, math.NaN()}},
+		"Inf float32":                           []float32{float32(math.Inf(-1))},
+		"number ok":                             json.Number("1.5e3"),
+		"number bad":                            map[string]any{"n": json.Number("abc")},
+		"chan":                                  map[string]any{"z": 1, "a": make(chan int)},
+		"func in slice":                         []any{1, func() {}},
+		"complex":                               struct{ C complex64 }{1},
+		"omitempty chan":                        jsHolder{},
+		"addressable text":                      &jsHolder{V: jsPtrText{"v"}, PV: &jsPtrText{"pv"}},
+		"unaddressable text":                    jsHolder{V: jsPtrText{"v"}},
+		"deep":                                  deep,
+		"dag":                                   dag,
+		"bytes":                                 map[string]any{"b": []byte("hello"), "n": []byte(nil)},
+		"nil things":                            map[string]any{"m": map[string]int(nil), "s": []int(nil), "p": (*int)(nil), "i": nil},
 	} {
 		_, want := json.Marshal(v)
 		var steps int64 = -1
@@ -535,3 +544,21 @@ func TestGoJSONCostMemoContainerDepth(t *testing.T) {
 		require.ErrorContains(t, err, "nests deeper than 1024", "direct first %v", directFirst)
 	}
 }
+
+type jsErrM struct{}
+
+func (jsErrM) MarshalJSON() ([]byte, error) { return nil, errors.New("boom") }
+
+type jsPtrErrM struct{}
+
+func (*jsPtrErrM) MarshalJSON() ([]byte, error) { return nil, errors.New("ptr boom") }
+
+type jsBadOutM struct{}
+
+func (jsBadOutM) MarshalJSON() ([]byte, error) { return []byte("{"), nil }
+
+type jsEmbedRaw struct{ json.RawMessage }
+
+type jsPtrErrText struct{}
+
+func (*jsPtrErrText) MarshalText() ([]byte, error) { return nil, errors.New("text boom") }

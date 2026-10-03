@@ -763,3 +763,31 @@ func TestGoContextMethodKeysNoCrash(t *testing.T) {
 	require.NoError(t, err, "%s", out)
 	require.Contains(t, string(out), "KEYS-OK")
 }
+
+// dagKey is a [32]any whose elements all hold the level below: levels deep,
+// 32^levels values to walk, though it is small.
+func dagKey(levels int) [32]any {
+	var k [32]any
+	var box any = 1.0
+	for range levels {
+		for i := range k {
+			k[i] = box
+		}
+		box = k
+	}
+	return k
+}
+
+// TestGoContextKeyWalkBounded: the NaN test of a map key stops with the
+// step budget, as its comparison cost does, so a key with more paths than
+// MaxSteps (32^5 here) fails the step limit rather than being walked.
+// (hbs's TestMapKeyWalksBounded bounds the walk itself, on 32^6.)
+func TestGoContextKeyWalkBounded(t *testing.T) {
+	m := map[[32]any]int{dagKey(5): 1}
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en o}}`)
+	require.NoError(t, err)
+	start := time.Now()
+	_, err = libhandlebars.Render(tpl, map[string]any{"o": m})
+	require.ErrorContains(t, err, "maximum of")
+	require.Less(t, time.Since(start), 5*time.Second)
+}
