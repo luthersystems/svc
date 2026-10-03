@@ -314,7 +314,11 @@ func (r *renderer) copyLeaves(b *strings.Builder, a []any) {
 		case []any:
 			r.copyLeaves(b, x)
 		default:
-			r.scratch = r.appendStrR(r.scratch[:0], x)
+			if isGo(x) {
+				r.scratch = r.goAppendElem(r.scratch[:0], x)
+			} else {
+				r.scratch = appendStr(r.scratch[:0], x)
+			}
 			r.formatted(len(r.scratch))
 			r.checkProduced(b.Len() + len(r.scratch))
 			b.Write(r.scratch)
@@ -436,24 +440,33 @@ func (r *renderer) writeValue(v any, esc bool) {
 		r.enter()
 		for _, e := range x {
 			r.step()
+			if isGo(e) {
+				// An element: printed by raymond's element rule.
+				r.writeGo(string(r.goAppendElem(r.scratch[:0], e)), esc)
+				continue
+			}
 			r.writeValue(e, esc)
 		}
 		r.leave()
 	default:
 		if isGo(v) {
 			// A Go slice of strings prints them; escape as a string.
-			s := string(r.goAppendStr(r.scratch[:0], reflect.ValueOf(v)))
-			if esc {
-				r.writeEscaped(s)
-			} else {
-				r.writeString(s)
-			}
+			r.writeGo(string(r.goAppendStr(r.scratch[:0], reflect.ValueOf(v))), esc)
 			return
 		}
 		// Numbers, booleans and UNPRINTABLE contain no escapable byte.
 		r.scratch = appendStr(r.scratch[:0], v)
 		r.formatted(len(r.scratch)) // a float can print hundreds of digits
 		r.writeBytes(r.scratch)
+	}
+}
+
+// writeGo writes the printed form of a Go value, escaped when esc is set.
+func (r *renderer) writeGo(s string, esc bool) {
+	if esc {
+		r.writeEscaped(s)
+	} else {
+		r.writeString(s)
 	}
 }
 

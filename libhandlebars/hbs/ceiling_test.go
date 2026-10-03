@@ -28,6 +28,8 @@ var ceilingCases = []struct {
 	{"toFloat long halfway", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "1." + strings.Repeat("0", 1060) + "5e-1"}, false, 332811},
 	{"plus 50 subnormal keys", `{{#each a}}{{plus ` + plusKeys(50) + `}}{{/each}}`, map[string]any{"x": "5e-324"}, false, 5329674},
 	{"times subnormal printed", `{{#each a}}{{times ../den 1}}{{/each}}`, map[string]any{"den": "5e-324"}, false, 114874},
+	{"times float64 overflow band", `{{#each a}}{{times ../x 1}}{{/each}}`, map[string]any{"x": "2.8e308"}, false, 107011},
+	{"gt float64 overflow band", `{{#each a}}{{gt ../x 1}}{{/each}}`, map[string]any{"x": "9.9e308"}, false, 107012},
 	{"round-to-nth float32 underflow", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e-300"}, false, 107012},
 	{"round-to-nth float32 overflow", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e300"}, true, 541},
 	{"round-to-nth float32 subnormal", `{{#each a}}{{round-to-nth ../x "2"}}{{/each}}`, map[string]any{"x": "1e-40"}, false, 106812},

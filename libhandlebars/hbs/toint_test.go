@@ -148,7 +148,8 @@ func TestParseErrorLen(t *testing.T) {
 // rejecting a malformed suffix.
 func TestSlowFloatClasses(t *testing.T) {
 	for s, slow := range map[string]bool{
-		"1.5": false, "123456789.123": false, "1e308": false, "-0.0001": false, "0": false, "0.000": false,
+		"1.5": false, "123456789.123": false, "9.9e307": false, "1e308": true, // conservative: 27 ns, charged as slow
+		"1.8e308": true, "2.8e308": true, "9.9e308": true, "-0.0001": false, "0": false, "0.000": false,
 		"5e-324": true, "1e-320": true, "4.9406564584124654e-324": true, "1e999": true,
 		"12345678901234567890123":             true,
 		"0." + strings.Repeat("0", 400) + "1": true, // implicit exponent

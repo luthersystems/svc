@@ -494,6 +494,74 @@ func TestGoContextReview(t *testing.T) {
 	checkGo(t, `{{prettyp-num-en n}}`, map[string]any{"n": map[int]string{1: "one"}})
 }
 
+type goInner2 struct{ V int }
+
+func (*goInner2) Foo() string { return "foo" }
+
+type goTagged struct {
+	Data goInner2 `handlebars:"payload"`
+}
+
+type goErrHolder struct{ E error }
+
+// TestGoContextReview2 covers the final review's Go-path cases: Go values
+// inside an engine []any print by raymond's element rule, a tag-matched
+// field is a copy, the empty name finds the first untagged field, and a
+// path into a nil interface whose type has the method fails.
+func TestGoContextReview2(t *testing.T) {
+	n, str := 5, "str"
+	ctx := map[string]any{
+		"l": []any{&n}, "s": []any{&str}, "nested": []any{[]any{&n}},
+		"c": []any{make(chan int)}, "f": []any{func() {}}, "typed": []*int{&n},
+		"o":  goTagged{Data: goInner2{V: 1}},
+		"po": &goTagged{Data: goInner2{V: 1}},
+		"st": struct{ A, B int }{1, 2},
+		"so": struct{ In goInner2 }{goInner2{V: 3}},
+		"e":  goErrHolder{},
+	}
+	for _, tpl := range []string{
+		`{{l}}|{{s}}|{{nested}}|{{c}}|{{f}}|{{typed}}`,
+		`{{#each l}}{{this}}{{/each}}|{{#each typed}}{{this}}{{/each}}|{{eq l "5"}}|{{eq typed "5"}}`,
+		`{{o.payload.v}}|{{o.payload.foo}}|{{po.payload.foo}}`,
+		`{{st.[]}}|{{so.[]}}|{{so.[].v}}`,
+		`{{e.e.error}}`,
+		`{{e.e.x}}`,
+	} {
+		checkGo(t, tpl, ctx)
+	}
+}
+
+// TestGoContextVDeterministic: %v sizing of a Go map charges the same
+// steps and fails the same way whatever Go's map order.
+func TestGoContextVDeterministic(t *testing.T) {
+	m := map[int]any{100: nil}
+	var deep any = "leaf"
+	for range 300 {
+		deep = []any{deep}
+	}
+	for i := range 8 {
+		m[i] = make([]int, 4096)
+	}
+	m[100] = deep
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en m}}`)
+	require.NoError(t, err)
+	for _, maxSteps := range []int64{0, 8192} {
+		var firstErr string
+		var firstSteps int64
+		for i := range 40 {
+			cm := &countMeter{}
+			_, err := tpl.Render(map[string]any{"m": m}, hbs.Options{Meter: cm, Limits: hbs.Limits{MaxSteps: maxSteps}})
+			require.Error(t, err)
+			if i == 0 {
+				firstErr, firstSteps = err.Error(), cm.n
+				continue
+			}
+			require.Equal(t, firstErr, err.Error(), "MaxSteps %d run %d", maxSteps, i)
+			require.Equal(t, firstSteps, cm.n, "MaxSteps %d run %d", maxSteps, i)
+		}
+	}
+}
+
 type countMeter struct{ n int64 }
 
 func (m *countMeter) Charge(n int64) error { m.n += n; return nil }

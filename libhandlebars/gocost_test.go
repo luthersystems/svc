@@ -5,6 +5,7 @@ package libhandlebars_test
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -56,17 +57,27 @@ func TestGoContextCostCeiling(t *testing.T) {
 	}
 	structs := make([]goCostItem, 20000)
 	long := strings.Repeat("é", 1000)
+	bigMap := make(map[any]any, 100_000)
+	for i := range 100_000 {
+		bigMap[strconv.Itoa(i)] = i
+	}
+	bigTag := reflect.ChanOf(reflect.BothDir, reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`big:"` + strings.Repeat("x", 4<<20) + `"`)},
+	}))
 	cases := []struct {
 		name, tpl string
 		ctx       any
+		once      bool // the render ends with an error
 	}{
-		{"wide each", `{{#each xs}}{{f4999}}{{/each}}`, map[string]any{"xs": wides}},
-		{"deep path", `{{#each xs}}{{` + deepPath.String() + `}}{{/each}}`, map[string]any{"xs": []any{reflect.New(cur).Elem().Interface(), reflect.New(cur).Elem().Interface()}}},
-		{"long name", `{{#each xs}}{{` + long + `}}{{/each}}`, map[string]any{"xs": structs[:2000]}},
-		{"1 MiB tag", `{{#each xs}}{{b}}{{/each}}`, map[string]any{"xs": taggedItems}},
-		{"[]struct", `{{#each xs}}{{name}}{{/each}}`, map[string]any{"xs": structs}},
-		{"each struct", `{{#each xs}}{{#each this}}{{this}}{{/each}}{{/each}}`, map[string]any{"xs": structs}},
-		{"str slice", `{{#each xs}}{{../ys}}{{/each}}`, map[string]any{"xs": make([]int, 200), "ys": make([]int, 2000)}},
+		{"%v of a 100k map[any]any", `{{prettyp-num-en m}}`, map[string]any{"m": bigMap}, true},
+		{"chan type with 4 MiB tag", `{{c}}`, map[string]any{"c": reflect.MakeChan(bigTag, 0).Interface()}, true},
+		{"wide each", `{{#each xs}}{{f4999}}{{/each}}`, map[string]any{"xs": wides}, false},
+		{"deep path", `{{#each xs}}{{` + deepPath.String() + `}}{{/each}}`, map[string]any{"xs": []any{reflect.New(cur).Elem().Interface(), reflect.New(cur).Elem().Interface()}}, false},
+		{"long name", `{{#each xs}}{{` + long + `}}{{/each}}`, map[string]any{"xs": structs[:2000]}, false},
+		{"1 MiB tag", `{{#each xs}}{{b}}{{/each}}`, map[string]any{"xs": taggedItems}, false},
+		{"[]struct", `{{#each xs}}{{name}}{{/each}}`, map[string]any{"xs": structs}, false},
+		{"each struct", `{{#each xs}}{{#each this}}{{this}}{{/each}}{{/each}}`, map[string]any{"xs": structs}, false},
+		{"str slice", `{{#each xs}}{{../ys}}{{/each}}`, map[string]any{"xs": make([]int, 200), "ys": make([]int, 2000)}, false},
 	}
 	for _, c := range cases {
 		tpl, err := libhandlebars.Parse(c.tpl)
@@ -78,7 +89,7 @@ func TestGoContextCostCeiling(t *testing.T) {
 		for range 5 {
 			m := &countMeter{}
 			st := time.Now()
-			if _, err := tpl.Render(c.ctx, hbs.Options{Meter: m, Limits: hbs.Limits{MaxSteps: 1 << 40, MaxOutputBytes: 1 << 30}}); err != nil {
+			if _, err := tpl.Render(c.ctx, hbs.Options{Meter: m, Limits: hbs.Limits{MaxSteps: 1 << 40, MaxOutputBytes: 1 << 30}}); (err != nil) != c.once {
 				t.Fatal(c.name, err)
 			}
 			best = min(best, time.Since(st))

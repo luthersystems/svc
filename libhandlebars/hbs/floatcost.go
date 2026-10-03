@@ -95,5 +95,5 @@ mantissa:
 	if bitSize == 32 && (dec <= -37 || dec >= 39) {
 		return true
 	}
-	return sig > 19 || dec <= -307 || dec >= 310
+	return sig > 19 || dec <= -307 || dec >= 309
 }

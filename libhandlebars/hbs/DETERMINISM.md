@@ -139,7 +139,7 @@ The ELPS entry points add:
 | Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON (strings at their exact escaped length, after a scan charged 1 per started 64 bytes; a `json.Marshaler` native at its JSON's length plus `JSONCost`, as the encoder decodes it to check it loads; a sorted map's entries 1 + log2(n) each for the encoder's collect and sort, before the cap is checked), stopping where the encoder fails (invalid value, NaN or infinity, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
 | Decoding the context | `hbs.FromJSONMetered` | before validating: 1 per started 16 bytes and 1 per started 4 whitespace bytes (every pass reads them); then 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
 | Retyping ELPS ints (`render-fixed` only) | `intTyper` | 1 per value walked |
-| Reading a Go value (Go API) | `goreflect.go` | each pointer or interface followed 1 (more than MaxDepth in a row is a limit error); a struct lookup 1 + 1 per started 16 of the type's visible and direct fields (its cached plan, charged alike on a hit) + hash(len(name)) + fmt-unit(len(name)) for `strings.Title`; a method check hash(len(name)); a map key hash(len); a slice index scan(len); printing, `#each`, array blocks and `%v` 1 per element, depth-bounded |
+| Reading a Go value (Go API) | `goreflect.go` | each pointer or interface followed 1 (more than MaxDepth in a row is a limit error); a struct lookup 1 + 1 per started 16 of the type's visible and direct fields and of its tags' bytes (its cached plan, charged alike on a hit) + hash(len(name)) + fmt-unit(len(name)) for `strings.Title`; a method check hash(len(name)); a map key hash(len); a slice index scan(len); printing, `#each` and array blocks 1 per element, depth-bounded; `%v` (prettyp-num-en's error) 1 per node, hash(len) per string, n(1 + log2 n) per map for fmt's key sort (4 times that for interface or float keys), before fmt runs |
 
 `TestBuiltinCostCeiling` (`libhandlebars/ceiling_test.go`) runs these end to
 end through `handlebars:must-parse` and `handlebars:render` on tag-dense 1
@@ -194,3 +194,10 @@ arrive, so the output is a function of the value and the entry point:
   `true`; any other value is logged and ignored), selects the JSON route
   instead. Output for a Go value is deterministic except where raymond's was
   not: `%v` of a pointer in `prettyp-num-en`'s error text prints its address.
+  That `%v` is also the one place Go code runs: fmt calls a value's String
+  or Error method, as raymond's did. It is sized first by an order-free
+  walk (each node up to MaxDepth, fmt's map-key sort charged), so its
+  charge and its error do not depend on Go's map order. A Go value inside
+  an engine array prints by raymond's element rule (a pointer, chan or func
+  there is UNPRINTABLE). Printing a Go chan fails with its type in the
+  error, where raymond's panic text held an address.

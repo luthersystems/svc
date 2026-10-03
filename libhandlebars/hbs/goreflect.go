@@ -4,6 +4,7 @@ package hbs
 
 import (
 	"fmt"
+	"math/bits"
 	"reflect"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ import (
 //
 //   - A path into a Go value resolves each part as raymond's evalField did:
 //     a method of that name (or of its strings.Title form) is a render error
-//     (raymond called it; the engine never calls Go code), then an exported
+//     (raymond called it; lookups never call Go code), then an exported
 //     struct field (promoted fields included) named strings.Title(name),
 //     then the first field whose `handlebars` tag is name; a map key, when
 //     a string is assignable to the key type; a slice or array index. A
@@ -31,6 +32,9 @@ import (
 //   - Truthiness, printing, #each and array blocks follow the value's kind,
 //     so named types print and test like their underlying kind, but a
 //     helper's type switch sees the named type, as svc's helpers did.
+//
+// The one place Go code runs is fmt's %v (prettyp-num-en's error text),
+// which calls a value's String or Error method, as raymond's did.
 //
 // Only what the template touches is read, so a cyclic or huge Go value
 // costs what the template does with it. Where raymond panicked (an
@@ -81,7 +85,7 @@ func (r *renderer) goIndirect(v reflect.Value) (reflect.Value, bool) {
 // the exported fields #each visits.
 type structPlan struct {
 	byName   map[string]reflect.StructField
-	byTag    map[string]int
+	byTag    map[string]int // a field with no handlebars tag is under ""
 	exported []int
 	cost     int64 // steps a lookup costs, the same whether the plan was cached
 }
@@ -101,13 +105,14 @@ func planFor(t reflect.Type) *structPlan {
 	for i := range t.NumField() {
 		f := t.Field(i)
 		tagBytes += len(f.Tag)
-		if tag := f.Tag.Get("handlebars"); tag != "" {
-			if p.byTag == nil {
-				p.byTag = map[string]int{}
-			}
-			if _, dup := p.byTag[tag]; !dup {
-				p.byTag[tag] = i
-			}
+		// raymond compared every field's tag, an absent one being "", so
+		// the empty name finds the first field without one.
+		tag := f.Tag.Get("handlebars")
+		if p.byTag == nil {
+			p.byTag = map[string]int{}
+		}
+		if _, dup := p.byTag[tag]; !dup {
+			p.byTag[tag] = i
 		}
 		if f.IsExported() {
 			p.exported = append(p.exported, i)
@@ -151,7 +156,9 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 			break
 		}
 		if i, ok := p.byTag[name]; ok {
-			result = ctx.Field(i)
+			// raymond's evalStructTag reads a copy (ctx.Interface()), so the
+			// field is not addressable and its pointer methods do not count.
+			result = reflect.ValueOf(r.goInterface(ctx)).Field(i)
 		}
 	case reflect.Map:
 		if stringType.AssignableTo(ctx.Type().Key()) {
@@ -193,6 +200,15 @@ func (r *renderer) goResult(v any, name string) any {
 // v named name or strings.Title(name).
 func (r *renderer) goNoMethod(v reflect.Value, name string) {
 	if v.Kind() == reflect.Interface && v.IsNil() {
+		// raymond's MethodByName panics on a nil interface whose type has
+		// the method.
+		r.hashKey(len(name))
+		if _, ok := v.Type().MethodByName(name); ok {
+			r.fail("reflect: Method on nil interface value")
+		}
+		if _, ok := v.Type().MethodByName(r.title(name)); ok {
+			r.fail("reflect: Method on nil interface value")
+		}
 		return
 	}
 	if v.Kind() != reflect.Interface && v.CanAddr() {
@@ -202,11 +218,13 @@ func (r *renderer) goNoMethod(v reflect.Value, name string) {
 		return
 	}
 	r.hashKey(len(name))
+	// The type's name is passed as a string, so the error text is sized by
+	// it (an anonymous struct type's name holds its field tags).
 	if v.MethodByName(name).IsValid() {
-		r.errorf("Go method calls are not supported: %s.%s", v.Type(), name)
+		r.errorf("Go method calls are not supported: %s.%s", v.Type().String(), name)
 	}
 	if t := r.title(name); t != name && v.MethodByName(t).IsValid() {
-		r.errorf("Go method calls are not supported: %s.%s", v.Type(), t)
+		r.errorf("Go method calls are not supported: %s.%s", v.Type().String(), t)
 	}
 }
 
@@ -290,10 +308,24 @@ func (r *renderer) goAppendStr(dst []byte, v reflect.Value) []byte {
 		if v.CanAddr() && (pt.Implements(errorType) || pt.Implements(stringerType)) {
 			v = v.Addr()
 		} else if k := v.Kind(); k == reflect.Chan || k == reflect.Func {
-			r.fail("Can't print value: " + t.String())
+			ts := t.String()
+			r.steps1(units(len(ts), scanUnit))
+			r.failWith("Can't print value: ", ts)
 		}
 	}
-	val := reflect.ValueOf(r.goInterface(v))
+	return r.goAppendKind(dst, reflect.ValueOf(r.goInterface(v)))
+}
+
+// goAppendElem appends raymond's strValue of a Go value held in an engine
+// []any. raymond saw such an element as an interface value, so its
+// printableValue neither followed a pointer nor refused a chan or func:
+// those print UNPRINTABLE.
+func (r *renderer) goAppendElem(dst []byte, x any) []byte {
+	return r.goAppendKind(dst, reflect.ValueOf(x))
+}
+
+// goAppendKind is strValue's switch on the kind of a printable value.
+func (r *renderer) goAppendKind(dst []byte, val reflect.Value) []byte {
 	n := len(dst)
 	switch val.Kind() {
 	case reflect.Invalid:
@@ -329,12 +361,21 @@ func (r *renderer) goAppendStr(dst []byte, v reflect.Value) []byte {
 }
 
 // goAppendV appends fmt's %v of a Go value (prettyp-num-en's error text).
-// fmt recurses without bound into maps, slices and interfaces, so the
-// value is walked first, a step per element and bounded by MaxDepth, with
-// the text's size estimated and checked; only then does fmt print it.
+// fmt recurses without bound into maps, slices and interfaces, and sorts
+// map keys by reflection, so the value is sized first (goSize), and only
+// then does fmt print it. As raymond's did, fmt calls a value's String or
+// Error method.
 func (r *renderer) goAppendV(dst []byte, v any) []byte {
-	size := r.goSize(reflect.ValueOf(v), 0)
+	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
+	size := z.size(reflect.ValueOf(v), 0)
+	// The walk's charge, size and outcome do not depend on Go's map
+	// order: it counts every node up to MaxDepth, or stops once the count
+	// passes what MaxSteps leaves, and reports depth only after.
+	r.steps1(min(z.steps, z.limit))
 	r.flush()
+	if z.deep {
+		panic(errorf(KindLimit, "template evaluation exceeds the maximum depth of %d", r.maxDepth))
+	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
 	dst = fmt.Appendf(dst, "%v", v)
@@ -342,50 +383,69 @@ func (r *renderer) goAppendV(dst []byte, v any) []byte {
 	return dst
 }
 
-// goSize walks v as fmt's %v does and returns a bound on the bytes it
-// prints, failing past MaxDepth.
-func (r *renderer) goSize(v reflect.Value, depth int) int {
-	r.step()
-	if depth > r.maxDepth {
-		panic(errorf(KindLimit, "template evaluation exceeds the maximum depth of %d", r.maxDepth))
+// goSizer walks a Go value as fmt's %v does, counting steps and bounding
+// the bytes it prints.
+type goSizer struct {
+	r            *renderer
+	steps, limit int64
+	deep         bool
+}
+
+func (z *goSizer) over() bool { return z.steps >= z.limit }
+
+func (z *goSizer) size(v reflect.Value, depth int) int {
+	z.steps++
+	if z.over() {
+		return 0
+	}
+	if depth > z.r.maxDepth {
+		z.deep = true
+		return 0
 	}
 	switch v.Kind() {
 	case reflect.Invalid:
 		return 5
 	case reflect.String:
-		r.read(v.Len())
+		z.steps += units(v.Len(), hashUnit)
 		return v.Len()
 	case reflect.Interface:
 		if v.IsNil() {
 			return 5
 		}
-		return r.goSize(v.Elem(), depth+1)
+		return z.size(v.Elem(), depth+1)
 	case reflect.Pointer:
 		if depth == 0 && !v.IsNil() {
 			switch v.Elem().Kind() {
 			case reflect.Array, reflect.Slice, reflect.Struct, reflect.Map:
-				return 1 + r.goSize(v.Elem(), depth+1)
+				return 1 + z.size(v.Elem(), depth+1)
 			default: // fmt prints other pointers as an address
 			}
 		}
 		return 20
 	case reflect.Array, reflect.Slice:
 		n := 2
-		for i := range v.Len() {
-			n += 1 + r.goSize(v.Index(i), depth+1)
+		for i := 0; i < v.Len() && !z.over(); i++ {
+			n += 1 + z.size(v.Index(i), depth+1)
 		}
 		return n
 	case reflect.Map:
+		// fmt sorts the keys by reflection (internal/fmtsort): about
+		// log2(n) comparisons a key, slower for interface and float keys.
+		k := int64(1 + bits.Len(uint(v.Len())))
+		if kk := v.Type().Key().Kind(); kk == reflect.Interface || kk == reflect.Float32 || kk == reflect.Float64 {
+			k *= 4
+		}
+		z.steps += int64(v.Len()) * k
 		n := 5
 		it := v.MapRange()
-		for it.Next() {
-			n += 2 + r.goSize(it.Key(), depth+1) + r.goSize(it.Value(), depth+1)
+		for it.Next() && !z.over() {
+			n += 2 + z.size(it.Key(), depth+1) + z.size(it.Value(), depth+1)
 		}
 		return n
 	case reflect.Struct:
 		n := 2
-		for i := range v.NumField() {
-			n += 1 + r.goSize(v.Field(i), depth+1)
+		for i := 0; i < v.NumField() && !z.over(); i++ {
+			n += 1 + z.size(v.Field(i), depth+1)
 		}
 		return n
 	default:
