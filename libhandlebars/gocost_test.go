@@ -100,7 +100,7 @@ func TestGoContextCostCeiling(t *testing.T) {
 		}
 		per := float64(best.Nanoseconds()) / float64(steps)
 		t.Logf("%-12s %9d steps %7.1f ns/step", c.name, steps, per)
-		if per > 200 {
+		if ceilingFails(t, per) {
 			t.Errorf("%s: %.0f ns per step, ceiling 200", c.name, per)
 		}
 	}
@@ -133,7 +133,7 @@ func TestGoContextColdPlan(t *testing.T) {
 			worst = max(worst, per)
 		}
 	}
-	if worst > 200 {
+	if ceilingFails(t, worst) {
 		t.Errorf("cold plan: %.0f ns per step, ceiling 200", worst)
 	}
 }

@@ -590,6 +590,8 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			k *= 4
 		}
 		z.steps += int64(v.Len()) * k
+		// MapRange copies each key and value out of the map.
+		z.steps += int64(v.Len()) * units(int(min(v.Type().Key().Size()+v.Type().Elem().Size(), 1<<40)), boxUnit)
 		n := 5
 		nans := 0
 		it := v.MapRange()
@@ -639,10 +641,14 @@ func (c *hcall) goEach(ctx any) {
 		r.steps1(int64(total)) // collecting the keys, before allocating
 		r.flush()
 		keys := make([]string, 0, total)
-		it := val.MapRange()
-		for it.Next() {
-			if k, ok := it.Key().Interface().(string); ok {
-				keys = append(keys, k)
+		// Only a string or an interface key can hold a string: iterating
+		// any other key type would copy each key for nothing.
+		if kt := val.Type().Key(); kt == stringType || kt.Kind() == reflect.Interface {
+			it := val.MapRange()
+			for it.Next() {
+				if k, ok := it.Key().Interface().(string); ok {
+					keys = append(keys, k)
+				}
 			}
 		}
 		r.sortKeys(keys)

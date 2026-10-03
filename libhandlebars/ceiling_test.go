@@ -49,7 +49,7 @@ func TestBuiltinCostCeiling(t *testing.T) {
 			}
 		}
 		t.Logf("%-34s %9d steps %6.0f ns/step", name, steps, best)
-		if best > ceilingNs {
+		if ceilingFails(t, best) {
 			t.Errorf("%s: %.0f ns per charged step, want at most %d", name, best, ceilingNs)
 		}
 	}

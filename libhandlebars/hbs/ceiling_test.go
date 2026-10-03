@@ -112,6 +112,24 @@ const ceilingNs = 200
 // of times slower, while contention from parallel tests slows both alike.
 const baselineFactor = 6
 
+// ceilingFails reports whether perNs fails the ceiling: past twice
+// ceilingNs always, past ceilingNs unless the plain evaluator, measured
+// now, is slow too (within baselineFactor), as when other packages' tests
+// run in parallel.
+func ceilingFails(t *testing.T, perNs float64) bool {
+	t.Helper()
+	switch {
+	case perNs <= ceilingNs:
+		return false
+	case perNs > 2*ceilingNs:
+		return true
+	default:
+		base := baselineNs(t)
+		t.Logf("%.0f ns/step over the ceiling; plain evaluator now %.0f ns/step", perNs, base)
+		return perNs > baselineFactor*base
+	}
+}
+
 // baselineNs is the plain evaluator's time per step now: a loop printing a
 // context value, best of five.
 func baselineNs(t *testing.T) float64 {
@@ -186,16 +204,8 @@ func TestCostCeiling(t *testing.T) {
 		if best > worst {
 			worst, worstName = best, c.name
 		}
-		if best > ceilingNs {
-			// Over the ceiling: fail only if the machine was not slow at
-			// the time too (other packages' tests run in parallel), judged
-			// by the plain evaluator measured now; twice the ceiling fails
-			// however slow the machine seems.
-			if base := baselineNs(t); best > 2*ceilingNs || best > baselineFactor*base {
-				t.Errorf("%s: %.0f ns per charged step, want at most %d (baseline %.0f)", c.name, best, ceilingNs, base)
-			} else {
-				t.Logf("%s: %.0f ns/step over the ceiling, but the baseline is %.0f ns/step: contention", c.name, best, base)
-			}
+		if ceilingFails(t, best) {
+			t.Errorf("%s: %.0f ns per charged step, want at most %d", c.name, best, ceilingNs)
 		}
 	}
 	t.Logf("worst: %s, %.0f ns/step", worstName, worst)
@@ -214,7 +224,7 @@ func TestCostCeiling(t *testing.T) {
 		}
 	}
 	t.Logf("%-28s %6.0f ns/step", "FromJSON subnormals", best)
-	if best > ceilingNs {
+	if ceilingFails(t, best) {
 		t.Errorf("FromJSON subnormals: %.0f ns per charged step, want at most %d", best, ceilingNs)
 	}
 
@@ -233,7 +243,7 @@ func TestCostCeiling(t *testing.T) {
 			}
 		}
 		t.Logf("%-28s %6.0f ns/step", name, best)
-		if best > ceilingNs {
+		if ceilingFails(t, best) {
 			t.Errorf("%s: %.0f ns per charged step, want at most %d", name, best, ceilingNs)
 		}
 	}
@@ -294,7 +304,7 @@ func phoneCold(t *testing.T, in string) {
 		}
 	}
 	t.Logf("format-phone-gb cold %-20q %.0f ns/step", in, best)
-	if best > ceilingNs {
+	if ceilingFails(t, best) {
 		t.Errorf("format-phone-gb cold %q: %.0f ns per charged step, want at most %d", in, best, ceilingNs)
 	}
 }

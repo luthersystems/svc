@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 )
@@ -80,6 +81,21 @@ type jsonWalker struct {
 	skipped  []skippedMarshaler    // methods passed over, in encoding/json's order
 	maxDepth int                   // container nesting allowed (0: none, as encoding/json)
 	quoted   bool                  // the value is a ",string" field's: a scalar is written as a JSON string
+	levels   int                   // the walk's recursion depth
+}
+
+// hopCost is the steps a pointer or interface hop costs: the walk keeps
+// path and memo entries for it and deepens the stack (about 0.5-2 us a
+// hop on a long chain).
+const hopCost = 16
+
+// hop charges one pointer or interface hop and adds it to tot.
+func (w *jsonWalker) hop(tot jsonTotals, err error) (jsonTotals, error) {
+	tot.steps += hopCost
+	if err != nil {
+		return tot, err
+	}
+	return tot, w.c.steps(hopCost)
 }
 
 // q is 2 when the scalar being sized is written quoted (",string").
@@ -176,8 +192,25 @@ func (w *jsonWalker) value(v reflect.Value, depth int) (jsonTotals, error) {
 	return w.typed(v, v.Type(), true, depth)
 }
 
+// maxJSONLevels bounds the walk's recursion, pointer and interface hops
+// included. encoding/json has no bound, but at this depth it would be
+// near exhausting a goroutine's stack itself.
+const maxJSONLevels = 1_000_000
+
 // typed is newTypeEncoder(t, allowAddr) applied to v.
 func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
+	if w.levels >= maxJSONLevels {
+		return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: Go value nests deeper than %d", maxJSONLevels)}
+	}
+	// No defer: a deferred call per level makes each stack growth of a
+	// deep walk adjust them all.
+	w.levels++
+	tot, err := w.encode(v, t, allowAddr, depth)
+	w.levels--
+	return tot, err
+}
+
+func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
 	if t.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(t).Implements(marshalerType) && v.CanAddr() {
 		return w.marshalerLeaf(v.Addr(), false)
 	}
@@ -222,8 +255,20 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 			if num == "" {
 				num = "0"
 			}
+			// Validating reads it once; the error quotes it.
+			if err := w.c.steps(int64(len(num)/16 + 1)); err != nil {
+				return jsonTotals{}, err
+			}
 			if !validNumber(num) {
-				return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: invalid number literal %q", num)}
+				// strconv.Quote builds it about 10 ns a byte, and the error
+				// is copied on its way out.
+				if err := w.c.steps(int64(quotedLen(num)/4 + 1)); err != nil {
+					return jsonTotals{}, err
+				}
+				const prefix = "json: invalid number literal "
+				msg := make([]byte, 0, len(prefix)+quotedLen(num)) // built once, at its size
+				msg = strconv.AppendQuote(append(msg, prefix...), num)
+				return jsonTotals{}, &jsonFailure{string(msg)}
 			}
 			return w.leaf(int64(len(num)) + w.q()) // written unquoted, unless ",string"
 		}
@@ -245,7 +290,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 		if v.IsNil() {
 			return w.leaf(4)
 		}
-		return w.value(v.Elem(), depth)
+		return w.hop(w.value(v.Elem(), depth))
 	case reflect.Struct:
 		return w.structValue(v, t, depth)
 	case reflect.Map:
@@ -280,7 +325,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 			t reflect.Type
 			p any
 		}{t, v.UnsafePointer()}, func() (jsonTotals, error) {
-			return w.typed(v.Elem(), t.Elem(), true, depth)
+			return w.hop(w.typed(v.Elem(), t.Elem(), true, depth))
 		})
 	default: // Complex, Chan, Func, UnsafePointer
 		return jsonTotals{}, w.fail("json: unsupported type: ", t.String())
@@ -377,8 +422,16 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			ks string
 			v  reflect.Value
 		}
+		// MapRange copies each key and value out of the map, here and in
+		// json.Marshal after: allocated, zeroed and copied twice.
+		perEntry := units64(sizeOf(t.Key())+sizeOf(t.Elem()), 32)
+		if err := w.c.steps(int64(n) * perEntry); err != nil {
+			return tot, err
+		}
+		tot.steps += int64(n) * perEntry
 		kvs := make([]kv, 0, n)
 		var keyErr string
+		var keyBytes int64
 		it := v.MapRange()
 		for it.Next() {
 			ks, err := mapKeyString(it.Key())
@@ -391,8 +444,22 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 				}
 				continue
 			}
+			// Its escaping is sized next, and it is compared in the sort:
+			// charge reading it first.
+			scan := int64(len(ks)/16 + 1)
+			if err := w.c.steps(scan); err != nil {
+				return tot, err
+			}
+			tot.steps += scan
+			keyBytes += int64(len(ks))
 			kvs = append(kvs, kv{ks, it.Value()})
 		}
+		// Sorting compares keys: their bytes, log2(n) times.
+		cmp := (keyBytes/256 + 1) * int64(1+bits.Len(uint(n)))
+		if err := w.c.steps(cmp); err != nil {
+			return tot, err
+		}
+		tot.steps += cmp
 		if keyErr != "" {
 			return tot, w.fail("json: encoding error for type ", strconv.Quote(t.String()), ": ", strconv.Quote(keyErr))
 		}
@@ -472,6 +539,15 @@ FieldLoop:
 			}
 			fv = fv.Field(i)
 		}
+		if f.omitZero {
+			// IsZero reads the whole value (a method's cost is the
+			// caller's).
+			z := units64(sizeOf(fv.Type()), 256)
+			if err := w.c.steps(z); err != nil {
+				return tot, err
+			}
+			tot.steps += z
+		}
 		if (f.omitEmpty && isEmptyValue(fv)) || (f.omitZero && isZeroValue(fv)) {
 			continue
 		}
@@ -530,6 +606,17 @@ func (w *jsonWalker) fields(t reflect.Type) ([]jsonField, error) {
 	return jsonFields(t), nil
 }
 
+// sizeOf is t.Size() as an int64, capped (a Go type's size fits).
+func sizeOf(t reflect.Type) int64 { return int64(min(t.Size(), 1<<40)) }
+
+// units64 is n in units of per, rounded up.
+func units64(n, per int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	return (n-1)/per + 1
+}
+
 // isEmptyValue is encoding/json's omitempty test.
 func isEmptyValue(v reflect.Value) bool {
 	switch v.Kind() {
@@ -572,11 +659,70 @@ func isZeroValue(v reflect.Value) bool {
 
 // validNumber reports whether s is a JSON number literal, as encoding/json
 // requires of a json.Number.
+// It reads s once and allocates nothing.
 func validNumber(s string) bool {
-	if s == "" || (s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+	i := 0
+	if i < len(s) && s[i] == '-' {
+		i++
+	}
+	switch {
+	case i < len(s) && s[i] == '0':
+		i++
+	case i < len(s) && s[i] >= '1' && s[i] <= '9':
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+	default:
 		return false
 	}
-	return json.Valid([]byte(s))
+	if i < len(s) && s[i] == '.' {
+		i++
+		start := i
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+		i++
+		if i < len(s) && (s[i] == '+' || s[i] == '-') {
+			i++
+		}
+		start := i
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	return i == len(s)
+}
+
+// quotedLen is len(strconv.Quote(s)), computed without building it.
+func quotedLen(s string) int {
+	n := 2
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			n += 4 // \xHH
+		case r == '"' || r == '\\' || r == '\a' || r == '\b' || r == '\f' || r == '\n' || r == '\r' || r == '\t' || r == '\v':
+			n += 2
+		case strconv.IsPrint(r):
+			n += size
+		case r < ' ' || r == 0x7f:
+			n += 4 // \xHH
+		case r < 0x10000:
+			n += 6 // \uHHHH
+		default:
+			n += 10 // \UHHHHHHHH
+		}
+		i += size
+	}
+	return n
 }
 
 // jsonField is a struct field encoding/json encodes.

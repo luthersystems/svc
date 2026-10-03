@@ -591,7 +591,7 @@ func TestNativeCostCeiling(t *testing.T) {
 			}
 		}
 		t.Logf("%-36s %.0f ns/step", name, best)
-		if best > 200 {
+		if ceilingFails(t, best) {
 			t.Errorf("%s: %.0f ns per step, ceiling 200", name, best)
 		}
 	}
@@ -707,5 +707,75 @@ func TestNativeColdEmbedding(t *testing.T) {
 			worst = max(worst, per)
 		}
 	}
-	require.Less(t, worst, 200.0)
+	require.False(t, ceilingFails(t, worst), "%.0f ns/step", worst)
+}
+
+type hiddenBig struct {
+	Big [4 << 20]byte `json:"-"`
+	N   int
+}
+
+type zeroBig struct {
+	Z [4 << 20]byte `json:",omitzero"`
+}
+
+// renderNative renders "x" with ctx {"n": native} and returns the time per
+// step and the bytes allocated.
+func renderNative(t *testing.T, native any) (*lisp.LVal, float64, uint64) {
+	t.Helper()
+	env := newEnv(t)
+	env.Runtime.MaxAlloc = 1 << 30
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("n", lisp.Native(native))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	var res *lisp.LVal
+	var steps int64
+	var d time.Duration
+	alloc := allocDuring(func() {
+		start := time.Now()
+		res, steps = eval(t, env, `(handlebars:render "x" ctx)`)
+		d = time.Since(start)
+	})
+	return res, float64(d.Nanoseconds()) / float64(max(steps, 1)), alloc
+}
+
+// TestNativeResourceReview covers the resource-accounting review cases on
+// natives: an invalid json.Number, map entry copies, pointer and interface
+// hops, omitzero scans, long map keys and cold deep embedding are charged
+// before the work, within the cost model's ceiling.
+func TestNativeResourceReview(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	var hops any = map[string]int{}
+	for range 5000 {
+		prev := hops
+		hops = &prev
+	}
+	shared := &zeroBig{}
+	rows := make([]*zeroBig, 200)
+	for i := range rows {
+		rows[i] = shared
+	}
+	for name, c := range map[string]struct {
+		native  any
+		wantErr string
+	}{
+		"invalid json.Number":   {map[string]any{"n": json.Number("1" + strings.Repeat("\x00", 4<<20))}, "invalid number literal"},
+		"map of hidden structs": {map[string]hiddenBig{"a": {}}, ""},
+		"5000 pointer hops":     {hops, ""},
+		"omitzero 4 MiB x200":   {rows, ""},
+		"4 MiB key then chan":   {map[string]any{strings.Repeat("k", 4<<20): make(chan int)}, "unsupported type: chan int"},
+		"cold 2000-level chain": {reflect.New(reflect.StructOf([]reflect.StructField{{Name: "C", Type: embedChain(2000), Anonymous: true}, {Name: "Cold", Type: reflect.TypeFor[int]()}})).Elem().Interface(), ""},
+	} {
+		res, per, alloc := renderNative(t, c.native)
+		if c.wantErr == "" {
+			require.Equal(t, lisp.LString, res.Type, "%s: %v", name, res)
+		} else {
+			require.Equal(t, lisp.LError, res.Type, name)
+			require.Contains(t, res.Cells[0].Str, c.wantErr, name)
+		}
+		t.Logf("%-24s %6.0f ns/step %6d KB", name, per, alloc>>10)
+		require.False(t, ceilingFails(t, per), "%s: %.0f ns/step", name, per)
+	}
 }

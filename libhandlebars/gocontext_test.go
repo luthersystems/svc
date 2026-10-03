@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -650,3 +651,39 @@ func TestJSONContextNilMarshaler(t *testing.T) {
 type panicMarshaler struct{}
 
 func (panicMarshaler) MarshalJSON() ([]byte, error) { panic("boom") }
+
+// TestGoContextMapKeyCopies: #each over a Go map whose key type cannot
+// hold a string does not copy its keys (raymond iterated none of them).
+func TestGoContextMapKeyCopies(t *testing.T) {
+	ctx := map[string]any{"a": make([]int, 200), "m": map[[1 << 20]byte]int{{}: 1}}
+	tpl, err := libhandlebars.Parse(`{{#each a}}{{#each ../m}}x{{/each}}{{/each}}`)
+	require.NoError(t, err)
+	var out string
+	alloc := allocDuringGo(func() { out, err = libhandlebars.Render(tpl, ctx) })
+	require.NoError(t, err)
+	require.Empty(t, out)
+	require.Less(t, alloc, uint64(16<<20), "keys copied")
+	checkGo(t, `{{#each m}}x{{/each}}`, map[string]any{"m": map[[2]byte]int{{}: 1}})
+}
+
+// TestJSONContextNumberAlloc: an invalid json.Number is validated without
+// copying and its quoted error text sized and charged first.
+func TestJSONContextNumberAlloc(t *testing.T) {
+	ctx := map[string]any{"n": json.Number("1" + strings.Repeat("\x00", 4<<20))}
+	tpl, err := libhandlebars.Parse(`x`)
+	require.NoError(t, err)
+	_, want := json.Marshal(ctx)
+	var gerr error
+	alloc := allocDuringGo(func() { _, gerr = libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithJSONContext()) })
+	require.EqualError(t, gerr, want.Error())
+	require.Less(t, alloc, uint64(48<<20), "the 16 MB text, built at its size and copied once")
+}
+
+func allocDuringGo(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}

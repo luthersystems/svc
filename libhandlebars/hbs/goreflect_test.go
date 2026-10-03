@@ -98,9 +98,36 @@ func TestFieldsByName(t *testing.T) {
 	require.NoError(t, err)
 	per := float64(time.Since(start).Nanoseconds()) / float64(m.n)
 	t.Logf("cold level-18 diamond: %d steps, %.0f ns/step", m.n, per)
-	require.Less(t, per, 200.0)
+	if per > 200 {
+		// Contention from parallel packages: compare with the plain
+		// evaluator now (as the ceiling tests do).
+		base := internalBaselineNs(t)
+		require.False(t, per > 400 || per > 6*base, "%.0f ns/step, plain evaluator %.0f", per, base)
+	}
 }
 
 type countMeter struct{ n int64 }
 
 func (m *countMeter) Charge(n int64) error { m.n += n; return nil }
+
+// internalBaselineNs is the plain evaluator's time per step now.
+func internalBaselineNs(t *testing.T) float64 {
+	t.Helper()
+	p, err := Parse(`{{#each a}}{{x}}{{/each}}`, DefaultLimits())
+	require.NoError(t, err)
+	a := make([]any, 20000)
+	for i := range a {
+		a[i] = 1.0
+	}
+	best := 0.0
+	for range 5 {
+		m := &countMeter{}
+		start := time.Now()
+		_, err := p.Render(map[string]any{"x": "abc", "a": a}, Options{Meter: m})
+		require.NoError(t, err)
+		if ns := float64(time.Since(start).Nanoseconds()) / float64(m.n); best == 0 || ns < best {
+			best = ns
+		}
+	}
+	return best
+}
