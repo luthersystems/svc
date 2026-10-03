@@ -796,3 +796,28 @@ func TestGoContextKeyWalkBounded(t *testing.T) {
 		require.Less(t, time.Since(start), 5*time.Second)
 	}
 }
+
+type zeroSized struct{ F [0]float64 }
+
+// TestGoContextZeroSizedKeyArray: a map key that is a large array of
+// zero-size values is walked within the step budget: with MaxSteps 64 the
+// render fails at once.
+func TestGoContextZeroSizedKeyArray(t *testing.T) {
+	kt := reflect.ArrayOf(1<<24, reflect.TypeFor[zeroSized]())
+	m := reflect.MakeMap(reflect.MapOf(kt, reflect.TypeFor[int]()))
+	m.SetMapIndex(reflect.New(kt).Elem(), reflect.ValueOf(1))
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en m}}`)
+	require.NoError(t, err)
+	lim := hbs.DefaultLimits()
+	lim.MaxSteps = 64
+	best := time.Hour
+	for range 3 {
+		start := time.Now()
+		_, err = tpl.Render(map[string]any{"m": m.Interface()}, hbs.Options{Limits: lim})
+		require.ErrorContains(t, err, "maximum of 64 steps")
+		best = min(best, time.Since(start))
+	}
+	if !raceEnabled {
+		require.Less(t, best, 20*time.Millisecond, "not walked past the budget")
+	}
+}

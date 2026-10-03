@@ -1031,3 +1031,28 @@ func TestNativeAddressableMarshalerText(t *testing.T) {
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
 	require.Contains(t, res.String(), "error while serializing: "+merr.Error())
 }
+
+// TestNativeRawMessageCharged: a RawMessage as a native, behind a pointer
+// or in a json.Marshaler field is charged for encoding/json's check of its
+// bytes, and fails with json.Marshal's text.
+func TestNativeRawMessageCharged(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
+	for name, native := range map[string]any{
+		"raw":             raw,
+		"pointer":         &raw,
+		"marshaler field": struct{ R json.Marshaler }{raw},
+		"raw field":       struct{ R json.RawMessage }{raw},
+	} {
+		_, merr := json.Marshal(native)
+		require.Error(t, merr, name)
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 64 << 10
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("r", lisp.Native(native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, name)
+		require.Contains(t, res.String(), "error while serializing: "+merr.Error(), name)
+		require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), name)
+	}
+}

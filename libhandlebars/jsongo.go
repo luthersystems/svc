@@ -133,9 +133,23 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 var rawMessageType = reflect.TypeFor[json.RawMessage]()
 
 // rawMessage returns the bytes of a json.RawMessage (or a pointer to one)
-// v, whose MarshalJSON returns them as they are.
+// v, whose MarshalJSON returns them as they are. It looks through an
+// interface (a field typed json.Marshaler holding one); a nil pointer or
+// an invalid value is not one.
 func rawMessage(v reflect.Value) (json.RawMessage, bool) {
+	if !v.IsValid() {
+		return nil, false
+	}
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil, false
+		}
+		v = v.Elem()
+	}
 	if v.Kind() == reflect.Pointer && v.Type().Elem() == rawMessageType {
+		if v.IsNil() {
+			return nil, false
+		}
 		v = v.Elem()
 	}
 	if v.Type() != rawMessageType {
@@ -390,7 +404,16 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 				if v.IsNil() {
 					return w.leaf(4)
 				}
-				return w.leaf(int64(base64.StdEncoding.EncodedLen(v.Len())) + 2) // base64, quoted
+				// base64, quoted: encoding it is charged as a string's scan,
+				// a step per started 32 bytes written.
+				out := int64(base64.StdEncoding.EncodedLen(v.Len()))
+				enc := units64(out, 32)
+				if err := w.c.steps(enc); err != nil {
+					return jsonTotals{steps: enc}, err
+				}
+				tot, err := w.leaf(out + 2)
+				tot.steps += enc
+				return tot, err
 			}
 		}
 		if v.IsNil() {

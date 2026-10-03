@@ -562,3 +562,29 @@ type jsEmbedRaw struct{ json.RawMessage }
 type jsPtrErrText struct{}
 
 func (*jsPtrErrText) MarshalText() ([]byte, error) { return nil, errors.New("text boom") }
+
+// TestRawMessageBehindMarshaler: a RawMessage held in a json.Marshaler
+// field or map element is charged and checked as one (encoding/json names
+// the static type json.Marshaler in its error); and []byte is charged for
+// its base64 encoding.
+func TestRawMessageBehindMarshaler(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
+	for name, v := range map[string]any{
+		"field": struct{ R json.Marshaler }{raw},
+		"map":   map[string]json.Marshaler{"r": raw},
+		"ptr":   struct{ R json.Marshaler }{&raw},
+	} {
+		_, merr := json.Marshal(v)
+		require.Error(t, merr, name)
+		bud := &goBudget{max: 1 << 40}
+		require.EqualError(t, goJSONCost(bud, reflect.ValueOf(v), 0), merr.Error(), name)
+		require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), name)
+	}
+
+	b := map[string]any{"b": make([]byte, 8<<20)}
+	out, err := json.Marshal(b)
+	require.NoError(t, err)
+	bud := &goBudget{max: 1 << 40}
+	require.NoError(t, goJSONCost(bud, reflect.ValueOf(b), 0))
+	require.GreaterOrEqual(t, bud.used, int64(len(out)/32), "base64 charged by its output")
+}
