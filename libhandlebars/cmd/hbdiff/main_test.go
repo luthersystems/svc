@@ -365,3 +365,51 @@ func TestWithin(t *testing.T) {
 	require.False(t, within("/a/b", "/a/bc"))
 	require.False(t, within("/a/b", "/a"))
 }
+
+// TestCtxSymlinks: -ctx entries that are symlinks are followed, a key
+// directory as much as a file, and a link into an svc work tree or a
+// directory below a key directory is refused loudly, never dropped.
+func TestCtxSymlinks(t *testing.T) {
+	f := newFixture(t)
+	elsewhere := filepath.Join(f.root, "elsewhere")
+	writeFile(t, filepath.Join(elsewhere, "key", "one.json"), `{"items":["a"]}`)
+	writeFile(t, filepath.Join(elsewhere, "key", "two.json"), `{"items":["b"]}`)
+	writeFile(t, filepath.Join(elsewhere, "shared.json"), `{"name":"s"}`)
+	require.NoError(t, os.RemoveAll(filepath.Join(f.ctx, "templates_letter.html")))
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "key"), filepath.Join(f.ctx, "templates_letter.html")))
+	require.NoError(t, os.Symlink(filepath.Join(elsewhere, "shared.json"), filepath.Join(f.ctx, "linked.json")))
+
+	code, stdout, stderr := runT(t, hbdiff.Ref, "-out", f.out, "-phylum", f.phylum, "-ctx", f.ctx, "-runs", "1", "-allow", "none")
+	require.Equal(t, exitOK, code, stderr)
+	// 4 shared contexts each (a.json, linked.json, more.jsonl's two
+	// lines), plus letter's 2 through the linked key directory.
+	require.Contains(t, stdout, "hbdiff: 4 templates, 18 cases")
+	cases := readCases(t, f.out)
+	require.Contains(t, cases, "templates/letter.html#templates_letter.html/one.json")
+	require.Contains(t, cases, "templates/letter.html#templates_letter.html/two.json")
+	require.Contains(t, cases, "templates/change.html#linked.json")
+
+	svc := filepath.Join(f.root, "svc")
+	fakeSvc(t, svc)
+	writeFile(t, filepath.Join(svc, "private", "p.json"), `{"name":"`+secret+`"}`)
+	for _, tc := range []struct {
+		name, link, target, want string
+	}{
+		{"key dir into svc", "key2", filepath.Join(svc, "private"), "links into the svc work tree"},
+		{"file into svc", "p.json", filepath.Join(svc, "private", "p.json"), "links into the svc work tree"},
+		{"dangling", "gone.json", filepath.Join(f.root, "nope.json"), "no such file"},
+		{"nested dir", filepath.Join("templates_letter.html", "deeper"), elsewhere, "is a directory"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := filepath.Join(f.root, "ctx-"+strings.ReplaceAll(tc.name, " ", "-"))
+			writeFile(t, filepath.Join(ctx, "a.json"), `{}`)
+			require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(ctx, tc.link)), 0o700))
+			require.NoError(t, os.Symlink(tc.target, filepath.Join(ctx, tc.link)))
+			out := filepath.Join(f.root, "out-"+strings.ReplaceAll(tc.name, " ", "-"))
+			code, stdout, stderr := runT(t, hbdiff.Ref, "-out", out, "-phylum", f.phylum, "-ctx", ctx)
+			require.Equal(t, exitError, code)
+			require.Contains(t, stderr, tc.want)
+			require.Empty(t, stdout)
+		})
+	}
+}

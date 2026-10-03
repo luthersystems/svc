@@ -282,7 +282,9 @@ func loadInputs(cfg *config) (*inputs, error) {
 
 // loadContexts reads a -ctx directory: its own .json and .jsonl files are
 // shared by every template; those in a subdirectory belong to the template
-// whose key is the subdirectory's name.
+// whose key is the subdirectory's name. Symlinks are followed, after the
+// same outside-the-svc-work-tree check as the flag's own path. A directory
+// below a key directory is an error, not silently skipped.
 func loadContexts(dir string) ([]ctxFile, map[string][]ctxFile, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
@@ -294,7 +296,11 @@ func loadContexts(dir string) ([]ctxFile, map[string][]ctxFile, error) {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		if !e.IsDir() {
+		isDir, derr := ctxEntryIsDir(dir, e)
+		if derr != nil {
+			return nil, nil, derr
+		}
+		if !isDir {
 			cs, err := readContextFile(dir, "", e.Name())
 			if err != nil {
 				return nil, nil, err
@@ -302,13 +308,22 @@ func loadContexts(dir string) ([]ctxFile, map[string][]ctxFile, error) {
 			shared = append(shared, cs...)
 			continue
 		}
-		sub, err := os.ReadDir(filepath.Join(dir, e.Name()))
+		keyDir := filepath.Join(dir, e.Name())
+		sub, err := os.ReadDir(keyDir)
 		if err != nil {
 			return nil, nil, fmt.Errorf("-ctx: %w", err)
 		}
 		for _, s := range sub {
-			if s.IsDir() || strings.HasPrefix(s.Name(), ".") {
+			if strings.HasPrefix(s.Name(), ".") {
 				continue
+			}
+			isDir, err := ctxEntryIsDir(keyDir, s)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isDir {
+				return nil, nil, fmt.Errorf("-ctx: %s is a directory; contexts are <ctx>/*.json(l) or <ctx>/<key>/*.json(l)",
+					filepath.Join(keyDir, s.Name()))
 			}
 			cs, err := readContextFile(dir, e.Name(), s.Name())
 			if err != nil {
@@ -318,6 +333,28 @@ func loadContexts(dir string) ([]ctxFile, map[string][]ctxFile, error) {
 		}
 	}
 	return shared, byKey, nil
+}
+
+// ctxEntryIsDir reports whether the -ctx entry e of dir is a directory,
+// following a symlink. A symlink that resolves into an svc work tree, or
+// that does not resolve, is an error.
+func ctxEntryIsDir(dir string, e fs.DirEntry) (bool, error) {
+	if e.Type()&fs.ModeSymlink == 0 {
+		return e.IsDir(), nil
+	}
+	p := filepath.Join(dir, e.Name())
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return false, fmt.Errorf("-ctx: %w", err)
+	}
+	if root := svcWorkTree(r); root != "" {
+		return false, fmt.Errorf("refusing -ctx entry %s: it links into the svc work tree %s; private inputs stay outside the repository", p, root)
+	}
+	st, err := os.Stat(r) //nolint:gosec // resolved -ctx entry, checked against the svc work tree above
+	if err != nil {
+		return false, fmt.Errorf("-ctx: %w", err)
+	}
+	return st.IsDir(), nil
 }
 
 // readContextFile reads <dir>/<sub>/<name>. Files that are not .json or
