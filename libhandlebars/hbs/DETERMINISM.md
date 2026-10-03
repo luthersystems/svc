@@ -96,6 +96,10 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 | Operation | Where | Charge |
 |---|---|---|
 | Each AST node evaluated | `eval.go` `at` | 1 |
+| A number literal used as a lookup key (`{{1e-320}}`) | `evalExpr` | fmt(len of its canonical form) |
+| Each `@../` frame a data path climbs | `evalDataPathExpression` | 1 |
+| `mod` | `hMod` | 1 per 8 bits the operands' exponents differ by (math.Mod's reduction loop) |
+| Evaluation error text | `errorf` | its string arguments checked against the produced-bytes bound before formatting; the whole text then charged as produced |
 | Each path segment resolved | `evalPath` | 1, plus the key lookup |
 | Each context a lookup tries (mustache climb) | `evalDepthPath` | 1 |
 | Each array element a path is mapped over | `evalCtxPath` | 1 |
@@ -106,8 +110,8 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 | Sorting k keys | `sortKeys` | sum of hash(len) x ceil(log2(k+1)), before sorting |
 | Collecting an object's keys | `helperEach`, `appendV` | 1 per key, before collecting |
 | `#each` iteration; helper call | `visitBlock`, `helperEach`, `callHelper` | 1 |
-| String argument read by a helper | `read` via `convertArg`, `hashStr` | hash(n) |
-| Parsing a number from a string (`toFloat`: `gt`, `plus`, `times`..., `round-to-nth`, `prettyp-num-en`) | `parseFloat`, `floatCost` | scan(n), plus 512 + n when the literal is in `ParseFloat`'s slow class (more than 19 significant digits, or a decimal exponent <= -307 or >= 309; about 20 us however short) |
+| String argument read by a helper | `read` via `convertArg`, `hashStr` | hash(n); an empty string 0 (the call's own step covers it) |
+| Parsing a number from a string (`toFloat`: `gt`, `plus`, `times`..., `round-to-nth`, `prettyp-num-en`) | `parseFloat`, `floatCost` | scan(n), plus 512 + n when the literal is in `ParseFloat`'s slow class (more than 19 significant digits, or a decimal exponent <= -307 or >= 310, judged on the numeric prefix ParseFloat parses before rejecting a malformed suffix; about 20 us however short) |
 | Parsing an integer from a string (`to-int`, `round-to-nth`'s precision) | `toInt`, `hRoundToNth` | scan(n) |
 | Formatting a number (printing, `str`, `%v`, `to-str` in ModeFixed) | `formatted` | fmt(len) |
 | `to-str` of a float in ModeCompat (`%f`) | `hToStr` | ceil(len/2) |
@@ -116,22 +120,23 @@ formatting a number's n bytes; `KiB(n)` = ceil(n/1024).
 | `escape-uri-component` | `hEscapeURIComponent` | ceil(n/8), exact escaped length checked before escaping |
 | `possessive` (`TrimRight`) | `hPossessive` | scan(n); result checked before it is built |
 | Date helpers that discard the parse error | `parseISODate` | input that is not 10 bytes fails without `time.Parse` |
-| Date formatters' error text | `dateFormatHelper` | n, and 8n + 128 checked against the produced-bytes bound, before parsing a non-10-byte input |
+| Date formatters' error text | `dateFormatHelper` | n steps, and the least possible message length checked against the produced-bytes bound, before parsing a non-10-byte input; then the exact length (`parseErrorLen`) checked before the text is built |
 | String built from an array (`str`) | `measureLeaves`, `copyLeaves` | 1 per element and a read per string leaf, nested arrays against MaxDepth, all before allocating; numbers fmt(len); then produced bytes |
 | fmt `%v` text (`prettyp-num-en` errors) | `appendV` | 1 per element, leaves and keys checked and charged before copying, depth-bounded |
 | `select` / `in-string-array` element scanned | helpers | hash(len(key)) / 1, plus compares; `where` parsed without allocation |
 | `global` read or write | `hGlobal` | hash(len(ns) + len(key)) |
 | `round-to-nth` | `hRoundToNth` | precision checked against the produced-bytes bound and charged fmt(precision) before formatting |
 | Printing an array | `writeValue` | 1 per element; nested arrays count against MaxDepth |
-| Escaped output | `writeEscaped` | scan(n) of the escaped length (or of the input when nothing needs escaping), rejected before scanning if it cannot fit |
+| Escaped output | `writeEscaped` | refused before scanning if even the unescaped length cannot fit; scan(len) charged before the scan for escapable bytes; then, if any, scan(n) of the escaped length once it is known to fit |
+| Writing unescaped output (content, triple-stash, helper results) | `writeString` | 1 per whole 16 bytes (short writes are covered by their node's step) |
 | Produced bytes: output, captured sections, helper results, error text | `wrote`, `produced`, `fail`, `errorf` | KiB of the running total; bounded by 8 x MaxOutputBytes |
 
 The ELPS entry points add:
 
 | Operation | Where | Charge |
 |---|---|---|
-| Parsing a template (`must-parse`, `render`), cache hit or miss alike | `hbs.ParseCachedMetered`, `hbs.ParseCost` | 6 per lexer token + 1 per started 16 bytes (SHA-256 and plain text), charged after the depth prescan counts the tokens and before the recursive parse; a cache hit charges the count its miss measured |
-| Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder would (invalid value, `Runtime.MaxAlloc`); then `json:dump-bytes`'s own 1 per whole KiB written |
+| Parsing a template (`must-parse`, `render`), cache hit or miss alike | `hbs.ParseCachedMetered`, `hbs.ParseCost` | 6 per lexer token + 1 per started 16 bytes (SHA-256 and plain text) + `floatCost` of each number literal, charged after the depth prescan counts the tokens and before the recursive parse; a cache hit charges what its miss did |
+| Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder fails (invalid value, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
 | Decoding the context | `hbs.FromJSONMetered` | before decoding: 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
 
 `TestBuiltinCostCeiling` (`libhandlebars/ceiling_test.go`) runs these end to

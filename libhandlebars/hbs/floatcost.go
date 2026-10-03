@@ -23,68 +23,63 @@ const slowFloatPremium = 512
 // (subnormals and overflow). Anything that is not a plain decimal (hex,
 // Inf, NaN, malformed) is fast or fails fast.
 func slowFloat(s string) bool {
+	// ParseFloat converts the longest numeric prefix before it rejects a
+	// malformed suffix, so the prefix is what is classified.
 	i := 0
 	if i < len(s) && (s[i] == '+' || s[i] == '-') {
 		i++
 	}
 	sig, intDigits, leadFrac := 0, 0, 0
 	seenDot, seenDigit := false, false
+mantissa:
 	for ; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c >= '0' && c <= '9':
+			seenDigit = true
 			if c == '0' && sig == 0 {
 				if seenDot {
 					leadFrac++
 				}
-				seenDigit = true
 				continue
 			}
 			sig++
-			seenDigit = true
 			if !seenDot {
 				intDigits++
 			}
 		case c == '.' && !seenDot:
 			seenDot = true
-		case c == 'e' || c == 'E':
-			goto exp
 		default:
-			return false
+			break mantissa
 		}
 	}
-	return seenDigit && sig > 19
-exp:
-	if !seenDigit {
-		return false
+	if !seenDigit || sig == 0 {
+		return false // no number, or zero
 	}
-	i++
-	neg := false
-	if i < len(s) && (s[i] == '+' || s[i] == '-') {
-		neg = s[i] == '-'
-		i++
-	}
-	e, digits := 0, 0
-	for ; i < len(s); i++ {
-		c := s[i]
-		if c < '0' || c > '9' {
-			return false
+	e := 0
+	if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+		j := i + 1
+		neg := false
+		if j < len(s) && (s[j] == '+' || s[j] == '-') {
+			neg = s[j] == '-'
+			j++
 		}
-		digits++
-		if digits > 6 {
-			return true // an exponent this long is out of range
+		digits := 0
+		for ; j < len(s) && s[j] >= '0' && s[j] <= '9'; j++ {
+			digits++
+			if digits > 6 {
+				return true // an exponent this long is out of range
+			}
+			e = e*10 + int(s[j]-'0')
 		}
-		e = e*10 + int(c-'0')
+		if neg {
+			e = -e
+		}
 	}
-	if neg {
-		e = -e
-	}
-	if sig == 0 {
-		return false // zero
-	}
+	// The decimal exponent of the first significant digit, plus one.
 	dec := e - leadFrac
 	if intDigits > 0 {
 		dec = e + intDigits
 	}
-	return sig > 19 || dec <= -307 || dec >= 309
+	return sig > 19 || dec <= -307 || dec >= 310
 }

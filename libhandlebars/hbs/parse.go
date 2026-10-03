@@ -72,37 +72,41 @@ const (
 	parseByteUnit  = 16
 )
 
-// parseMetered is Parse charging ParseCost to m (nil: none) once the
-// prescan has counted the tokens, before the recursive parse. It returns
-// the token count, which the cache keeps so a hit costs what a miss did.
-// A template over the size limit is charged ParseCost(len, 0).
-func parseMetered(src string, lim Limits, m Meter) (*Program, int, error) {
+// parseMetered is Parse charging ParseCost to m (nil: none), plus each
+// number literal's floatCost, once the prescan has counted the tokens and
+// before the recursive parse. It returns the steps charged, which the cache
+// keeps so a hit costs what a miss did. A template over the size limit is
+// charged ParseCost(len, 0).
+func parseMetered(src string, lim Limits, m Meter) (*Program, int64, error) {
 	maxBytes, maxDepth := parseLimits(lim)
 
 	if len(src) > maxBytes {
-		if err := charge(m, ParseCost(len(src), 0)); err != nil {
-			return nil, 0, err
+		cost := ParseCost(len(src), 0)
+		if err := charge(m, cost); err != nil {
+			return nil, cost, err
 		}
-		return nil, 0, errorf(KindLimit, "template is %d bytes, limit is %d", len(src), maxBytes)
+		return nil, cost, errorf(KindLimit, "template is %d bytes, limit is %d", len(src), maxBytes)
 	}
 
 	// The prescan finds a depth excess without recursion; the parser then
 	// runs with the same limit, so its recursion is bounded too, and reports
 	// whichever comes first in the source: a syntax error, as raymond did,
 	// or the depth limit.
-	tokens, derr := parser.Depth(src, maxDepth)
-	if err := charge(m, ParseCost(len(src), tokens)); err != nil {
-		return nil, tokens, err
+	var numbers int64 // template number literals are parsed with ParseFloat
+	tokens, derr := parser.DepthFunc(src, maxDepth, func(lit string) { numbers += floatCost(lit) })
+	cost := ParseCost(len(src), tokens) + numbers
+	if err := charge(m, cost); err != nil {
+		return nil, cost, err
 	}
 	prog, err := parser.ParseLimit(src, maxDepth)
 	if err != nil {
-		return nil, tokens, toError(err)
+		return nil, cost, toError(err)
 	}
 	if derr != nil {
-		return nil, tokens, toError(derr)
+		return nil, cost, toError(derr)
 	}
 
-	return &Program{ast: prog, srcLen: len(src), tokens: tokens}, tokens, nil
+	return &Program{ast: prog, srcLen: len(src), tokens: tokens}, cost, nil
 }
 
 // charge charges n steps to m, if any.

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,4 +123,38 @@ func TestQueryEscapedLen(t *testing.T) {
 		require.Equal(t, len(url.QueryEscape(s)), queryEscapedLen(s), "byte %d", b)
 	}
 	require.Equal(t, len(url.QueryEscape(string(all))), queryEscapedLen(string(all)))
+}
+
+// TestParseErrorLen checks parseErrorLen against time.ParseError.Error() on
+// inputs with every class of byte the time package quotes differently.
+func TestParseErrorLen(t *testing.T) {
+	inputs := []string{"", "x", "2020-01-0", "2020-01-01x", "2020-13-01", `2020-01-01"\`, "\x00\x1f\x7f", "é2020", "2020-01-01\xff\xfe", "�2020", "2020-01-01" + strings.Repeat("\x01", 100)}
+	for b := range 256 {
+		inputs = append(inputs, "2020-01-01"+string([]byte{byte(b)}), string([]byte{byte(b)})+"020-01-01")
+	}
+	for _, in := range inputs {
+		_, err := time.Parse(layoutISO, in)
+		if err == nil {
+			continue
+		}
+		var pe *time.ParseError
+		require.ErrorAs(t, err, &pe, "%q", in)
+		require.Equal(t, len(err.Error()), parseErrorLen(pe), "%q", in)
+	}
+}
+
+// TestSlowFloatClasses: the classifier follows ParseFloat's slow path on
+// the effective exponent and on the numeric prefix it parses before
+// rejecting a malformed suffix.
+func TestSlowFloatClasses(t *testing.T) {
+	for s, slow := range map[string]bool{
+		"1.5": false, "123456789.123": false, "1e308": false, "-0.0001": false, "0": false, "0.000": false,
+		"5e-324": true, "1e-320": true, "4.9406564584124654e-324": true, "1e999": true,
+		"12345678901234567890123":             true,
+		"0." + strings.Repeat("0", 400) + "1": true, // implicit exponent
+		"0." + strings.Repeat("0", 300) + "1": false,
+		"5e-324x":                             true, "1e-320 ": true, "1.5x": false, "x5e-324": false,
+	} {
+		require.Equal(t, slow, slowFloat(s), "%.40q", s)
+	}
 }

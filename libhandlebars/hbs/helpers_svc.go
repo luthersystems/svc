@@ -160,6 +160,11 @@ func hMod(c *hcall) any {
 	} else if !ok1 && !ok2 {
 		return float64(0)
 	}
+	// math.Mod reduces the dividend one exponent bit at a time: about 6 ns
+	// for each bit the exponents differ by.
+	_, e1 := math.Frexp(f1)
+	_, e2 := math.Frexp(f2)
+	c.r.steps1(int64(max(0, e1-e2)) / 8)
 	return math.Mod(f1, f2)
 }
 
@@ -332,17 +337,24 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 		if date == "" {
 			return ""
 		}
-		// Only a 10-byte input can parse. On any other, time.Parse copies the
-		// input into its error, and the error text quotes it twice, up to 4
-		// bytes per byte: bound that before parsing.
+		// Only a 10-byte input can parse. On any other, time.Parse quotes
+		// part of it into its error, and the text quotes it again, up to
+		// about 80 ns a byte in all: charge that first.
+		prefix := name + ": expecting date format YYYY-MM-DD, got: "
 		if len(date) != len(layoutISO) {
-			c.r.reserveProduced(len(name) + 8*len(date) + 128)
-			// Building that error takes up to about 80 ns a byte.
 			c.r.steps1(int64(len(date)))
+			// The message quotes the whole input at least once: refuse
+			// before time.Parse copies it if even that cannot fit.
+			c.r.reserveProduced(len(prefix) + len("parsing time ") + len(date) + 2)
 		}
 		d, err := time.Parse(layoutISO, date)
 		if err != nil {
-			c.r.fail(fmt.Sprintf("%s: expecting date format YYYY-MM-DD, got: %v", name, err))
+			// Bound the exact message before building it.
+			var pe *time.ParseError
+			if errors.As(err, &pe) {
+				c.r.reserveProduced(len(prefix) + parseErrorLen(pe))
+			}
+			c.r.fail(prefix + err.Error())
 		}
 		return d.Format(layout)
 	}
@@ -480,6 +492,33 @@ func parseISODate(s string) (time.Time, error) {
 		return time.Time{}, errNotISODate
 	}
 	return time.Parse(layoutISO, s)
+}
+
+// parseErrorLen is len(e.Error()), computed without building it.
+func parseErrorLen(e *time.ParseError) int {
+	if e.Message == "" {
+		return len("parsing time ") + quotedLen(e.Value) + len(" as ") + quotedLen(e.Layout) +
+			len(": cannot parse ") + quotedLen(e.ValueElem) + len(" as ") + quotedLen(e.LayoutElem)
+	}
+	return len("parsing time ") + quotedLen(e.Value) + len(e.Message)
+}
+
+// quotedLen is the length of the time package's quote(s): a byte below
+// 0x20 or from 0x80 up is written \xHH, a quote or backslash is escaped,
+// and the text is enclosed in double quotes.
+func quotedLen(s string) int {
+	n := 2
+	for i := range len(s) {
+		switch b := s[i]; {
+		case b < ' ' || b >= 0x80:
+			n += 4
+		case b == '"' || b == '\\':
+			n += 2
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // phoneCallCost is the steps a format-phone-gb call on a non-empty input

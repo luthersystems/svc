@@ -242,91 +242,119 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 // chargeEncode charges encoding v to JSON before the encoder runs:
 // encodeValueCost steps per value and one step per started KiB of the
 // JSON, estimated by walking v in the encoder's order. The walk stops where
-// the encoder would: at the first value JSON cannot hold, or once the
-// estimate passes the runtime's allocation cap. It returns the budget error
-// if the budget runs out first.
+// the encoder stops with an error, so the encoder then reports its own: at
+// a value JSON cannot hold, past the value depth limit, at a value that
+// contains itself, and once the estimate passes the runtime's allocation
+// cap. It returns the budget error if the budget runs out first.
 func chargeEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
-	limit := int64(env.Runtime.MaxAllocBytes())
-	var size, charged int64
-	add := func(n int64) *lisp.LVal {
-		size += n
-		if kib := (size + 1023) >> 10; kib > charged {
-			if lerr := env.ChargeSteps(kib - charged); lerr.Type == lisp.LError {
-				return lerr
-			}
-			charged = kib
-		}
-		return nil
+	w := &encodeWalk{
+		env:   env,
+		limit: int64(env.Runtime.MaxAllocBytes()),
+		depth: env.Runtime.ValueDepthLimit(),
+		path:  map[*lisp.LVal]struct{}{},
 	}
-	stack := []*lisp.LVal{v}
-	for len(stack) > 0 && size <= limit {
-		x := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		var n int64
-		switch {
-		case x.IsNil():
-			n = 4
-		default:
-			switch x.Type {
-			case lisp.LInt:
-				var buf [24]byte
-				n = int64(len(strconv.AppendInt(buf[:0], int64(x.Int), 10)))
-			case lisp.LFloat:
-				n = 24
-			case lisp.LString, lisp.LSymbol:
-				n = int64(len(x.Str)) + 2
-			case lisp.LBytes:
-				n = int64(len(x.Bytes()))*4/3 + 4
-			case lisp.LSExpr:
-				n = int64(len(x.Cells)) + 2
-				stack = appendReversed(stack, x.Cells)
-			case lisp.LQuote, lisp.LTaggedVal:
-				n = 1
-				stack = appendReversed(stack, x.Cells[:1])
-			case lisp.LArray:
-				if len(x.Cells) == 2 {
-					n = int64(len(x.Cells[1].Cells)) + 2
-					stack = appendReversed(stack, x.Cells[1].Cells)
-				}
-			case lisp.LSortMap:
-				m := x.Map()
-				// Charge the entries before allocating room for them.
-				if lerr := add(int64(m.Len()) * 4); lerr != nil {
-					return lerr
-				}
-				buf := make([]*lisp.LVal, m.Len())
-				if e := m.Entries(buf); e.Type == lisp.LError {
-					return nil
-				}
-				for i := len(buf) - 1; i >= 0; i-- {
-					if buf[i] != nil && len(buf[i].Cells) == 2 {
-						stack = append(stack, buf[i].Cells[1], buf[i].Cells[0])
-					}
-				}
-			default:
-				return nil // the encoder stopped here
-			}
-		}
-		if lerr := add(n); lerr != nil {
+	if w.depth < 1024 { // as libjson's encoder reads the limit
+		w.depth = lisp.MaxValueDepth
+	}
+	_, lerr := w.walk(v, 0)
+	return lerr
+}
+
+type encodeWalk struct {
+	env         *lisp.LEnv
+	path        map[*lisp.LVal]struct{}
+	limit, size int64
+	charged     int64
+	depth       int
+}
+
+// add charges n more estimated bytes and one value.
+func (w *encodeWalk) add(n int64) *lisp.LVal {
+	w.size += n
+	if kib := (w.size + 1023) >> 10; kib > w.charged {
+		if lerr := w.env.ChargeSteps(kib - w.charged); lerr.Type == lisp.LError {
 			return lerr
 		}
-		if lerr := env.ChargeSteps(encodeValueCost); lerr.Type == lisp.LError {
-			return lerr
-		}
+		w.charged = kib
+	}
+	if lerr := w.env.ChargeSteps(encodeValueCost); lerr.Type == lisp.LError {
+		return lerr
 	}
 	return nil
+}
+
+// walk charges x and its contents. It reports true where the encoder
+// fails, and the budget error if the budget runs out.
+func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
+	if w.size > w.limit {
+		return true, nil
+	}
+	if x.IsNil() {
+		return false, w.add(4)
+	}
+	if depth >= w.depth {
+		return true, nil
+	}
+	var n int64
+	var children []*lisp.LVal
+	switch x.Type {
+	case lisp.LInt:
+		var buf [24]byte
+		n = int64(len(strconv.AppendInt(buf[:0], int64(x.Int), 10)))
+	case lisp.LFloat:
+		n = 24
+	case lisp.LString, lisp.LSymbol:
+		n = int64(len(x.Str)) + 2
+	case lisp.LBytes:
+		n = int64(len(x.Bytes()))*4/3 + 4
+	case lisp.LSExpr:
+		n, children = int64(len(x.Cells))+2, x.Cells
+	case lisp.LQuote, lisp.LTaggedVal:
+		n, children = 1, x.Cells[:1]
+	case lisp.LArray:
+		if len(x.Cells) == 2 {
+			n, children = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells
+		}
+	case lisp.LSortMap:
+		m := x.Map()
+		// Charge the entries before allocating room for them.
+		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
+			return true, lerr
+		}
+		buf := make([]*lisp.LVal, m.Len())
+		if e := m.Entries(buf); e.Type == lisp.LError {
+			return true, nil
+		}
+		for _, entry := range buf {
+			if entry != nil && len(entry.Cells) == 2 {
+				children = append(children, entry.Cells[0], entry.Cells[1])
+			}
+		}
+	default:
+		return true, nil // the encoder stops here
+	}
+	if lerr := w.add(n); lerr != nil {
+		return true, lerr
+	}
+	if len(children) == 0 {
+		return false, nil
+	}
+	if _, cyclic := w.path[x]; cyclic {
+		return true, nil
+	}
+	w.path[x] = struct{}{}
+	defer delete(w.path, x)
+	for _, c := range children {
+		if stop, lerr := w.walk(c, depth+1); stop || lerr != nil {
+			return true, lerr
+		}
+	}
+	return false, nil
 }
 
 // encodeValueCost is the steps encoding one value costs beyond its bytes:
 // about 200 ns a value on a structure that shares one value many times.
 const encodeValueCost = 3
-
-func appendReversed(stack, cells []*lisp.LVal) []*lisp.LVal {
-	for i := len(cells) - 1; i >= 0; i-- {
-		stack = append(stack, cells[i])
-	}
-	return stack
-}
 
 // isLimitError reports whether lerr is a runtime limit: the allocation cap,
 // a step limit or budget, or a cancelled evaluation.

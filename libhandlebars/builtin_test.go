@@ -150,11 +150,12 @@ func TestRenderSteps(t *testing.T) {
 	// Measured against the empty string, as the sum of: the encode walk's
 	// estimate (a step per started KiB), json:dump-bytes (per whole KiB),
 	// the decode pass (1 + a step per started 8 bytes of the string), the
-	// output (per started KiB) and the escape scan (per started 16 bytes).
+	// output (per started KiB), the escape scan (per started 16 bytes) and
+	// the copy (per whole 16 bytes).
 	require.Equal(t, empty+3, call("x"))
-	require.Equal(t, empty+194, call(strings.Repeat("x", 1016)))
-	require.Equal(t, empty+196, call(strings.Repeat("x", 1024)))
-	require.Equal(t, empty+787, call(strings.Repeat("x", 4097)))
+	require.Equal(t, empty+257, call(strings.Repeat("x", 1016)))
+	require.Equal(t, empty+260, call(strings.Repeat("x", 1024)))
+	require.Equal(t, empty+1043, call(strings.Repeat("x", 4097)))
 
 	// Iterations cost steps.
 	each := func(n int) int64 {
@@ -260,4 +261,23 @@ func TestFailedEncodeCharged(t *testing.T) {
 	env.Runtime.SetStepBudget(1000)
 	res, _ := steps(1_000_000)
 	require.Equal(t, lisp.CondStepBudgetExceeded, res.Str)
+}
+
+// TestEncodeWalkStopsWhereEncoderDoes: the charging walk stops at a value
+// that contains itself, as the encoder does, so the encoder's own error is
+// returned, not a budget error from walking the cycle.
+func TestEncodeWalkStopsWhereEncoderDoes(t *testing.T) {
+	env := newEnv(t)
+	self := lisp.QExpr([]*lisp.LVal{lisp.Int(1)})
+	self.Cells = append(self.Cells, self)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("a", self)
+	env.Put(lisp.Symbol("ctx"), ctx)
+	want, _ := eval(t, env, `(json:dump-bytes ctx)`)
+	require.Equal(t, lisp.LError, want.Type)
+	env.Runtime.SetStepBudget(1000)
+	got, _ := eval(t, env, `(handlebars:render "" ctx)`)
+	require.Equal(t, lisp.LError, got.Type)
+	require.NotEqual(t, lisp.CondStepBudgetExceeded, got.Str, got.Cells[0].Str)
+	require.Equal(t, want.Cells[0].Str, strings.TrimPrefix(got.Cells[0].Str, "error while serializing: "))
 }

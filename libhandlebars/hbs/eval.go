@@ -110,6 +110,15 @@ func (r *renderer) at(n ast.Node) {
 //
 // The message, which can hold template text, counts as produced bytes.
 func (r *renderer) errorf(format string, args ...any) {
+	// Bound the formatted arguments before building them (they can hold a
+	// long name from the template); the node dump is then charged as built.
+	n := len(format)
+	for _, a := range args {
+		if s, ok := a.(string); ok {
+			n += len(s)
+		}
+	}
+	r.reserveProduced(n)
 	msg := fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", fmt.Sprintf(format, args...), r.curNode)
 	r.produced(len(msg))
 	panic(&Error{Kind: KindRender, Msg: msg})
@@ -382,6 +391,7 @@ func (r *renderer) evalCtxPathExpression(node *ast.PathExpression) any {
 func (r *renderer) evalDataPathExpression(node *ast.PathExpression) any {
 	frame := r.frame
 	for i := node.Depth; i > 0; i-- {
+		r.step() // each @../ frame climbed
 		if frame.parent == nil {
 			return nil
 		}
@@ -436,6 +446,7 @@ func (r *renderer) evalExpr(node *ast.Expression, direct bool) any {
 		}
 	}
 	if lit, ok := node.LiteralStr(); ok {
+		r.formatted(len(lit)) // a number literal is formatted to look it up
 		cur, ok := r.ancestorCtx(0)
 		if ok {
 			if v, found := r.evalField(cur, lit); found {

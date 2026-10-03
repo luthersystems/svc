@@ -105,6 +105,12 @@ func ParseLimit(input string, maxDepth int) (*ast.Program, error) {
 // first lexer error, where the parser stops too. It also returns the number
 // of tokens scanned, which bounds the size of the AST the parser builds.
 func Depth(input string, maxDepth int) (int, error) {
+	return DepthFunc(input, maxDepth, nil)
+}
+
+// DepthFunc is Depth calling onNumber, if not nil, with each number token's
+// text, so the caller can price the literals the parser will convert.
+func DepthFunc(input string, maxDepth int, onNumber func(string)) (int, error) {
 	type frame struct{ links int }
 	var blocks []frame
 	depth, sexprs, raw := 0, 0, false
@@ -114,6 +120,9 @@ func Depth(input string, maxDepth int) (int, error) {
 	for {
 		tok := l.NextToken()
 		tokens++
+		if onNumber != nil && tok.Kind == lexer.TokenNumber {
+			onNumber(tok.Val)
+		}
 		switch tok.Kind {
 		case lexer.TokenEOF, lexer.TokenError:
 			return tokens, nil

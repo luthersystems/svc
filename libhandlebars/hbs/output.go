@@ -206,6 +206,7 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 				dst = append(dst, ' ')
 			}
 			r.checkProduced(len(dst) + len(k))
+			r.read(len(k))
 			dst = append(dst, k...)
 			dst = append(dst, ':')
 			dst = r.appendV(dst, x[k])
@@ -324,6 +325,10 @@ func (r *renderer) writeString(s string) {
 		return
 	}
 	r.reserve(len(s))
+	// Copying: a step per whole scanUnit bytes. A large output outgrows the
+	// CPU caches and costs about 4 ns a byte to write; a short write is
+	// covered by the step of the node that makes it.
+	r.steps1(int64(len(s) / scanUnit))
 	r.out = append(r.out, s...)
 	r.wrote(len(s))
 }
@@ -337,9 +342,11 @@ func (r *renderer) writeEscaped(s string) {
 	// Escaping only lengthens s: reject a string that cannot fit before
 	// scanning it.
 	r.reserve(len(s))
+	// The scan for the five bytes, and the count below, read s byte by
+	// byte: charge that before scanning.
+	r.scanBytes(len(s))
 	i := strings.IndexAny(s, escapedChars)
 	if i < 0 {
-		r.scanBytes(len(s)) // the scan for the five bytes
 		r.writeString(s)
 		return
 	}
@@ -358,7 +365,7 @@ func (r *renderer) writeEscaped(s string) {
 		}
 	}
 	r.reserve(n)
-	// Escaping is byte-by-byte work over the escaped length.
+	// Writing the escaped text is byte-by-byte work over its length.
 	r.scanBytes(n)
 	before := len(r.out)
 	r.out = appendEscaped(r.out, s, i)

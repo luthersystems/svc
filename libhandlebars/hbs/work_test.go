@@ -75,10 +75,11 @@ func TestHelperCharges(t *testing.T) {
 	// the small case's 1; escaping the output scans it, a step per started
 	// 16 bytes: 62,501, 62,500 more than the small case's 1; and formatting
 	// is charged on the precision, a step per started 8 digits: 125,000,
-	// 124,999 more than the small case's 1.
+	// 124,999 more than the small case's 1; and copying the output, a step
+	// per whole 16 bytes: 62,500.
 	base := steps(t, `{{round-to-nth "1" "2"}}`, `{}`)
-	require.Equal(t, base+1953+62500+124999, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
-	require.Equal(t, base+1953+62500+124999, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
+	require.Equal(t, base+1953+62500+124999+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`))
+	require.Equal(t, base+1953+62500+124999+62500, steps(t, `{{round-to-nth "1" "999999"}}`, `{}`), "deterministic")
 
 	// A string argument costs a step per started 256 bytes read; a
 	// non-string one, a step per started KiB of the string built.
@@ -518,11 +519,7 @@ func TestChargedBeforeAllocating(t *testing.T) {
 		tp := mustParse(t, tc.tpl)
 		got := allocDuring(func() { _, err = tp.Render(tc.ctx, tiny) })
 		requireLimit(t, err, "produces more than 256 bytes")
-		limit := uint64(1 << 20)
-		if name == "partial with long name" {
-			limit = 8 << 20 // the template's own text is in the message
-		}
-		require.Less(t, got, limit, name)
+		require.Less(t, got, uint64(1<<20), name)
 	}
 
 	// Collecting a large object's keys is charged before the keys are.
@@ -544,4 +541,26 @@ func TestChargedBeforeAllocating(t *testing.T) {
 	require.ErrorAs(t, err, &he)
 	require.Equal(t, hbs.KindRender, he.Kind)
 	require.Greater(t, m.used, int64(900))
+}
+
+// TestDateErrorExact: the date helpers bound their error text at its exact
+// length, so a message that fits after earlier output is produced as the
+// reference produces it.
+func TestDateErrorExact(t *testing.T) {
+	ctx := map[string]any{"a": repeatAny(1.0, 100), "s": strings.Repeat("x", 1<<20), "d": strings.Repeat("q", 4<<20)}
+	_, err := mustParse(t, `{{#each a}}{{and k=(to-str ../s)}}{{/each}}{{date-beautify d}}`).Render(ctx, hbs.Options{})
+	var he *hbs.Error
+	require.ErrorAs(t, err, &he)
+	require.Equal(t, hbs.KindRender, he.Kind, he.Msg[:min(80, len(he.Msg))])
+	_, perr := time.Parse("2006-01-02", strings.Repeat("q", 4<<20))
+	require.Equal(t, "date-beautify: expecting date format YYYY-MM-DD, got: "+perr.Error(), he.Msg)
+}
+
+// TestEscapeRejectionCharged: a string that fits unescaped but not escaped
+// is refused after its scan is charged.
+func TestEscapeRejectionCharged(t *testing.T) {
+	m := &countMeter{}
+	_, err := mustParse(t, `{{s}}`).Render(mustCtx(t, `{"s": "`+strings.Repeat("&", 600_000)+`"}`), hbs.Options{Meter: m, Limits: hbs.Limits{MaxOutputBytes: 1 << 20}})
+	requireLimit(t, err, "rendered output exceeds")
+	require.GreaterOrEqual(t, m.used, int64(600_000/16))
 }

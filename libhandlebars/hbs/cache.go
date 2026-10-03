@@ -36,8 +36,7 @@ type cacheEntry struct {
 	err    *Error
 	key    cacheKey
 	cost   int
-	srcLen int
-	tokens int // what the miss charged, so a hit charges the same
+	charge int64 // what the miss charged, so a hit charges the same
 }
 
 // parseCache is a byte-bounded LRU of parse verdicts.
@@ -85,18 +84,18 @@ func (c *parseCache) parse(src string, lim Limits, m Meter) (*Program, error) {
 	key := cacheKey{sum: sha256.Sum256([]byte(src)), maxBytes: maxBytes, maxDepth: maxDepth}
 
 	if e, ok := c.get(key); ok {
-		if err := charge(m, ParseCost(e.srcLen, e.tokens)); err != nil {
+		if err := charge(m, e.charge); err != nil {
 			return nil, err
 		}
 		return e.result()
 	}
 
-	prog, tokens, err := parseMetered(src, lim, m)
+	prog, cost, err := parseMetered(src, lim, m)
 	var he *Error
 	if err != nil && !errors.As(err, &he) {
 		return nil, err // a Meter error: nothing to cache
 	}
-	e := &cacheEntry{key: key, prog: prog, srcLen: len(src), tokens: tokens}
+	e := &cacheEntry{key: key, prog: prog, charge: cost}
 	if err == nil {
 		e.cost = len(src) + astBytesPerToken*prog.tokens + cacheEntryOverhead
 	} else {
