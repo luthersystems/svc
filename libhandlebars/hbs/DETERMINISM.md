@@ -138,6 +138,8 @@ The ELPS entry points add:
 | Parsing a template (`must-parse`, `render`), cache hit or miss alike | `hbs.ParseCachedMetered`, `hbs.ParseCost` | 6 per lexer token + 1 per started 16 bytes (SHA-256 and plain text) + `floatCost` of each number literal, charged after the depth prescan counts the tokens and before the recursive parse; a cache hit charges what its miss did |
 | Encoding an ELPS context to JSON | `chargeEncode`, then `json:dump-bytes` | before encoding, a walk in the encoder's order: 3 per value + 1 per started KiB of estimated JSON, stopping where the encoder fails (invalid value, value depth limit, a value that contains itself, `Runtime.MaxAlloc`), so the encoder then reports its own error; then `json:dump-bytes`'s own 1 per whole KiB written |
 | Decoding the context | `hbs.FromJSONMetered` | before decoding: 2 per `{` or `[`, 1 per `,`, `:`, `null`, `true`, `false`, 1 + ceil(len/8) per string, 8 + `floatCost` per number (each distinct literal parsed once); invalid or non-object JSON 1 per started 8 bytes |
+| Retyping ELPS ints (`render-fixed` only) | `intTyper` | 1 per value walked |
+| Converting a Go context (Go API) | `hbs.FromGo` | 4 per value, 1 per struct field and per map entry, hash(len) per map key and exported field name; nesting past MaxDepth and steps past MaxSteps are limit errors |
 
 `TestBuiltinCostCeiling` (`libhandlebars/ceiling_test.go`) runs these end to
 end through `handlebars:must-parse` and `handlebars:render` on tag-dense 1
@@ -152,21 +154,40 @@ the per-site ceiling with pinned step counts. A new operation on strings or
 a new library call must be charged through these primitives and get a row
 here and a case in `ceilingCases`.
 
-## Go API: contexts go through JSON
-
-`libhandlebars.Render(tpl, ctx)` converts a Go `ctx` with `json.Marshal` and
-the engine's decoder, as `handlebars:render` always converted ELPS values.
-Under raymond a Go context kept its Go types, so this is a difference for Go
-callers only (no ELPS-visible change): every number becomes a `float64`
-(`{{#if n includeZero=true}}` with `map[string]any{"n": 0}` rendered `yes`
-and now renders `no`; `{{to-str n}}` prints `0.000000`), and structs follow
-their JSON encoding instead of raymond's field-name rules. The conversion is
-one function, `libhandlebars.Render`, so a native conversion can replace it
-without touching the engine. `TestRenderGoValueTypes` pins the behaviour.
-
 `TestCostModelSites` (in `costguard_test.go`) times each site above with 1 KiB
 and 256 KiB strings and fails if the time per step grows more than about 3x
 (an uncharged site grows by about 256x), and `TestCostModelGuard` runs the
 grammar generator with short and long vocabularies as a coarser net. A new
 operation on strings must be charged through these primitives and get a row
 here and a case in `costSites`.
+
+## Contexts: JSON, ELPS and Go values
+
+A context's number types are visible to templates: compat mode treats only an
+int literal 0 as zero for `includeZero`, and `to-str` prints a float64 with
+`%f` (`3.000000`) but an int with `%d`. Each entry point fixes how numbers
+arrive, so the output is a function of the value and the entry point:
+
+- `handlebars:render` (ModeCompat) serializes the ELPS value with libjson and
+  decodes it with `FromJSON`, as svc always did: every number is a float64,
+  byte for byte what raymond rendered.
+- `handlebars:render-fixed` (ModeFixed) takes the same route, then walks the
+  ELPS value alongside the decoded one and puts back each ELPS int as a Go
+  int (a step per value). JSON cannot tell 3 from 3.0 (libjson writes both
+  as `3`), so the ELPS value is the only record of which numbers were ints.
+  The walk only retypes numbers: structure, errors and limits are the JSON
+  route's. A bytes (JSON text) context has no ELPS ints and stays float64.
+- `libhandlebars.Render` / `RenderWith` (Go API, ModeCompat) convert a Go
+  value with `FromGo` by default: Go's int, uint and float types keep their
+  type and structs keep raymond's lookup rules, so a Go caller renders what
+  raymond rendered for the same value (`TestGoContextDifferential` compares
+  both against the frozen raymond with Go-typed contexts). `FromGo` charges
+  `goValueCost` steps a value and hashing for each key and field name,
+  bounds nesting by MaxDepth (a limit error, never deeper recursion),
+  converts a shared or cyclic pointer, map or slice once, and stops at
+  MaxSteps. Where raymond called Go code (methods, funcs) or panicked
+  printing (channels, complex), the lookup that reaches the value fails the
+  render with an error naming it. `WithJSONContext()`, or
+  `SVC_HANDLEBARS_JSON_GO_CONTEXT=true` read once per process (exactly
+  `true`; any other value is logged and ignored), selects the JSON route
+  instead.

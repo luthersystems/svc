@@ -289,9 +289,10 @@ func stripBrackets(part string) string {
 // evalField looks name up in ctx. ok is false when there is no such field
 // (raymond's invalid reflect.Value); a field holding null is (nil, true).
 func (r *renderer) evalField(ctx any, name string) (any, bool) {
-	switch c := ctx.(type) {
+	switch c := unlist(ctx).(type) {
 	case map[string]any:
-		return r.lookup(c, name)
+		v, ok := r.lookup(c, name)
+		return r.goChecked(v), ok
 	case []any:
 		r.scanBytes(len(name))
 		i, err := strconv.Atoi(name)
@@ -299,8 +300,10 @@ func (r *renderer) evalField(ctx any, name string) (any, bool) {
 			if i < 0 {
 				r.errorf("array index out of range: %d", i)
 			}
-			return c[i], true
+			return r.goChecked(c[i]), true
 		}
+	case *goStruct:
+		return r.structField(c, name)
 	case bpContext:
 		if r.compare(c.name, name) {
 			return c.val, true
@@ -330,7 +333,7 @@ func (r *renderer) evalPath(ctx any, parts []string) (any, bool, bool) {
 // its elements and yields a []any, which is nil (but typed) when nothing
 // resolved. Each element costs a step, even for an empty path.
 func (r *renderer) evalCtxPath(ctx any, parts []string) (any, bool) {
-	if arr, ok := ctx.([]any); ok {
+	if arr, ok := unlist(ctx).([]any); ok {
 		var results []any
 		for _, e := range arr {
 			r.step()
@@ -541,7 +544,7 @@ func (r *renderer) visitBlock(node *ast.BlockStatement) {
 		}
 	} else if isTrue(v) {
 		if node.Program != nil {
-			if arr, ok := v.([]any); ok {
+			if arr, ok := unlist(v).([]any); ok {
 				frame := &dataFrame{parent: r.frame, iter: true}
 				boxKey := len(node.Program.BlockParams) > 1
 				for i, e := range arr {

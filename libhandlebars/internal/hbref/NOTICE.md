@@ -13,6 +13,9 @@ before the native engine:
   carry the stage that failed and the exact message the ELPS builtin showed.
   A runtime-error or non-error panic, which raymond re-panics and ELPS
   reports as `internal-panic`, is recovered and reported as stage `panic`.
+- `gocontext.go` (added for the Go-context tests) is svc's Go API,
+  `libhandlebars.Render`, as it stood: `raymond.Parse`, `addHelpers`, then
+  `Exec` with the Go value itself.
 
 **Do not edit this package.** Its behaviour, bugs included, is the
 specification the new engine's compat mode is tested against. The golden

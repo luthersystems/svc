@@ -94,6 +94,14 @@ func TestRenderModes(t *testing.T) {
 		{`{{round-to-nth "1.999" "2"}}`, "(sorted-map)", "2.00", "2.00"},
 		{"{{plus a=0.1 b=0.2 c=0.3}}", "(sorted-map)", "0.6000000000000001", "0.6000000000000001"},
 		{"{{to-int (div 1 0)}}", "(sorted-map)", "-9223372036854775808", "-9223372036854775808"},
+		// render-fixed keeps ELPS ints as ints (JSON makes them float64s):
+		// exact above 2^53, everywhere in the context.
+		{"{{n}} {{to-str n}}", `(sorted-map "n" 9007199254740993)`, "9007199254740992 9007199254740992.000000", "9007199254740993 9007199254740993"},
+		{"{{#each a}}{{this}},{{/each}}{{m.k}} {{m.[1]}} {{q}} {{v.[0]}}",
+			`(sorted-map "a" (list 9007199254740993 1.5 3.0 "s") "m" (sorted-map 'k 9007199254740995 1 9007199254740997) "q" (quote 9007199254740999) "v" (vector 9007199254741001))`,
+			"9007199254740992,1.5,3,s,9007199254740996 9007199254740996 9007199254741000 9007199254741000",
+			"9007199254740993,1.5,3,s,9007199254740995 9007199254740997 9007199254740999 9007199254741001"},
+		{"{{#if z includeZero=true}}y{{else}}n{{/if}} {{to-str f}}", `(sorted-map "z" 0 "f" 2.0)`, "n 2.000000", "y 2"},
 	} {
 		v, _ := eval(t, env, renderCall("render", tc.tpl, tc.ctx))
 		require.Equal(t, lisp.LString, v.Type, "%s: %v", tc.tpl, v)

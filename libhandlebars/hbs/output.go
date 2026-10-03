@@ -161,7 +161,7 @@ func (r *renderer) sortKeys(keys []string) {
 // and objects count against MaxDepth, each element costs a step, and the
 // produced-bytes bound is checked as it grows.
 func (r *renderer) appendV(dst []byte, v any) []byte {
-	switch x := v.(type) {
+	switch x := unlist(v).(type) {
 	case nil:
 		return append(dst, "<nil>"...)
 	case string:
@@ -214,8 +214,28 @@ func (r *renderer) appendV(dst []byte, v any) []byte {
 		}
 		r.leave()
 		return append(dst, ']')
+	case *goStruct:
+		// fmt's {v1 v2 ...}, over the exported fields.
+		r.enter()
+		dst = append(dst, '{')
+		for i, f := range x.fields {
+			r.step()
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = r.appendV(dst, f.val)
+			r.checkProduced(len(dst))
+		}
+		r.leave()
+		return append(dst, '}')
+	case *goOpaque:
+		r.checkProduced(len(dst) + len(x.v))
+		r.read(len(x.v))
+		return append(dst, x.v...)
+	case *goUnsupported:
+		return append(dst, x.typ...)
 	default:
-		// No other dynamic type reaches a helper; fmt has no recursion here.
+		// Booleans and numbers only: fmt has no recursion here.
 		return fmt.Appendf(dst, "%v", v)
 	}
 }
@@ -249,7 +269,7 @@ func (r *renderer) str(v any) string {
 		r.read(len(s))
 		return s
 	}
-	a, ok := v.([]any)
+	a, ok := unlist(v).([]any)
 	if !ok {
 		r.scratch = appendStr(r.scratch[:0], v)
 		r.formatted(len(r.scratch))
@@ -273,7 +293,7 @@ func (r *renderer) measureLeaves(a []any, n int) int {
 	r.enter()
 	for _, e := range a {
 		r.step()
-		switch x := e.(type) {
+		switch x := unlist(e).(type) {
 		case string:
 			r.read(len(x))
 			n += len(x)
@@ -291,7 +311,7 @@ func (r *renderer) measureLeaves(a []any, n int) int {
 // they are added.
 func (r *renderer) copyLeaves(b *strings.Builder, a []any) {
 	for _, e := range a {
-		switch x := e.(type) {
+		switch x := unlist(e).(type) {
 		case string:
 			b.WriteString(x)
 		case []any:
@@ -405,7 +425,7 @@ func appendEscaped(dst []byte, s string, i int) []byte {
 
 // writeValue appends raymond's string form of v, escaped when esc is set.
 func (r *renderer) writeValue(v any, esc bool) {
-	switch x := v.(type) {
+	switch x := unlist(v).(type) {
 	case nil:
 		return
 	case string:

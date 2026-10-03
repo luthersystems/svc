@@ -3,7 +3,6 @@
 package hbs
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
@@ -169,7 +168,7 @@ func (r *renderer) convertArg(name string, i int, kind argKind, p any) any {
 			return a
 		}
 	}
-	r.errorf("Helper %s called with argument %d with type %s but it should be %s", name, i, fmt.Sprintf("%T", p), kind.typeName())
+	r.errorf("Helper %s called with argument %d with type %s but it should be %s", name, i, typeName(p), kind.typeName())
 	return nil
 }
 
@@ -281,7 +280,7 @@ func helperEach(c *hcall) any {
 		return nil
 	}
 	r := c.r
-	switch x := ctx.(type) {
+	switch x := unlist(ctx).(type) {
 	case []any:
 		frame := &dataFrame{parent: r.frame, iter: true}
 		boxKey := c.wantsKey()
@@ -309,6 +308,14 @@ func helperEach(c *hcall) any {
 			frame.setIter(len(keys), i, k)
 			v, _ := r.lookup(x, k)
 			c.evalBlock(v, frame, k)
+		}
+	case *goStruct:
+		// Exported fields in declaration order, @key the field name.
+		frame := &dataFrame{parent: r.frame, iter: true}
+		for i, f := range x.fields {
+			r.step()
+			frame.setIter(len(x.fields), i, f.name)
+			c.evalBlock(f.val, frame, f.name)
 		}
 	default:
 		// raymond iterates arrays, maps and structs only.

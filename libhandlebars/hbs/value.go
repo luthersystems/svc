@@ -13,7 +13,7 @@ import (
 // Value is a template context value: the Go value json.Unmarshal produces
 // for a JSON document, plus the numbers a template literal produces.
 //
-// A Value is one of these dynamic types, and nothing else:
+// A Value built by FromJSON is one of these dynamic types, and nothing else:
 //
 //	nil                    JSON null, or a missing value
 //	bool                   JSON true / false, template literals true / false
@@ -25,7 +25,13 @@ import (
 //
 // The int / float64 split is part of the language that raymond rendered, and
 // helpers observe it: {{to-str 3}} renders "3" but {{to-str n}} with n=3 from
-// the context renders "3.000000". A context therefore never holds an int.
+// the context renders "3.000000". A context from JSON therefore never holds
+// an int.
+//
+// FromGo builds a context from a Go value instead, as raymond saw Go values:
+// it can also hold Go's other int, uint and float types (an int stays an
+// int), and opaque values for Go structs and the few Go types raymond could
+// only print as "UNPRINTABLE". See FromGo.
 // Objects are iterated in sorted key order; the engine never depends on Go map
 // order.
 //
@@ -197,7 +203,7 @@ func convertNumbers(v any, nums map[string]float64) any {
 // isTrue reports raymond's truthiness (text/template's isTrue): nil, false,
 // zero numbers and empty strings, arrays and maps are false.
 func isTrue(v any) bool {
-	switch x := v.(type) {
+	switch x := unlist(v).(type) {
 	case nil:
 		return false
 	case bool:
@@ -232,8 +238,10 @@ func isTrue(v any) bool {
 		return x != 0
 	case float32:
 		return x != 0
+	case *goOpaque:
+		return x.truth
 	default:
-		return true
+		return true // a struct, or a Go func (raymond: non-nil)
 	}
 }
 
@@ -251,7 +259,7 @@ func str(v any) string {
 // appendStr appends raymond's string form of v: arrays concatenate their
 // elements, objects print UNPRINTABLE, floats use FormatFloat('f', -1).
 func appendStr(dst []byte, v any) []byte {
-	switch x := v.(type) {
+	switch x := unlist(v).(type) {
 	case nil:
 		return dst
 	case string:

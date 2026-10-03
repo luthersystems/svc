@@ -1,7 +1,6 @@
 package libhandlebars
 
 import (
-	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -49,29 +48,6 @@ func (b *documentedBuiltin) Docstring() string { return b.docs }
 // LoadPackage loads the package.
 func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 	return elpsutil.PackageLoader(&handlebarsPackage{})(env)
-}
-
-// Template is a parsed template.
-type Template = *hbs.Program
-
-// Parse parses a template with hbs.DefaultLimits().
-func Parse(template string) (Template, error) {
-	return hbs.ParseCached(template, hbs.DefaultLimits())
-}
-
-// Render renders tpl in hbs.ModeCompat, as handlebars:render does. ctx is
-// converted through JSON (json.Marshal, then hbs.FromJSON), so it must
-// marshal to a JSON object or null.
-func Render(tpl Template, ctx interface{}) (string, error) {
-	b, err := json.Marshal(ctx)
-	if err != nil {
-		return "", err
-	}
-	v, err := hbs.FromJSON(b)
-	if err != nil {
-		return "", err
-	}
-	return tpl.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: hbs.DefaultLimits()})
 }
 
 var builtins = []lisp.LBuiltinDef{
@@ -197,6 +173,16 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 		return env.Errorf("error while unmarshaling: %v", err)
 	}
 
+	if mode == hbs.ModeFixed && context.Type != lisp.LBytes {
+		// render-fixed keeps ELPS ints as ints, which JSON cannot tell
+		// from floats.
+		t := &intTyper{m: m}
+		t.walk(context, ctx)
+		if t.flush() != nil {
+			return m.lerr
+		}
+	}
+
 	prog, lerr := parse(env, template.Str)
 	if lerr != nil {
 		return lerr
@@ -210,6 +196,103 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 		return env.ErrorConditionf(condRender, "error while rendering template: %v", err)
 	}
 	return lisp.String(out)
+}
+
+// intTyper restores the ELPS ints in a context that went through JSON:
+// walking the ELPS value alongside its decoded form, it replaces each
+// float64 that came from an LInt with the int itself. The JSON route has
+// already validated and bounded the value (depth, cycles, size), so the walk
+// follows the decoded structure and stops wherever the two differ. It
+// costs a step per value.
+type intTyper struct {
+	m       hbs.Meter
+	pending int64
+	err     error
+}
+
+func (t *intTyper) step() {
+	t.pending++
+	if t.pending >= 64 {
+		_ = t.flush()
+	}
+}
+
+func (t *intTyper) flush() error {
+	if t.err == nil && t.pending > 0 {
+		t.err = t.m.Charge(t.pending)
+	}
+	t.pending = 0
+	return t.err
+}
+
+// walk retypes the ints of x within v, its decoded form, and returns v.
+func (t *intTyper) walk(x *lisp.LVal, v hbs.Value) hbs.Value {
+	if t.err != nil || x.IsNil() {
+		return v
+	}
+	t.step()
+	switch x.Type {
+	case lisp.LInt:
+		if _, ok := v.(float64); ok {
+			return x.Int
+		}
+	case lisp.LQuote, lisp.LTaggedVal:
+		return t.walk(x.Cells[0], v)
+	case lisp.LSExpr:
+		t.list(x.Cells, v)
+	case lisp.LArray:
+		if len(x.Cells) == 2 {
+			t.list(x.Cells[1].Cells, v)
+		}
+	case lisp.LSortMap:
+		obj, ok := v.(map[string]any)
+		if !ok {
+			return v
+		}
+		ents := x.MapEntries()
+		if ents.Type == lisp.LError {
+			return v
+		}
+		// A JSON member name two keys share (a string and a symbol) holds
+		// one of them; leave it as JSON decoded it.
+		names := make(map[string]int, len(ents.Cells))
+		for _, e := range ents.Cells {
+			if k, ok := memberName(e.Cells[0]); ok {
+				names[k]++
+			}
+		}
+		for _, e := range ents.Cells {
+			if k, ok := memberName(e.Cells[0]); ok && names[k] == 1 {
+				if ev, ok := obj[k]; ok {
+					obj[k] = t.walk(e.Cells[1], ev)
+				}
+			}
+		}
+	default:
+	}
+	return v
+}
+
+func (t *intTyper) list(cells []*lisp.LVal, v hbs.Value) {
+	arr, ok := v.([]any)
+	if !ok || len(arr) != len(cells) {
+		return
+	}
+	for i, c := range cells {
+		arr[i] = t.walk(c, arr[i])
+	}
+}
+
+// memberName is the JSON member name libjson writes for a map key.
+func memberName(k *lisp.LVal) (string, bool) {
+	switch k.Type {
+	case lisp.LString, lisp.LSymbol:
+		return k.Str, true
+	case lisp.LInt:
+		return strconv.Itoa(k.Int), true
+	default:
+		return "", false
+	}
 }
 
 // dumpContext serializes an ELPS render context to JSON as json:dump-bytes
