@@ -2,3 +2,7 @@
 build/
 .tmp/
 tasks/
+
+# Go binaries built in a package directory (go build ./cmd/x)
+/libhandlebars/hbdiff
+/libhandlebars/hbshape
