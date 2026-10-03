@@ -4,6 +4,7 @@ package hbs
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -99,4 +100,21 @@ func TestParseCachedConcurrent(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// TestCacheWeighsAST: entries are weighed by their AST, not their source,
+// so tag-dense templates cannot pin many times the cache bound.
+func TestCacheWeighsAST(t *testing.T) {
+	c := newParseCache(cacheMaxBytes)
+	unit := "<p>Dear {{name}}, your balance is {{prettyp-num-en bal}} as of {{date-beautify d}}.</p>\n"
+	for i := range 7 {
+		src := strconv.Itoa(i) + strings.Repeat(unit, (1<<20-16)/len(unit))
+		p, err := c.parse(src, DefaultLimits())
+		require.NoError(t, err)
+		require.Greater(t, p.tokens, 100_000)
+	}
+	n, bytes := c.stats()
+	require.LessOrEqual(t, bytes, cacheMaxBytes)
+	require.Less(t, n, 7, "the bound must evict tag-dense templates")
+	t.Logf("%d of 7 dense 1 MiB templates cached, weight %d", n, bytes)
 }

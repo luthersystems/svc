@@ -8,13 +8,17 @@ import (
 	"sync"
 )
 
-// Parse cache bounds. A cached entry is charged its source length plus
-// cacheEntryOverhead bytes; an entry whose source is over
-// cacheMaxEntryBytes is never cached.
+// Parse cache bounds, in bytes of memory the entries retain. A program is
+// weighed as its source length plus astBytesPerToken for each lexer token
+// (the AST's size: plain text retains almost nothing beyond the source,
+// tag-dense templates up to about 91 bytes per token, measured on amd64),
+// plus cacheEntryOverhead; an error verdict as its message plus the
+// overhead. A template over cacheMaxEntryBytes is never cached.
 const (
-	cacheMaxBytes      = 8 << 20
+	cacheMaxBytes      = 64 << 20
 	cacheMaxEntryBytes = 1 << 20
 	cacheEntryOverhead = 256
+	astBytesPerToken   = 96
 )
 
 // cacheKey identifies a parse: the source's SHA-256 and the limits Parse
@@ -52,8 +56,8 @@ func newParseCache(maxBytes int) *parseCache {
 // errors alike, keyed by the SHA-256 of src and the effective limits. It
 // returns exactly what Parse returns for the same arguments: a Program is
 // immutable, so sharing one is safe, and each call gets its own copy of a
-// cached *Error. The cache holds at most 8 MiB of template source and
-// does not keep templates over 1 MiB.
+// cached *Error. The cache retains about 64 MiB at most, weighing each
+// program by its AST, and does not keep templates over 1 MiB.
 //
 // Callers that meter work must charge for a parse on a hit as on a miss,
 // so the cache cannot change what a transaction costs.
@@ -74,8 +78,10 @@ func (c *parseCache) parse(src string, lim Limits) (*Program, error) {
 	}
 
 	prog, err := Parse(src, lim)
-	e := &cacheEntry{key: key, prog: prog, cost: len(src) + cacheEntryOverhead}
-	if err != nil {
+	e := &cacheEntry{key: key, prog: prog}
+	if err == nil {
+		e.cost = len(src) + astBytesPerToken*prog.tokens + cacheEntryOverhead
+	} else {
 		herr, ok := err.(*Error) //nolint:errorlint // Parse returns *Error unwrapped
 		if !ok {
 			return nil, err

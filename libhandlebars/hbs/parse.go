@@ -16,6 +16,7 @@ import (
 type Program struct {
 	ast    *ast.Program
 	srcLen int
+	tokens int // lexer tokens: the parse cache's weight for the AST
 }
 
 // SourceLen returns the length in bytes of the template source.
@@ -61,7 +62,8 @@ func Parse(src string, lim Limits) (*Program, error) {
 		return nil, errorf(KindLimit, "template is %d bytes, limit is %d", len(src), maxBytes)
 	}
 
-	if err := parser.Depth(src, maxDepth); err != nil {
+	tokens, err := parser.Depth(src, maxDepth)
+	if err != nil {
 		return nil, toError(err)
 	}
 
@@ -70,7 +72,7 @@ func Parse(src string, lim Limits) (*Program, error) {
 		return nil, toError(err)
 	}
 
-	return &Program{ast: prog, srcLen: len(src)}, nil
+	return &Program{ast: prog, srcLen: len(src), tokens: tokens}, nil
 }
 
 // toError classifies a parser error.
