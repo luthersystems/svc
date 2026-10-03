@@ -612,6 +612,10 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 				break
 			}
 			z.steps += logn * kw.cmp(k, depth+1)
+			if kw.visits > kw.limit {
+				z.steps = max(z.steps, z.limit)
+				break
+			}
 			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
 		if nans > 1 {
@@ -647,7 +651,7 @@ type keyWalk struct {
 	limit    int64 // stop counting past it
 	maxDepth int
 	deep     bool  // a key goes past maxDepth
-	visits   int64 // values nan has visited, all keys together
+	visits   int64 // values nan and cmp have visited, all keys together
 }
 
 // past reports whether depth is past maxDepth, recording it.
@@ -664,6 +668,9 @@ func (kw *keyWalk) past(depth int) bool {
 // (each a reflection call, a quarter step for a scalar), an interface or
 // float by its slower path.
 func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
+	if kw.visits++; kw.visits > kw.limit {
+		return 1
+	}
 	if kw.past(depth) {
 		return 1
 	}
@@ -684,13 +691,13 @@ func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
 			return 1 + int64(k.Len())*kw.cmp(reflect.Zero(k.Type().Elem()), depth+1)/4
 		}
 		n := int64(1)
-		for i := 0; i < k.Len() && n <= kw.limit; i++ {
+		for i := 0; i < k.Len() && n <= kw.limit && kw.visits <= kw.limit; i++ {
 			n += kw.cmp(k.Index(i), depth+1)
 		}
 		return n
 	case reflect.Struct:
 		n := int64(1)
-		for i := 0; i < k.NumField() && n <= kw.limit; i++ {
+		for i := 0; i < k.NumField() && n <= kw.limit && kw.visits <= kw.limit; i++ {
 			n += kw.cmp(k.Field(i), depth+1)
 		}
 		return n
@@ -703,8 +710,8 @@ func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
 // false): a NaN, or an array, struct or interface holding one. Unlike
 // Value.Equal, it stops past maxDepth.
 //
-// Its visits are uncharged (cmp charges the same values), but bounded:
-// past the limit it stops, and over reports it.
+// Its visits are uncharged (cmp charges the same values), but bounded
+// with cmp's: past the limit both stop, and the caller reports it.
 func (kw *keyWalk) nan(k reflect.Value, depth int) bool {
 	if kw.visits++; kw.visits > kw.limit || kw.past(depth) {
 		return false

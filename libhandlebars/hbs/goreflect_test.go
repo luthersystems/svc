@@ -182,3 +182,34 @@ func TestMapKeyWalksBounded(t *testing.T) {
 	require.Equal(t, int64(1001), bounded.visits, "stops past the limit")
 	require.Less(t, bounded.cmp(reflect.ValueOf(dag), 0), int64(2000), "and cmp near it")
 }
+
+// TestKeyWalkCmpShared: cmp shares nan's visit budget across a whole key,
+// so a key whose every level holds a large comparable value (each level's
+// cmp under the limit on its own) stops near the limit instead of walking
+// depth times it.
+func TestKeyWalkCmpShared(t *testing.T) {
+	ints := make([]reflect.StructField, 64)
+	for i := range ints {
+		ints[i] = reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int]()}
+	}
+	leaf := reflect.New(reflect.StructOf(ints)).Elem().Interface()
+	var u [64]any
+	for i := range u {
+		u[i] = leaf
+	}
+	// L_0 = struct{U any}; L_d = struct{U any; N L_{d-1}}.
+	lt := reflect.StructOf([]reflect.StructField{{Name: "U", Type: reflect.TypeFor[any]()}})
+	lv := reflect.New(lt).Elem()
+	lv.Field(0).Set(reflect.ValueOf(u))
+	for range 200 {
+		nt := reflect.StructOf([]reflect.StructField{{Name: "U", Type: reflect.TypeFor[any]()}, {Name: "N", Type: lt}})
+		nv := reflect.New(nt).Elem()
+		nv.Field(0).Set(reflect.ValueOf(u))
+		nv.Field(1).Set(lv)
+		lt, lv = nt, nv
+	}
+	kw := &keyWalk{limit: 10_000, maxDepth: 1 << 20}
+	kw.cmp(lv, 0)
+	require.Greater(t, kw.visits, kw.limit, "the key is past the budget")
+	require.Less(t, kw.visits, 2*kw.limit, "and the walk stopped near it")
+}

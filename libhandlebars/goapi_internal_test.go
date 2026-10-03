@@ -588,3 +588,42 @@ func TestRawMessageBehindMarshaler(t *testing.T) {
 	require.NoError(t, goJSONCost(bud, reflect.ValueOf(b), 0))
 	require.GreaterOrEqual(t, bud.used, int64(len(out)/32), "base64 charged by its output")
 }
+
+type jsEmbRawPtr struct{ *json.RawMessage }
+
+type jsEmbRawDeep struct{ jsEmbedRaw }
+
+type jsEmbRawOwn struct{ json.RawMessage }
+
+func (jsEmbRawOwn) MarshalJSON() ([]byte, error) { return []byte(`"own"`), nil }
+
+// TestRawMessageEmbedded: a RawMessage's MarshalJSON promoted through
+// embedding (by value, by pointer, two levels down, behind a json.Marshaler
+// field) is charged and checked as a RawMessage, under the outer type's
+// name; a type declaring its own MarshalJSON is not mistaken for one.
+func TestRawMessageEmbedded(t *testing.T) {
+	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
+	for name, v := range map[string]any{
+		"value":           jsEmbedRaw{raw},
+		"pointer":         jsEmbRawPtr{&raw},
+		"outer pointer":   &jsEmbedRaw{raw},
+		"two levels":      jsEmbRawDeep{jsEmbedRaw{raw}},
+		"marshaler field": struct{ R json.Marshaler }{jsEmbedRaw{raw}},
+		"addressable":     []jsEmbedRaw{{raw}},
+	} {
+		_, merr := json.Marshal(v)
+		require.Error(t, merr, name)
+		bud := &goBudget{max: 1 << 40}
+		require.EqualError(t, goJSONCost(bud, reflect.ValueOf(v), 0), merr.Error(), name)
+		require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), name)
+	}
+	own := jsEmbRawOwn{raw}
+	_, err := json.Marshal(own)
+	require.NoError(t, err)
+	require.NoError(t, goJSONCost(&goBudget{max: 1 << 40}, reflect.ValueOf(own), 0), "its own method, not the RawMessage's")
+	_, ok := promotedRawPath(reflect.TypeFor[jsEmbRawOwn]())
+	require.False(t, ok)
+	nilPtr := jsEmbRawPtr{}
+	_, ok = rawMessage(reflect.ValueOf(nilPtr))
+	require.False(t, ok, "a nil embedded pointer is left to encoding/json")
+}

@@ -1038,10 +1038,12 @@ func TestNativeAddressableMarshalerText(t *testing.T) {
 func TestNativeRawMessageCharged(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
 	for name, native := range map[string]any{
-		"raw":             raw,
-		"pointer":         &raw,
-		"marshaler field": struct{ R json.Marshaler }{raw},
-		"raw field":       struct{ R json.RawMessage }{raw},
+		"raw":              raw,
+		"pointer":          &raw,
+		"marshaler field":  struct{ R json.Marshaler }{raw},
+		"raw field":        struct{ R json.RawMessage }{raw},
+		"embedded":         struct{ json.RawMessage }{raw},
+		"embedded pointer": struct{ *json.RawMessage }{&raw},
 	} {
 		_, merr := json.Marshal(native)
 		require.Error(t, merr, name)
