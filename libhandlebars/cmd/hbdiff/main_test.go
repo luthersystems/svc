@@ -223,7 +223,7 @@ func TestBuiltInAllowlist(t *testing.T) {
 func TestRefFatalSkipped(t *testing.T) {
 	f := newFixture(t)
 	tplFile := filepath.Join(f.root, "deep.hbs")
-	writeFile(t, tplFile, secret+strings.Repeat("{{#if a}}", 300)+strings.Repeat("{{/if}}", 300))
+	writeFile(t, tplFile, secret+strings.Repeat("{{#if a}}", 1100)+strings.Repeat("{{/if}}", 1100)) // past hbdiff.maxRefDepth
 	called := 0
 	cand := func(string, []byte) hbdiff.Result {
 		called++
