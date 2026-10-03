@@ -170,12 +170,18 @@ func TestPathWorkCharged(t *testing.T) {
 // TestStrOfArrayBounded: str() of an array checks the produced-bytes bound
 // as it builds, so it stops long before building the whole string.
 func TestStrOfArrayBounded(t *testing.T) {
-	ctx := `{"a": [` + strings.TrimSuffix(strings.Repeat("1e308,", 200_000), ",") + `]}`
+	ctx := mustCtx(t, `{"a": [`+strings.TrimSuffix(strings.Repeat("1e308,", 200_000), ",")+`]}`)
+	p := mustParse(t, `{{#if (eq a "x")}}y{{/if}}`)
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	_, err := mustParse(t, `{{#if (eq a "x")}}y{{/if}}`).Render(mustCtx(t, ctx), hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 1 << 20}})
+	_, err := p.Render(ctx, hbs.Options{Limits: hbs.Limits{MaxOutputBytes: 1 << 20}})
 	runtime.ReadMemStats(&after)
 	requireLimit(t, err, "template evaluation produces more than 8388608 bytes")
-	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20))
+	// The whole string is about 62 MB; building stops near the 8 MiB bound.
+	// Go grows a large slice by about 1.25x, so all the buffers it went
+	// through add up to about 5x what it holds: about 40 MiB here.
+	alloc := after.TotalAlloc - before.TotalAlloc
+	t.Logf("allocated %d bytes", alloc)
+	require.Less(t, alloc, uint64(8*(8<<20)))
 }
