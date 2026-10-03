@@ -4,6 +4,7 @@ package hbs
 
 import (
 	"fmt"
+	"math"
 	"math/bits"
 	"reflect"
 	"strconv"
@@ -602,10 +603,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		it := v.MapRange()
 		for it.Next() && !z.over() {
 			k := it.Key()
-			if !k.Equal(k) { // a NaN, or a key holding one
+			// Both stop at MaxDepth, where z.size reports the key too deep.
+			if holdsNaN(k, depth+1, z.r.maxDepth) {
 				nans++
 			}
-			z.steps += logn * keyCmp(k, z.limit)
+			z.steps += logn * keyCmp(k, z.limit, depth+1, z.r.maxDepth)
 			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
 		if nans > 1 {
@@ -630,8 +632,12 @@ const cmpUnit = 256
 // keyCmp is the steps fmtsort takes comparing k with another key, by k's
 // length: a string by its bytes, an array or struct element by element
 // (each a reflection call, a quarter step for a scalar), an interface or
-// float by its slower path. It stops counting past limit.
-func keyCmp(k reflect.Value, limit int64) int64 {
+// float by its slower path. It stops counting past limit, and below
+// maxDepth.
+func keyCmp(k reflect.Value, limit int64, depth, maxDepth int) int64 {
+	if depth > maxDepth {
+		return 1
+	}
 	switch k.Kind() {
 	case reflect.String:
 		return 1 + int64(k.Len()/cmpUnit)
@@ -641,26 +647,66 @@ func keyCmp(k reflect.Value, limit int64) int64 {
 		if k.IsNil() {
 			return 4
 		}
-		return 4 + keyCmp(k.Elem(), limit)
+		return 4 + keyCmp(k.Elem(), limit, depth+1, maxDepth)
 	case reflect.Array:
 		switch k.Type().Elem().Kind() {
 		case reflect.String, reflect.Interface, reflect.Array, reflect.Struct:
 		default: // elements of one fixed cost, about 5 ns each
-			return 1 + int64(k.Len())*keyCmp(reflect.Zero(k.Type().Elem()), limit)/4
+			return 1 + int64(k.Len())*keyCmp(reflect.Zero(k.Type().Elem()), limit, depth+1, maxDepth)/4
 		}
 		n := int64(1)
 		for i := 0; i < k.Len() && n <= limit; i++ {
-			n += keyCmp(k.Index(i), limit)
+			n += keyCmp(k.Index(i), limit, depth+1, maxDepth)
 		}
 		return n
 	case reflect.Struct:
 		n := int64(1)
 		for i := 0; i < k.NumField() && n <= limit; i++ {
-			n += keyCmp(k.Field(i), limit)
+			n += keyCmp(k.Field(i), limit, depth+1, maxDepth)
 		}
 		return n
 	default:
 		return 1
+	}
+}
+
+// holdsNaN reports whether map key k is unequal to itself (k.Equal(k) is
+// false): a NaN, or an array, struct or interface holding one. Unlike
+// Value.Equal, it stops below maxDepth.
+func holdsNaN(k reflect.Value, depth, maxDepth int) bool {
+	if depth > maxDepth {
+		return false
+	}
+	switch k.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return math.IsNaN(k.Float())
+	case reflect.Complex64, reflect.Complex128:
+		c := k.Complex()
+		return math.IsNaN(real(c)) || math.IsNaN(imag(c))
+	case reflect.Interface:
+		return !k.IsNil() && holdsNaN(k.Elem(), depth+1, maxDepth)
+	case reflect.Array:
+		switch k.Type().Elem().Kind() {
+		case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+			reflect.Interface, reflect.Array, reflect.Struct:
+		default: // no element can hold a NaN
+			return false
+		}
+		for i := range k.Len() {
+			if holdsNaN(k.Index(i), depth+1, maxDepth) {
+				return true
+			}
+		}
+		return false
+	case reflect.Struct:
+		for i := range k.NumField() {
+			if holdsNaN(k.Field(i), depth+1, maxDepth) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 

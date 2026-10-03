@@ -3,6 +3,7 @@
 package hbs
 
 import (
+	"math"
 	"reflect"
 	"strconv"
 	"testing"
@@ -133,4 +134,25 @@ func internalBaselineNs(t *testing.T) float64 {
 		}
 	}
 	return best
+}
+
+type deepKey struct{ I any }
+
+// TestMapKeyWalksBounded: the NaN test and comparison cost of a map key
+// stop at MaxDepth, as the size walk does, instead of following the key
+// all the way down (Value.Equal would).
+func TestMapKeyWalksBounded(t *testing.T) {
+	deep := func(n int, leaf any) reflect.Value {
+		v := leaf
+		for range n {
+			v = deepKey{v}
+		}
+		return reflect.ValueOf(v)
+	}
+	nan := math.NaN()
+	require.True(t, holdsNaN(deep(5, nan), 0, 100))
+	require.False(t, holdsNaN(deep(5, 1.0), 0, 100))
+	require.False(t, holdsNaN(deep(1000, nan), 0, 100), "past MaxDepth: not followed")
+	require.True(t, holdsNaN(reflect.ValueOf([2]complex128{0, complex(math.Inf(1), nan)}), 0, 100))
+	require.Equal(t, keyCmp(deep(100, 1.0), 1<<40, 0, 100), keyCmp(deep(100_000, 1.0), 1<<40, 0, 100), "past MaxDepth: not followed")
 }

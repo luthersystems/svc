@@ -802,6 +802,28 @@ func pointerChain(n int) any {
 	return x
 }
 
+// segmentDAG returns k segments, each nesting the one before it n levels
+// deeper ([]any wrappers, or pointer-to-interface hops with ptrs): shared,
+// so the value is small, but nested k*n deep for json.Marshal, which has
+// no memo.
+func segmentDAG(k, n int, ptrs bool) any {
+	segs := make([]any, k)
+	var prev any = 1
+	for i := range segs {
+		v := prev
+		for range n {
+			if ptrs {
+				y := v
+				v = &y
+			} else {
+				v = []any{v}
+			}
+		}
+		segs[i], prev = v, v
+	}
+	return segs
+}
+
 // deepRender renders a native and the Go API's JSON mode on a fresh
 // goroutine, as an endorser would, and returns both errors.
 func deepRender(t *testing.T, v any) (*lisp.LVal, error) {
@@ -863,7 +885,7 @@ func TestNativeDepthBound(t *testing.T) {
 // must fail with an error, not abort the process.
 func TestNativeDepthNoCrash(t *testing.T) {
 	if os.Getenv("HBS_DEEP_CHILD") == "1" {
-		for _, v := range []any{nestedSlices(1_000_000), pointerChain(500_000)} {
+		for _, v := range []any{nestedSlices(1_000_000), pointerChain(500_000), segmentDAG(60, 24_000, false), segmentDAG(60, 24_000, true)} {
 			res, gerr := deepRender(t, v)
 			if res.Type != lisp.LError || gerr == nil {
 				t.Fatalf("no error: %v %v", res, gerr)
@@ -880,6 +902,21 @@ func TestNativeDepthNoCrash(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	require.Contains(t, string(out), "DEEP-OK")
+}
+
+// TestNativeDAGDepth: a native whose shared subtrees nest it past the
+// walk's level bound fails that bound, though the walk charges a shared
+// subtree from its memo: json.Marshal would walk it all.
+func TestNativeDAGDepth(t *testing.T) {
+	for _, ptrs := range []bool{false, true} {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("n", lisp.Native(segmentDAG(3, 24_000, ptrs)))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "pointers %v: %v", ptrs, res)
+		require.Contains(t, res.String(), "nests deeper than 50000", "pointers %v", ptrs)
+	}
 }
 
 type zeroFloats struct {

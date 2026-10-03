@@ -75,13 +75,14 @@ func (t *jsonTotals) add(o jsonTotals) {
 type jsonWalker struct {
 	c        jsonCoster
 	path     map[any]int
-	memo     map[jsonMemoKey]jsonTotals
+	memo     map[jsonMemoKey]jsonMemo
 	typed1   map[reflect.Type]bool // struct types whose field list this walk has charged
 	pathType []reflect.Type        // the types of the pointer-like values on the path
 	skipped  []skippedMarshaler    // methods passed over, in encoding/json's order
 	maxDepth int                   // container nesting allowed (0: none, as encoding/json)
 	quoted   bool                  // the value is a ",string" field's: a scalar is written as a JSON string
 	levels   int                   // the walk's recursion depth
+	peak     int                   // the deepest level the walk has reached (or a memo hit stands for)
 }
 
 // hopCost is the steps a pointer or interface hop costs: the walk keeps
@@ -160,6 +161,14 @@ func (w *jsonWalker) firstMarshalerError() error {
 	return nil
 }
 
+// jsonMemo is a subtree's charges and its height in walk levels: a memo
+// hit stands for walking the subtree again, which json.Marshal does (it
+// has no memo), so it must fail the level bound where that walk would.
+type jsonMemo struct {
+	tot    jsonTotals
+	height int
+}
+
 type jsonMemoKey struct {
 	t      reflect.Type
 	p      any
@@ -170,7 +179,7 @@ type jsonMemoKey struct {
 // goJSONCost charges json.Marshal(v) to c. It returns a *jsonFailure where
 // encoding/json fails, and c's errors unchanged.
 func goJSONCost(c jsonCoster, v reflect.Value, maxDepth int) error {
-	w := &jsonWalker{c: c, maxDepth: maxDepth, path: map[any]int{}, memo: map[jsonMemoKey]jsonTotals{}}
+	w := &jsonWalker{c: c, maxDepth: maxDepth, path: map[any]int{}, memo: map[jsonMemoKey]jsonMemo{}}
 	_, err := w.value(v, 0)
 	var fail *jsonFailure
 	if errors.As(err, &fail) && len(w.skipped) > 0 {
@@ -199,6 +208,9 @@ func (w *jsonWalker) value(v reflect.Value, depth int) (jsonTotals, error) {
 // and fails well before encoding/json itself would run out (about 300,000
 // levels of nested slices). Levels past deepLevel are charged
 // deepLevelCost each for the stack growth they cause.
+// errLevels is the walk's failure past maxJSONLevels.
+var errLevels = &jsonFailure{fmt.Sprintf("json: Go value nests deeper than %d", maxJSONLevels)}
+
 const (
 	maxJSONLevels = 50_000
 	deepLevel     = 64
@@ -208,7 +220,7 @@ const (
 // typed is newTypeEncoder(t, allowAddr) applied to v.
 func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, depth int) (jsonTotals, error) {
 	if w.levels >= maxJSONLevels {
-		return jsonTotals{}, &jsonFailure{fmt.Sprintf("json: Go value nests deeper than %d", maxJSONLevels)}
+		return jsonTotals{}, errLevels
 	}
 	// No defer: a deferred call per level makes each stack growth of a
 	// deep walk adjust them all.
@@ -218,6 +230,7 @@ func (w *jsonWalker) typed(v reflect.Value, t reflect.Type, allowAddr bool, dept
 		}
 	}
 	w.levels++
+	w.peak = max(w.peak, w.levels)
 	tot, err := w.encode(v, t, allowAddr, depth)
 	w.levels--
 	return tot, err
@@ -369,19 +382,28 @@ func (w *jsonWalker) pointerLike(v reflect.Value, key any, walk func() (jsonTota
 	if w.maxDepth > 0 {
 		mk.depth = len(w.pathType) + 1
 	}
-	if tot, ok := w.memo[mk]; ok {
-		if err := w.c.charge(tot.values, tot.bytes); err != nil {
+	if m, ok := w.memo[mk]; ok {
+		// Walked from here, the subtree would reach w.levels+m.height.
+		if w.levels+m.height > maxJSONLevels {
+			return jsonTotals{}, errLevels
+		}
+		w.peak = max(w.peak, w.levels+m.height)
+		if err := w.c.charge(m.tot.values, m.tot.bytes); err != nil {
 			return jsonTotals{}, err
 		}
-		return tot, w.c.steps(tot.steps)
+		return m.tot, w.c.steps(m.tot.steps)
 	}
 	w.path[key] = len(w.pathType)
 	w.pathType = append(w.pathType, v.Type())
+	start, peak := w.levels, w.peak
+	w.peak = start
 	tot, err := walk()
+	height := w.peak - start
+	w.peak = max(peak, w.peak)
 	w.pathType = w.pathType[:len(w.pathType)-1]
 	delete(w.path, key)
 	if err == nil {
-		w.memo[mk] = tot
+		w.memo[mk] = jsonMemo{tot, height}
 	}
 	return tot, err
 }
