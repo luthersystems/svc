@@ -13,7 +13,6 @@ import (
 	"math"
 	"math/bits"
 	"reflect"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -128,10 +127,88 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 			if raw, ok := rawMessage(v); ok {
 				return w.rawLeaf(raw, typ)
 			}
+			// A struct embedding a RawMessage (perhaps its MarshalJSON):
+			// encoding/json checks and compacts whatever the method
+			// returns, so the bytes are charged here, method or not.
+			raw, scanned, ok := embeddedRaw(v, 0)
+			charge := scanned
+			if ok {
+				charge += 2 * units64(int64(len(raw)), 16)
+			}
+			if err := w.c.steps(charge); err != nil {
+				return jsonTotals{steps: charge}, err
+			}
+			w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
+			tot, err := w.leaf(1)
+			tot.steps += charge
+			return tot, err
 		}
 		w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 	}
 	return w.leaf(1) // its output is not known here: at least a byte
+}
+
+// holdsRawMessage reports whether a Marshaler v is a RawMessage, or
+// reaches one by embedding: its bytes are then the walk's to charge.
+func holdsRawMessage(v reflect.Value) bool {
+	if _, ok := rawMessage(v); ok {
+		return true
+	}
+	_, _, ok := embeddedRaw(v, 0)
+	return ok
+}
+
+// maxEmbedRaw bounds embeddedRaw's search: a RawMessage embedded deeper
+// is not found (and not charged).
+const maxEmbedRaw = 64
+
+// embeddedRaw finds the RawMessage a value's MarshalJSON would reach by
+// embedding, by the value, not its type (so a type built by
+// reflect.StructOf is treated as a compiled one): through interfaces and
+// pointers to their values, and in a struct through its one embedded field
+// whose type has MarshalJSON (two at the first level are ambiguous: none).
+// It does not ask whether the struct declares its own MarshalJSON: the
+// bytes are charged either way. scanned is the fields it looked at.
+func embeddedRaw(v reflect.Value, depth int) (json.RawMessage, int64, bool) {
+	var scanned int64
+	for ; depth <= maxEmbedRaw; depth++ {
+		for v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return nil, scanned, false
+			}
+			v = v.Elem()
+		}
+		if v.Type() == rawMessageType {
+			return json.RawMessage(v.Bytes()), scanned, true
+		}
+		if v.Kind() != reflect.Struct {
+			return nil, scanned, false
+		}
+		found := -1
+		for i := range v.NumField() {
+			scanned++
+			f := v.Type().Field(i)
+			if !f.Anonymous {
+				continue
+			}
+			ft := f.Type
+			_, has := ft.MethodByName("MarshalJSON")
+			if !has && ft.Kind() != reflect.Pointer && ft.Kind() != reflect.Interface {
+				_, has = reflect.PointerTo(ft).MethodByName("MarshalJSON")
+			}
+			if has {
+				if found >= 0 {
+					return nil, scanned, false
+				}
+				found = i
+			}
+		}
+		if found < 0 {
+			return nil, scanned, false
+		}
+		v = v.Field(found)
+	}
+	return nil, scanned, false
 }
 
 var rawMessageType = reflect.TypeFor[json.RawMessage]()
@@ -157,119 +234,9 @@ func rawMessage(v reflect.Value) (json.RawMessage, bool) {
 		v = v.Elem()
 	}
 	if v.Type() != rawMessageType {
-		return promotedRawMessage(v)
+		return nil, false
 	}
 	return json.RawMessage(v.Bytes()), true
-}
-
-// promotedRawMessage returns the bytes of the RawMessage whose MarshalJSON
-// v's type has by embedding (struct{ json.RawMessage }, at any depth, by
-// value or pointer). A nil pointer on the way is left to encoding/json.
-func promotedRawMessage(v reflect.Value) (json.RawMessage, bool) {
-	path, ok := promotedRawPath(v.Type())
-	if !ok {
-		return nil, false
-	}
-	for _, i := range path {
-		if v.Kind() == reflect.Pointer {
-			if v.IsNil() {
-				return nil, false
-			}
-			v = v.Elem()
-		}
-		v = v.Field(i)
-	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return nil, false
-		}
-		v = v.Elem()
-	}
-	return json.RawMessage(v.Bytes()), true
-}
-
-var promotedRawCache sync.Map // reflect.Type -> rawPath
-
-type rawPath struct {
-	index []int
-	ok    bool
-}
-
-// promotedRawPath reports whether t's MarshalJSON is json.RawMessage's,
-// promoted through embedded fields, and the field index path to it. A
-// promoted method is a compiler-generated wrapper; one t declares itself
-// is not, and is t's own. Where the method's origin is not a single
-// embedded field at the first level, it answers no (the method is then
-// charged as any other Marshaler's).
-func promotedRawPath(t reflect.Type) ([]int, bool) {
-	if p, ok := promotedRawCache.Load(t); ok {
-		rp := p.(rawPath) //nolint:forcetypeassert // only rawPath is stored
-		return rp.index, rp.ok
-	}
-	index, ok := findRawPath(t, 0)
-	promotedRawCache.Store(t, rawPath{index, ok})
-	return index, ok
-}
-
-func findRawPath(t reflect.Type, depth int) ([]int, bool) {
-	if t == rawMessageType || t == reflect.PointerTo(rawMessageType) {
-		return nil, true
-	}
-	if depth > 64 {
-		return nil, false
-	}
-	base, addressable := t, false
-	if t.Kind() == reflect.Pointer {
-		base, addressable = t.Elem(), true
-	}
-	if base.Kind() != reflect.Struct {
-		return nil, false
-	}
-	m, ok := base.MethodByName("MarshalJSON")
-	if !ok && addressable {
-		m, ok = t.MethodByName("MarshalJSON")
-	}
-	if !ok || !generated(m.Func) {
-		return nil, false
-	}
-	found := -1
-	for i := range base.NumField() {
-		f := base.Field(i)
-		if !f.Anonymous {
-			continue
-		}
-		ft := f.Type
-		_, has := ft.MethodByName("MarshalJSON")
-		if !has && addressable && ft.Kind() != reflect.Pointer {
-			_, has = reflect.PointerTo(ft).MethodByName("MarshalJSON")
-		}
-		if has {
-			if found >= 0 {
-				return nil, false // two at this level: not a single origin
-			}
-			found = i
-		}
-	}
-	if found < 0 {
-		return nil, false
-	}
-	sub, ok := findRawPath(base.Field(found).Type, depth+1)
-	if !ok {
-		return nil, false
-	}
-	return append([]int{found}, sub...), true
-}
-
-// generated reports whether fn is a compiler-generated method wrapper
-// (one promoted from an embedded field, or a pointer receiver's wrapper
-// of a value method).
-func generated(fn reflect.Value) bool {
-	f := runtime.FuncForPC(fn.Pointer())
-	if f == nil {
-		return false
-	}
-	file, _ := f.FileLine(f.Entry())
-	return file == "<autogenerated>"
 }
 
 // rawLeaf is a json.RawMessage, whose MarshalJSON costs nothing: its

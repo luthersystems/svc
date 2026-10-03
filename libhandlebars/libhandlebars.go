@@ -418,7 +418,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 		// MarshalJSON costs nothing: encoding/json's check of its bytes is
 		// the walk's to charge.
 		v := reflect.ValueOf(x.Native)
-		if _, raw := rawMessage(v); raw || !v.IsValid() || !v.Type().Implements(marshalerType) {
+		if !v.IsValid() || !v.Type().Implements(marshalerType) || holdsRawMessage(v) {
 			if stop, lerr := w.nativeCost(v); stop || lerr != nil {
 				return nil, true, lerr
 			}
