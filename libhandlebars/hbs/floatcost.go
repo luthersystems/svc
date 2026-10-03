@@ -60,6 +60,9 @@ mantissa:
 			}
 		case c == '.' && !seenDot:
 			seenDot = true
+		case c == '_':
+			// ParseFloat accepts Go's digit separators; they do not
+			// change the value it converts.
 		default:
 			break mantissa
 		}
@@ -76,7 +79,10 @@ mantissa:
 			j++
 		}
 		digits := 0
-		for ; j < len(s) && s[j] >= '0' && s[j] <= '9'; j++ {
+		for ; j < len(s) && (s[j] >= '0' && s[j] <= '9' || s[j] == '_'); j++ {
+			if s[j] == '_' {
+				continue
+			}
 			digits++
 			if digits > 6 {
 				return true // an exponent this long is out of range

@@ -5,6 +5,7 @@ package libhandlebars
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"sync"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs"
@@ -82,7 +83,13 @@ func jsonGoContextSetting(v string, ok bool, log logrus.FieldLogger) bool {
 // only what the template touches is read. Where raymond called Go code (a
 // method or func the template looks up) the render fails instead.
 // WithJSONContext, or SVC_HANDLEBARS_JSON_GO_CONTEXT=true, converts ctx
-// through JSON instead, as handlebars:render does.
+// through JSON instead, as handlebars:render does; that conversion counts
+// against the render's MaxSteps and fails past 1024 levels of nesting.
+//
+// The caller's own Go code is the caller's responsibility, in cost and in
+// determinism: prettyp-num-en's error text prints a value with fmt's %v,
+// which calls its String or Error method, as raymond did, and JSON mode
+// calls MarshalJSON and MarshalText methods.
 func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
 	cfg := renderConfig{json: jsonGoContextDefault()}
 	for _, o := range opts {
@@ -90,16 +97,25 @@ func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, er
 	}
 	lim := hbs.DefaultLimits()
 	var v hbs.Value
-	var err error
 	if cfg.json {
-		var b []byte
-		if b, err = json.Marshal(ctx); err != nil {
-			return "", err
-		}
-		v, err = hbs.FromJSON(b)
+		// The conversion counts against the render's MaxSteps: the
+		// marshal is charged by a walk first, then the decode.
+		bud := &goBudget{max: lim.MaxSteps}
+		deep, err := goJSONCost(bud, reflect.ValueOf(ctx), 0, jsonGoMaxDepth, map[uintptr]bool{})
 		if err != nil {
 			return "", err
 		}
+		if deep != nil {
+			return "", deep
+		}
+		b, err := json.Marshal(ctx)
+		if err != nil {
+			return "", err
+		}
+		if v, err = hbs.FromJSONMetered(b, bud); err != nil {
+			return "", err
+		}
+		lim.MaxSteps = max(1, lim.MaxSteps-bud.used)
 	} else {
 		// The engine reads a Go value lazily, by reflection, as raymond did.
 		v = ctx

@@ -5,6 +5,9 @@ package hbs_test
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +28,9 @@ var ceilingCases = []struct {
 	steps     int64
 }{
 	{"toFloat subnormal", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "4.9406564584124654e-324"}, false, 110411},
+	{"toFloat subnormal underscores", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "5e-3_24"}, false, 107011},
+	{"toFloat mantissa underscores", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "4_9.4_0e-3_25"}, false, 108211},
+	{"escape-uri-component rejected 48 MiB", `{{escape-uri-component x}}`, map[string]any{"x": strings.Repeat("/", 48<<20)}, true, 25657353},
 	{"toFloat long halfway", `{{#each a}}{{gt ../x "1"}}{{/each}}`, map[string]any{"x": "1." + strings.Repeat("0", 1060) + "5e-1"}, false, 332811},
 	{"plus 50 subnormal keys", `{{#each a}}{{plus ` + plusKeys(50) + `}}{{/each}}`, map[string]any{"x": "5e-324"}, false, 5329674},
 	{"times subnormal printed", `{{#each a}}{{times ../den 1}}{{/each}}`, map[string]any{"den": "5e-324"}, false, 114874},
@@ -191,5 +197,65 @@ func TestCostCeiling(t *testing.T) {
 		if best > ceilingNs {
 			t.Errorf("%s: %.0f ns per charged step, want at most %d", name, best, ceilingNs)
 		}
+	}
+}
+
+// TestPhoneColdCeiling: format-phone-gb's first calls in a fresh process
+// stay within the ceiling, since the package warms phonenumbers (whose
+// first call compiles its regular expressions) at init. The measurement
+// runs in a subprocess, so nothing earlier in this one has warmed it.
+func TestPhoneColdCeiling(t *testing.T) {
+	if os.Getenv("HBS_PHONE_COLD") == "1" {
+		// One call: the first one in the process.
+		p, err := hbs.Parse(`{{format-phone-gb p}}`, hbs.DefaultLimits())
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := hbs.FromJSON([]byte(`{"p": ` + strconv.Quote(os.Getenv("HBS_PHONE_INPUT")) + `}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := &stepMeter{}
+		start := time.Now()
+		if _, err := p.Render(v, hbs.Options{Meter: m}); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Printf("COLD %d %d\n", time.Since(start).Nanoseconds(), m.used)
+		return
+	}
+	if raceEnabled || testing.Short() {
+		t.Skip("timing guard: skipped under -race and -short")
+	}
+	for _, in := range []string{"07700900123", "+44 20 7946 0958", "01632 960983 x7", "+1 650 253 0000", "+49 30 1234567", "12", "not a number", "+44 7700 900123"} {
+		phoneCold(t, in)
+	}
+}
+
+func phoneCold(t *testing.T, in string) {
+	t.Helper()
+	best := 0.0
+	for range 3 {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestPhoneColdCeiling$") //nolint:gosec // this test binary
+		cmd.Env = append(os.Environ(), "HBS_PHONE_COLD=1", "HBS_PHONE_INPUT="+in)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		var ns, steps int64
+		for _, l := range strings.Split(string(out), "\n") {
+			if _, err := fmt.Sscanf(l, "COLD %d %d", &ns, &steps); err == nil {
+				break
+			}
+		}
+		if steps == 0 {
+			t.Fatalf("no measurement in %q", out)
+		}
+		if per := float64(ns) / float64(steps); best == 0 || per < best {
+			best = per
+		}
+	}
+	t.Logf("format-phone-gb cold %-20q %.0f ns/step", in, best)
+	if best > ceilingNs {
+		t.Errorf("format-phone-gb cold %q: %.0f ns per charged step, want at most %d", in, best, ceilingNs)
 	}
 }

@@ -16,7 +16,7 @@ import "github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
 // Steps charged to o.Meter (nil: none): 1 per AST node evaluated, 1 per
 // path segment resolved, 1 per context a lookup tries, 1 per array element
 // a path is mapped over, 1 per #each iteration, 1 per helper call, 1 per element select and
-// in-string-array scan, 1 per started KiB of each string a helper reads
+// in-string-array scan, 1 per started 256 bytes of each string a helper reads
 // (its string arguments), and 1 per started KiB of everything produced:
 // output written (captured sections included), strings helpers build, and
 // round-to-nth's precision, charged before it formats. Steps are batched in

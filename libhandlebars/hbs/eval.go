@@ -33,6 +33,7 @@ type renderer struct {
 	curNode ast.Node
 	frame   *dataFrame
 	global  map[globalKey]string
+	planned map[reflect.Type]bool // struct types whose plan this render has charged
 	out     []byte
 	scratch []byte // formatting buffer for str
 	ctx     []any

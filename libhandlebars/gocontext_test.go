@@ -5,6 +5,7 @@ package libhandlebars_test
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -560,6 +561,21 @@ func TestGoContextVDeterministic(t *testing.T) {
 			require.Equal(t, firstSteps, cm.n, "MaxSteps %d run %d", maxSteps, i)
 		}
 	}
+}
+
+// TestGoContextNaNKeys: %v of a map with more than one NaN key fails the
+// same way on every run, as fmt's order among them follows Go's map order.
+func TestGoContextNaNKeys(t *testing.T) {
+	two := map[float64]int{math.NaN(): 1, math.NaN(): 2, 1: 3}
+	one := map[float64]int{math.NaN(): 1, 1: 3}
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en m}}`)
+	require.NoError(t, err)
+	for range 20 {
+		_, rerr := libhandlebars.Render(tpl, map[string]any{"m": two})
+		require.ErrorContains(t, rerr, "more than one NaN key")
+	}
+	_, err = libhandlebars.Render(tpl, map[string]any{"m": one})
+	require.ErrorContains(t, err, "map[NaN:1 1:3]")
 }
 
 type countMeter struct{ n int64 }

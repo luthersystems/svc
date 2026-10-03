@@ -154,7 +154,7 @@ func TestSlowFloatClasses(t *testing.T) {
 		"12345678901234567890123":             true,
 		"0." + strings.Repeat("0", 400) + "1": true, // implicit exponent
 		"0." + strings.Repeat("0", 300) + "1": false,
-		"5e-324x":                             true, "1e-320 ": true, "1.5x": false, "x5e-324": false,
+		"5e-324x":                             true, "5e-3_24": true, "5_0e-3_25": true, "4.940_656_458_412_465_4e-324": true, "1_000.5": false, "0x1p-1074": false, "1e-320 ": true, "1.5x": false, "x5e-324": false,
 	} {
 		require.Equal(t, slow, slowFloat(s), "%.40q", s)
 	}

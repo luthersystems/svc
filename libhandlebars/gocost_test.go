@@ -12,6 +12,7 @@ import (
 
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
+	"github.com/stretchr/testify/require"
 )
 
 type goCostItem struct{ Name string }
@@ -71,6 +72,7 @@ func TestGoContextCostCeiling(t *testing.T) {
 	}{
 		{"%v of a 100k map[any]any", `{{prettyp-num-en m}}`, map[string]any{"m": bigMap}, true},
 		{"chan type with 4 MiB tag", `{{c}}`, map[string]any{"c": reflect.MakeChan(bigTag, 0).Interface()}, true},
+		{"boxing 1 MiB structs", `{{#each xs}}{{#each ../ys}}{{/each}}{{/each}}`, map[string]any{"xs": make([]int, 32), "ys": []struct{ Big [1 << 20]byte }{{}}}, false},
 		{"wide each", `{{#each xs}}{{f4999}}{{/each}}`, map[string]any{"xs": wides}, false},
 		{"deep path", `{{#each xs}}{{` + deepPath.String() + `}}{{/each}}`, map[string]any{"xs": []any{reflect.New(cur).Elem().Interface(), reflect.New(cur).Elem().Interface()}}, false},
 		{"long name", `{{#each xs}}{{` + long + `}}{{/each}}`, map[string]any{"xs": structs[:2000]}, false},
@@ -100,5 +102,37 @@ func TestGoContextCostCeiling(t *testing.T) {
 		if per > 200 {
 			t.Errorf("%s: %.0f ns per step, ceiling 200", c.name, per)
 		}
+	}
+}
+
+// TestGoContextColdPlan: the first use of a struct type in a render is
+// charged for building its plan, before it is built, so a cold build of a
+// 5,000-field type stays within the ceiling.
+func TestGoContextColdPlan(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	worst := 0.0
+	for run := range 3 {
+		fields := make([]reflect.StructField, 5000)
+		for i := range fields {
+			// A tag unique to this run makes a type no plan was built for.
+			fields[i] = reflect.StructField{Name: "F" + strconv.Itoa(i), Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`cold:"` + strconv.Itoa(run) + `"`)}
+		}
+		v := reflect.New(reflect.StructOf(fields)).Elem().Interface()
+		tpl, err := libhandlebars.Parse(`{{x.f4999}}`)
+		require.NoError(t, err)
+		m := &countMeter{}
+		start := time.Now()
+		_, err = tpl.Render(map[string]any{"x": v}, hbs.Options{Meter: m})
+		require.NoError(t, err)
+		per := float64(time.Since(start).Nanoseconds()) / float64(m.n)
+		t.Logf("cold 5000-field plan: %d steps, %.0f ns/step", m.n, per)
+		if run > 0 { // the first run also warms the engine itself
+			worst = max(worst, per)
+		}
+	}
+	if worst > 200 {
+		t.Errorf("cold plan: %.0f ns per step, ceiling 200", worst)
 	}
 }

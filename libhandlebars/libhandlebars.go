@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"math/bits"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -313,8 +314,16 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 	// but its walk costs per value (shared structure writes little and
 	// walks much) and a failed encode charges nothing. Charge the walk
 	// first, value by value, so neither runs uncharged.
-	if lerr := chargeEncode(env, v); lerr != nil {
+	w, lerr := chargeEncode(env, v)
+	if lerr != nil {
 		return nil, lerr
+	}
+	if w.nativeErr != nil {
+		// Where the encoder would have failed, with its text.
+		return nil, env.Errorf("error while serializing: %s", w.nativeErr.Error())
+	}
+	if len(w.natives) > 0 {
+		v = w.withNatives(v)
 	}
 	res := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{v, lisp.Bool(false)}))
 	if res.Type != lisp.LError {
@@ -333,7 +342,7 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 // a value JSON cannot hold, past the value depth limit, at a value that
 // contains itself, and once the estimate passes the runtime's allocation
 // cap. It returns the budget error if the budget runs out first.
-func chargeEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
+func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 	w := &encodeWalk{
 		env:   env,
 		limit: int64(env.Runtime.MaxAllocBytes()),
@@ -344,15 +353,154 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 		w.depth = lisp.MaxValueDepth
 	}
 	_, lerr := w.walk(v, 0)
-	return lerr
+	return w, lerr
 }
 
 type encodeWalk struct {
 	env         *lisp.LEnv
 	path        map[*lisp.LVal]struct{}
+	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once
+	nativeErr   error                 // the error marshalling a native, where the walk stopped
 	limit, size int64
 	charged     int64
 	depth       int
+}
+
+// native marshals a native value's JSON once, as the encoder would through
+// encoding/json, charging it first: a value encoding/json walks by
+// reflection is sized by nativeCost before it is marshalled; a
+// json.Marshaler's own work is the embedder's, and its bytes are charged
+// by JSONCost after, as the encoder decodes them to check they load. The
+// bytes are reused for the encode (dumpContext), so a Marshaler is called
+// once. stop is set where the encoder would fail.
+func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
+	b, done := w.natives[x]
+	if !done {
+		if v := reflect.ValueOf(x.Native); !v.IsValid() || !v.Type().Implements(marshalerType) {
+			if stop, lerr := w.nativeCost(v); stop || lerr != nil {
+				return nil, true, lerr
+			}
+		}
+		var err error
+		if b, err = json.Marshal(x.Native); err != nil {
+			w.nativeErr = err
+			return nil, true, nil
+		}
+		if w.natives == nil {
+			w.natives = map[*lisp.LVal][]byte{}
+		}
+		w.natives[x] = b
+	}
+	if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
+		return nil, true, lerr
+	}
+	return b, false, nil
+}
+
+// walkCoster adapts the encode walk to goJSONCost: values go through add,
+// so they count toward the estimate and the allocation cap, and a budget
+// error is kept for the walk to return.
+type walkCoster struct {
+	w    *encodeWalk
+	lerr *lisp.LVal
+}
+
+var errWalkBudget = errors.New("budget")
+
+func (c *walkCoster) value(bytes int64) error {
+	if lerr := c.w.add(bytes); lerr != nil {
+		c.lerr = lerr
+		return errWalkBudget
+	}
+	return nil
+}
+
+func (c *walkCoster) steps(n int64) error {
+	if lerr := c.w.env.ChargeSteps(n); lerr.Type == lisp.LError {
+		c.lerr = lerr
+		return errWalkBudget
+	}
+	return nil
+}
+
+// nativeCost charges encoding/json's reflective walk of a native (see
+// goJSONCost). It reports stop where the walk passes the value depth
+// limit, which the encoder has for ELPS values and encoding/json lacks.
+func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
+	c := &walkCoster{w: w}
+	deep, err := goJSONCost(c, v, 0, w.depth, map[uintptr]bool{})
+	if err != nil {
+		return true, c.lerr
+	}
+	if deep != nil {
+		w.nativeErr = deep
+		return true, nil
+	}
+	return false, nil
+}
+
+// withNatives returns v with each native the walk marshalled replaced by a
+// native json.RawMessage of its bytes, so the encoder writes the same JSON
+// without marshalling it again. Containers on the way are copied; the rest
+// is shared.
+func (w *encodeWalk) withNatives(v *lisp.LVal) *lisp.LVal {
+	memo := map[*lisp.LVal]*lisp.LVal{}
+	var sub func(x *lisp.LVal) *lisp.LVal
+	sub = func(x *lisp.LVal) *lisp.LVal {
+		if x == nil {
+			return x
+		}
+		if r, ok := memo[x]; ok {
+			return r
+		}
+		memo[x] = x // a cycle back to x keeps the original
+		var out *lisp.LVal
+		switch x.Type {
+		case lisp.LNative:
+			if b, ok := w.natives[x]; ok {
+				out = lisp.Native(json.RawMessage(b))
+			}
+		case lisp.LSortMap:
+			ents := x.MapEntries()
+			if ents.Type == lisp.LError {
+				break
+			}
+			changed := false
+			vals := make([]*lisp.LVal, len(ents.Cells))
+			for i, e := range ents.Cells {
+				vals[i] = sub(e.Cells[1])
+				changed = changed || vals[i] != e.Cells[1]
+			}
+			if changed {
+				out = lisp.SortedMapSized(len(vals))
+				for i, e := range ents.Cells {
+					out.MapSetLVal(e.Cells[0], vals[i])
+				}
+			}
+		case lisp.LSExpr, lisp.LQuote, lisp.LTaggedVal, lisp.LArray:
+			var cells []*lisp.LVal
+			for i, c := range x.Cells {
+				if s := sub(c); s != c {
+					if cells == nil {
+						cells = append([]*lisp.LVal(nil), x.Cells...)
+					}
+					cells[i] = s
+				}
+			}
+			if cells != nil {
+				cp := *x
+				cp.Cells = cells
+				out = &cp
+			}
+		default:
+		}
+		if out == nil {
+			return x
+		}
+		memo[x] = out
+		return out
+	}
+	return sub(v)
 }
 
 // add charges n more estimated bytes and one value.
@@ -452,18 +600,8 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		}
 		n = jsonStringLen(x.Str)
 	case lisp.LNative:
-		// The encoder writes a json.Marshaler's bytes, compacted, and then
-		// decodes them to check they load: charge that decode by the JSON's
-		// tokens, as FromJSONMetered does.
-		mj, ok := x.Native.(json.Marshaler)
-		if !ok {
-			return true, nil // marshalled by reflection: not estimated
-		}
-		b, err := mj.MarshalJSON()
-		if err != nil {
-			return true, nil
-		}
-		if lerr := w.env.ChargeSteps(hbs.JSONCost(b)); lerr.Type == lisp.LError {
+		b, stop, lerr := w.native(x)
+		if stop || lerr != nil {
 			return true, lerr
 		}
 		n = int64(len(b))

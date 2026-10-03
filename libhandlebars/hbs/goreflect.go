@@ -87,7 +87,6 @@ type structPlan struct {
 	byName   map[string]reflect.StructField
 	byTag    map[string]int // a field with no handlebars tag is under ""
 	exported []int
-	cost     int64 // steps a lookup costs, the same whether the plan was cached
 }
 
 var structPlans sync.Map // reflect.Type -> *structPlan
@@ -101,10 +100,8 @@ func planFor(t reflect.Type) *structPlan {
 	for _, f := range visible {
 		p.byName[f.Name] = f
 	}
-	tagBytes := 0
 	for i := range t.NumField() {
 		f := t.Field(i)
-		tagBytes += len(f.Tag)
 		// raymond compared every field's tag, an absent one being "", so
 		// the empty name finds the first field without one.
 		tag := f.Tag.Get("handlebars")
@@ -118,12 +115,53 @@ func planFor(t reflect.Type) *structPlan {
 			p.exported = append(p.exported, i)
 		}
 	}
-	// Building the plan is linear in the fields and their tags' bytes
-	// (Tag.Get parses a tag byte by byte); charging that on every lookup
-	// keeps a cache hit and a miss alike.
-	p.cost = 1 + units(len(visible)+t.NumField(), scanUnit) + units(tagBytes, scanUnit)
 	actual, _ := structPlans.LoadOrStore(t, p)
 	return actual.(*structPlan) //nolint:forcetypeassert // only *structPlan is stored
+}
+
+// plan returns t's plan, charging its build the first time this render
+// uses t, whether or not another render has built it (so the charge does
+// not depend on the process cache): planFieldCost a field, its embedded
+// structs' fields included, and a step per started scanUnit bytes of tags,
+// counted and charged field by field before the plan is built (a cold
+// build takes 450-900 ns a field).
+func (r *renderer) plan(t reflect.Type) *structPlan {
+	if !r.planned[t] {
+		if r.planned == nil {
+			r.planned = map[reflect.Type]bool{}
+		}
+		r.planned[t] = true
+		r.chargePlan(t, map[reflect.Type]bool{})
+		r.flush()
+	}
+	return planFor(t)
+}
+
+const planFieldCost = 12
+
+// boxUnit is the bytes of a copied Go value a step covers: boxing
+// allocates (zeroing) and copies, about 0.5 ns a byte for large values.
+const boxUnit = 128
+
+func (r *renderer) chargePlan(t reflect.Type, seen map[reflect.Type]bool) {
+	if seen[t] {
+		return
+	}
+	seen[t] = true
+	for i := range t.NumField() {
+		r.steps1(planFieldCost)
+		f := t.Field(i)
+		r.steps1(units(len(f.Tag), scanUnit))
+		if f.Anonymous {
+			ft := f.Type
+			if ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				r.chargePlan(ft, seen)
+			}
+		}
+	}
 }
 
 // title is strings.Title, the casing raymond applied to field and method
@@ -144,8 +182,7 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 	var result reflect.Value
 	switch ctx.Kind() {
 	case reflect.Struct:
-		p := planFor(ctx.Type())
-		r.steps1(p.cost)
+		p := r.plan(ctx.Type())
 		r.hashKey(len(name))
 		if f, ok := p.byName[r.title(name)]; ok && f.IsExported() {
 			fv, err := ctx.FieldByIndexErr(f.Index)
@@ -163,6 +200,10 @@ func (r *renderer) goField(ctx reflect.Value, name string) reflect.Value {
 	case reflect.Map:
 		if stringType.AssignableTo(ctx.Type().Key()) {
 			r.hashKey(len(name))
+			if size := ctx.Type().Elem().Size(); size > 8 {
+				r.steps1(units(int(min(size, 1<<40)), boxUnit)) // capped; MapIndex copies the value
+				r.flush()
+			}
 			result = ctx.MapIndex(reflect.ValueOf(name))
 		}
 	case reflect.Array, reflect.Slice:
@@ -247,9 +288,16 @@ func (r *renderer) goPath(v reflect.Value, parts []string, resolved bool) (any, 
 }
 
 // goInterface is v.Interface(), which raymond called on every result.
+//
+// Boxing copies a value that is not pointer-shaped (a struct, an array):
+// its size is charged first, a step per started boxUnit bytes.
 func (r *renderer) goInterface(v reflect.Value) any {
 	if !v.CanInterface() {
 		r.fail("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+	}
+	if size := v.Type().Size(); size > 8 {
+		r.steps1(units(int(min(size, 1<<40)), boxUnit)) // capped
+		r.flush()
 	}
 	return v.Interface()
 }
@@ -376,6 +424,11 @@ func (r *renderer) goAppendV(dst []byte, v any) []byte {
 	if z.deep {
 		panic(errorf(KindLimit, "template evaluation exceeds the maximum depth of %d", r.maxDepth))
 	}
+	if z.nanKeys {
+		// fmt orders NaN keys among themselves by Go's map order, so the
+		// text would differ from run to run.
+		r.fail("Go map with more than one NaN key has no deterministic text")
+	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
 	dst = fmt.Appendf(dst, "%v", v)
@@ -389,6 +442,16 @@ type goSizer struct {
 	r            *renderer
 	steps, limit int64
 	deep         bool
+	nanKeys      bool // a map with more than one NaN key
+}
+
+// isNaN reports whether v is a float NaN, or an interface holding one.
+func isNaN(v reflect.Value) bool {
+	if v.Kind() == reflect.Interface && !v.IsNil() {
+		v = v.Elem()
+	}
+	k := v.Kind()
+	return (k == reflect.Float32 || k == reflect.Float64) && v.Float() != v.Float()
 }
 
 func (z *goSizer) over() bool { return z.steps >= z.limit }
@@ -437,9 +500,16 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		}
 		z.steps += int64(v.Len()) * k
 		n := 5
+		nans := 0
 		it := v.MapRange()
 		for it.Next() && !z.over() {
+			if isNaN(it.Key()) {
+				nans++
+			}
 			n += 2 + z.size(it.Key(), depth+1) + z.size(it.Value(), depth+1)
+		}
+		if nans > 1 {
+			z.nanKeys = true
 		}
 		return n
 	case reflect.Struct:
@@ -489,12 +559,14 @@ func (c *hcall) goEach(ctx any) {
 		for i, k := range keys {
 			r.step()
 			r.hashKey(len(k))
+			if size := val.Type().Elem().Size(); size > 8 {
+				r.steps1(units(int(min(size, 1<<40)), boxUnit)) // capped; MapIndex copies the value
+			}
 			frame.setIter(total, i, k)
 			c.evalBlock(r.goInterface(val.MapIndex(reflect.ValueOf(k))), frame, k)
 		}
 	case reflect.Struct:
-		p := planFor(val.Type())
-		r.steps1(p.cost)
+		p := r.plan(val.Type())
 		frame := &dataFrame{parent: r.frame, iter: true}
 		for i, fi := range p.exported {
 			r.step()

@@ -360,6 +360,23 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 	}
 }
 
+// init warms phonenumbers: the library compiles each region's regular
+// expressions the first time a number from that region is parsed or
+// checked (milliseconds), which no render should pay for. Warming every
+// supported region's example number, in the international form a template
+// would pass, takes about 55 ms and 7 MB once per process.
+func init() {
+	for region := range phonenumbers.GetSupportedRegions() {
+		if ex := phonenumbers.GetExampleNumber(region); ex != nil {
+			_ = formatPhoneGB(phonenumbers.Format(ex, phonenumbers.INTERNATIONAL))
+			_ = formatPhoneGB(phonenumbers.Format(ex, phonenumbers.NATIONAL))
+		}
+	}
+	for _, n := range []string{"07700900123 ext 12", "0", "abc", "+999 1", "tel:+44-20-7946-0958"} {
+		_ = formatPhoneGB(n)
+	}
+}
+
 func hFormatPhoneGB(c *hcall) any {
 	rawNum := c.argStr(0)
 	if rawNum == "" {
@@ -368,6 +385,11 @@ func hFormatPhoneGB(c *hcall) any {
 	// phonenumbers takes 40-175 us a call (it caps its input at 250 bytes):
 	// a fixed charge keeps that within the base cost per step.
 	c.r.steps1(phoneCallCost)
+	return formatPhoneGB(rawNum)
+}
+
+// formatPhoneGB is svc's format-phone-gb on a non-empty input.
+func formatPhoneGB(rawNum string) string {
 	formattedNum, err := phonenumbers.Parse(rawNum, "GB")
 	if err != nil {
 		return rawNum
@@ -384,10 +406,12 @@ func hFormatPhoneGB(c *hcall) any {
 
 func hEscapeURIComponent(c *hcall) any {
 	s := c.argStr(0)
-	// Bound the result before building it: its exact length is the input's
-	// plus two bytes for each byte QueryEscape writes as %XX.
+	// Charge the scan and the escape (about 5 ns a byte) first, then bound
+	// the result before building it: its exact length is the input's plus
+	// two bytes for each byte QueryEscape writes as %XX.
+	c.r.steps1(units(len(s), 8))
+	c.r.flush()
 	c.r.reserveProduced(queryEscapedLen(s))
-	c.r.steps1(units(len(s), 8)) // QueryEscape: about 5 ns a byte
 	return url.QueryEscape(s)
 }
 

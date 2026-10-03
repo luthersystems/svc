@@ -4,6 +4,7 @@ package libhandlebars_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"runtime"
 	"strconv"
@@ -381,5 +382,86 @@ func TestEncodeWalkReview(t *testing.T) {
 		require.Equal(t, lisp.LError, res.Type)
 		require.NotEqual(t, lisp.CondStepBudgetExceeded, res.Str)
 		require.Contains(t, res.Cells[0].Str, "unable to encode number NaN")
+	})
+}
+
+type nativeItem struct {
+	A int
+	B string
+}
+
+// onceMarshaler fails on its second call, as a stateful embedder type might.
+type onceMarshaler struct{ calls *int }
+
+func (m onceMarshaler) MarshalJSON() ([]byte, error) {
+	*m.calls++
+	if *m.calls > 1 {
+		return nil, errors.New("called twice")
+	}
+	return []byte(`{"x": "once"}`), nil
+}
+
+type failingMarshaler struct{}
+
+func (failingMarshaler) MarshalJSON() ([]byte, error) { return nil, errors.New("boom") }
+
+// TestEncodeNatives: a native is marshalled once and charged before the
+// encode, whether encoding/json reflects through it or calls its
+// MarshalJSON, and a failing native reports the encoder's text.
+func TestEncodeNatives(t *testing.T) {
+	t.Run("reflective native then NaN", func(t *testing.T) {
+		env := newEnv(t)
+		item := &nativeItem{A: 1, B: "b"}
+		items := make([]*nativeItem, 100_000)
+		for i := range items {
+			items[i] = item
+		}
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(items))
+		ctx.MapSetString("b", lisp.Float(math.NaN()))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		var res *lisp.LVal
+		var steps int64
+		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		require.Equal(t, lisp.LError, res.Type)
+		require.Contains(t, res.Cells[0].Str, "unable to encode number NaN")
+		require.GreaterOrEqual(t, steps, int64(500_000), "100k structs walked")
+		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 0), "%d bytes for %d steps", alloc, steps)
+	})
+
+	t.Run("marshaler called once", func(t *testing.T) {
+		env := newEnv(t)
+		calls := 0
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(onceMarshaler{calls: &calls}))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, _ := eval(t, env, `(handlebars:render "{{a.x}}" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		require.Equal(t, "once", res.Str)
+		require.Equal(t, 1, calls)
+	})
+
+	t.Run("failing marshaler", func(t *testing.T) {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(failingMarshaler{}))
+		ctx.MapSetString("b", lisp.Native(make(chan int)))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type)
+		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
+	})
+
+	t.Run("output unchanged", func(t *testing.T) {
+		env := newEnv(t)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("a", lisp.Native(map[string]any{"k": []any{1, "<&>", 2.5}, "n": nil}))
+		ctx.MapSetString("q", lisp.QExpr([]*lisp.LVal{lisp.Native(json.RawMessage(`{"z": 1}`)), lisp.Int(2)}))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		res, _ := eval(t, env, `(handlebars:render "{{#each a.k}}{{this}},{{/each}}{{a.n}}|{{q.[0].z}}{{q.[1]}}" ctx)`)
+		require.Equal(t, lisp.LString, res.Type, "%v", res)
+		require.Equal(t, "1,&lt;&amp;&gt;,2.5,|12", res.Str)
 	})
 }
