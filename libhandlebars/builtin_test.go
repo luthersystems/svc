@@ -514,7 +514,9 @@ func TestEncodeNativesAsJSON(t *testing.T) {
 		dump, res, steps, d := render(t, newEnv(t), x)
 		require.Equal(t, lisp.LError, res.Type)
 		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
-		require.Less(t, d.Nanoseconds()/max(steps, 1), int64(1000), "%v for %d steps", d, steps)
+		if !raceEnabled { // a timing check, as the ceiling tests are
+			require.Less(t, d.Nanoseconds()/max(steps, 1), int64(1000), "%v for %d steps", d, steps)
+		}
 	})
 	t.Run("map holding itself", func(t *testing.T) {
 		m := map[string]any{}
@@ -522,7 +524,9 @@ func TestEncodeNativesAsJSON(t *testing.T) {
 		dump, res, _, d := render(t, newEnv(t), m)
 		require.Equal(t, lisp.LError, res.Type)
 		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
-		require.Less(t, d, time.Second)
+		if !raceEnabled {
+			require.Less(t, d, time.Second)
+		}
 	})
 	t.Run("unexported fields skipped", func(t *testing.T) {
 		big := make(map[int]int, 200_000)
