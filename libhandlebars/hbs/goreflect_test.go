@@ -92,16 +92,21 @@ func TestFieldsByName(t *testing.T) {
 	if raceEnabled || testing.Short() {
 		return
 	}
-	cold := reflect.StructOf([]reflect.StructField{{Name: "D", Type: diamond(18), Anonymous: true}, {Name: "Cold", Type: reflect.TypeFor[int]()}})
+	// Best of 3, each on a fresh type: one run is about half a
+	// millisecond, which a busy machine can stretch.
 	p, err := Parse(`{{x.missing}}`, DefaultLimits())
 	require.NoError(t, err)
-	x := reflect.New(cold).Interface()
-	m := &countMeter{}
-	start := time.Now()
-	_, err = p.Render(map[string]any{"x": x}, Options{Meter: m})
-	require.NoError(t, err)
-	per := float64(time.Since(start).Nanoseconds()) / float64(m.n)
-	t.Logf("cold level-18 diamond: %d steps, %.0f ns/step", m.n, per)
+	per := math.Inf(1)
+	for run := range 3 {
+		cold := reflect.StructOf([]reflect.StructField{{Name: "D", Type: diamond(18), Anonymous: true}, {Name: "Cold" + strconv.Itoa(run), Type: reflect.TypeFor[int]()}})
+		x := reflect.New(cold).Interface()
+		m := &countMeter{}
+		start := time.Now()
+		_, err = p.Render(map[string]any{"x": x}, Options{Meter: m})
+		require.NoError(t, err)
+		per = min(per, float64(time.Since(start).Nanoseconds())/float64(m.n))
+		t.Logf("cold level-18 diamond: %d steps, %.0f ns/step", m.n, per)
+	}
 	if per > 200 {
 		// Contention from parallel packages: compare with the plain
 		// evaluator now (as the ceiling tests do).
