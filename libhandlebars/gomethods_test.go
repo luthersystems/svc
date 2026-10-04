@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"runtime"
@@ -242,4 +243,68 @@ func TestGoContextMethodValuesExactLength(t *testing.T) {
 	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethPtr{nil}})
 	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethErr{nil}})
 	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethFmt{nil}})
+}
+
+type BigWrap struct{ *big.Float }
+
+type bigInner struct{ *big.Float }
+
+type BigOuter struct{ bigInner }
+
+type BigByValue struct{ big.Float }
+
+type BigKey struct{ *big.Float }
+
+// TestBigValuesEmbeddedFailFast: math/big methods promoted through
+// embedding (exported or not, by pointer, or by value behind a pointer)
+// and math/big map keys under JSON (their MarshalText runs twice) are
+// charged before they run: a Float that would take hours fails the step
+// limit at once.
+func TestBigValuesEmbeddedFailFast(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
+	require.NoError(t, err)
+	huge := func() *big.Float { return new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30)) }
+	run := func(x any, opt libhandlebars.RenderOption) {
+		t.Helper()
+		start := time.Now()
+		_, err := libhandlebars.RenderWith(tpl, map[string]any{"x": x}, opt)
+		require.ErrorContains(t, err, "maximum of", "%#v", x)
+		require.Less(t, time.Since(start), 5*time.Second, "%#v", x)
+	}
+	byVal := &BigByValue{}
+	byVal.Set(huge())
+	for _, x := range []any{
+		[]any{BigWrap{huge()}}, []any{BigOuter{bigInner{huge()}}}, []any{&BigOuter{bigInner{huge()}}},
+		[]*BigByValue{byVal}, map[string]any{"k": BigWrap{huge()}},
+	} {
+		run(x, libhandlebars.WithGoContext())
+		run(x, libhandlebars.WithJSONContext())
+	}
+	run(BigWrap{huge()}, libhandlebars.WithJSONContext())
+	run(map[*big.Float]int{huge(): 1}, libhandlebars.WithJSONContext())
+	run(map[BigKey]int{{huge()}: 1}, libhandlebars.WithJSONContext())
+	run(map[*big.Int]int{new(big.Int).Lsh(big.NewInt(1), 1<<26): 1}, libhandlebars.WithJSONContext())
+	// Small ones print as before.
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{BigWrap{big.NewFloat(2.5)}, BigOuter{bigInner{big.NewFloat(3)}}, BigWrap{}}})
+	checkJSON(t, `{{x}}`, map[string]any{"x": map[*big.Int]int{big.NewInt(7): 1}})
+}
+
+type nanKey struct {
+	F float64
+	S string
+}
+
+// TestGoContextNaNKeysOrdered: map keys holding NaNs that fmt's sort still
+// orders (they differ in another field) print as raymond printed them;
+// keys it ties (plain float NaNs) remain an error.
+func TestGoContextNaNKeysOrdered(t *testing.T) {
+	nan := math.NaN()
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": map[nanKey]int{{nan, "a"}: 1, {nan, "b"}: 2, {1, "c"}: 3}})
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": map[[2]float64]int{{nan, 1}: 1, {nan, 2}: 2}})
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	for _, x := range []any{map[float64]int{nan: 1, math.NaN(): 2}, map[nanKey]int{{nan, "a"}: 1, {math.NaN(), "a"}: 2}} {
+		_, err = libhandlebars.Render(tpl, map[string]any{"x": x})
+		require.EqualError(t, err, "Go map with more than one NaN key has no deterministic text")
+	}
 }

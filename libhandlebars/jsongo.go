@@ -133,14 +133,9 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		// math/big's methods do more work than their text shows: charged
 		// before encoding/json (or firstMarshalerError) calls them.
-		var bigSteps int64
-		if v.CanInterface() {
-			if c, ok := bigcost.Steps(v.Interface()); ok {
-				bigSteps = c
-				if err := w.c.steps(c); err != nil {
-					return jsonTotals{steps: c}, err
-				}
-			}
+		bigSteps, _ := bigcost.ValueSteps(v)
+		if err := w.c.steps(bigSteps); err != nil {
+			return jsonTotals{steps: bigSteps}, err
 		}
 		if !text {
 			w.mayUnload = true
@@ -830,6 +825,21 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			return tot, err
 		}
 		tot.steps += int64(n) * perEntry
+		if k := t.Key(); k.Kind() != reflect.String && k.Implements(textMarshalerType) {
+			// A key's MarshalText runs twice (here and in json.Marshal):
+			// math/big's, whose work grows faster than its text, are
+			// charged first, summed so a failure does not depend on Go's
+			// map order.
+			var keySteps int64
+			for it := v.MapRange(); it.Next(); {
+				c, _ := bigcost.ValueSteps(it.Key())
+				keySteps = min(keySteps+2*c, 1<<62)
+			}
+			if err := w.c.steps(keySteps); err != nil {
+				return tot, err
+			}
+			tot.steps += keySteps
+		}
 		kvs := make([]kv, 0, n)
 		var keyErr string
 		var keyBytes, scan int64

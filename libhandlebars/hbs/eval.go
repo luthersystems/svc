@@ -183,7 +183,9 @@ func (r *renderer) recovered(p any) error {
 		}
 		return e
 	default:
-		// Not reachable by design; never let a template crash the process.
+		// A panic the engine did not raise: a Go value's method that fmt
+		// could not recover (its panic value's own String panicked too).
+		// Never let a template crash the process.
 		return errorf(KindRender, "Evaluation error: internal error: %v", e)
 	}
 }

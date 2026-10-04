@@ -655,7 +655,7 @@ type goPrinter struct {
 // Format, Error or String method. The bytes each such call produced are
 // charged and checked against the produced-bytes bound before they are
 // appended, so one method's result is the most it builds past the bound.
-// goFormat has sized v first: it holds no address, no two NaN keys, and
+// goFormat has sized v first: it holds no address, no two tied keys, and
 // nothing past MaxDepth.
 func (p *goPrinter) print(dst []byte, v reflect.Value, depth int) []byte {
 	if v.IsValid() && v.Type() == reflectValueType && depth > 0 && v.CanInterface() {
@@ -780,7 +780,7 @@ type goSizer struct {
 	r            *renderer
 	steps, limit int64
 	deep         bool
-	nanKeys      bool // a map with more than one key not equal to itself (NaN)
+	nanKeys      bool // a map with two NaN keys fmt's sort ties (keysTied)
 	methods      bool // fmt would call a Format, Error or String method (sized as 0)
 	addr         bool // fmt would print an address (a chan, func, unsafe or nested pointer)
 }
@@ -827,7 +827,7 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			if nilValueMethod(v) {
 				return len("<nil>") // goPrinter writes it without the call
 			}
-			if c, ok := bigcost.Steps(v.Interface()); ok {
+			if c, ok := bigcost.ValueSteps(v); ok {
 				z.steps += min(c, z.limit)
 			}
 			return 0
@@ -895,7 +895,7 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			}
 			n += 1 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
-		if nans > 1 {
+		if nans > 1 && !z.over() && keysTied(v) {
 			z.nanKeys = true
 		}
 		// fmt compares keys by reflection all the way down, past any
@@ -1050,6 +1050,28 @@ func keysOrderedByAddress(m reflect.Value) bool {
 	byAddr := false
 	slices.SortFunc(keys, func(a, b reflect.Value) int { return fmtsortCompare(a, b, &byAddr) })
 	return byAddr
+}
+
+// keysTied reports whether two of map m's keys compare equal by fmtsort's
+// comparison (only keys holding a NaN can): fmt's stable sort then leaves
+// them in Go's map order, so the text would differ from run to run. Keys
+// holding NaNs that differ elsewhere (a struct's other field) sort alike
+// every time.
+func keysTied(m reflect.Value) bool {
+	keys := make([]reflect.Value, 0, m.Len())
+	it := m.MapRange()
+	for it.Next() {
+		keys = append(keys, it.Key())
+	}
+	var byAddr bool
+	cmpKeys := func(a, b reflect.Value) int { return fmtsortCompare(a, b, &byAddr) }
+	slices.SortFunc(keys, cmpKeys)
+	for i := 1; i < len(keys); i++ {
+		if cmpKeys(keys[i-1], keys[i]) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // fmtsortCompare is internal/fmtsort's compare, setting *byAddr where two

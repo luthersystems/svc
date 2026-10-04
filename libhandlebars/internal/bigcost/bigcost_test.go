@@ -52,3 +52,52 @@ func TestIsqrt(t *testing.T) {
 	}
 	require.Equal(t, int64(1<<31), isqrt(1<<62))
 }
+
+type wrapF struct{ *big.Float }
+
+type inner struct{ *big.Int }
+
+type outer struct {
+	inner
+	N int
+}
+
+type byValue struct{ big.Rat }
+
+type twoAtOneDepth struct {
+	*big.Int
+	*big.Float
+}
+
+type shallowWins struct {
+	*big.Int
+	inner
+}
+
+type selfEmbed struct{ *selfEmbed }
+
+// TestStepsEmbedded: methods promoted from an embedded math/big field are
+// charged as the field's, found by Go's selector rules.
+func TestStepsEmbedded(t *testing.T) {
+	f := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 12))
+	fs, _ := Steps(f)
+	i := new(big.Int).Lsh(big.NewInt(1), 1<<16)
+	is, _ := Steps(i)
+	for _, c := range []struct {
+		x    any
+		want int64
+		ok   bool
+	}{
+		{wrapF{f}, fs, true}, {&wrapF{f}, fs, true}, {wrapF{}, 1, true},
+		{outer{inner{i}, 1}, is, true}, {&outer{inner{i}, 1}, is, true},
+		{&byValue{*big.NewRat(1, 3)}, 2 * IntSteps(2), true},
+		{byValue{}, 0, false},           // not addressable: its methods are not promoted
+		{twoAtOneDepth{i, f}, 0, false}, // ambiguous
+		{shallowWins{big.NewInt(1), inner{i}}, IntSteps(1), true},
+		{&selfEmbed{&selfEmbed{}}, 0, false}, {(*wrapF)(nil), 0, false}, {struct{ A *big.Int }{i}, 0, false},
+	} {
+		n, ok := Steps(c.x)
+		require.Equal(t, c.ok, ok, "%T", c.x)
+		require.Equal(t, c.want, n, "%T", c.x)
+	}
+}
