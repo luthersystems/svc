@@ -20,11 +20,15 @@ import (
 // change only speed and memory, and may differ between peers.
 //
 // The other bounds the engine applies are fixed: they mirror encoding/json
-// and libjson (the 1024-level encode and 10,000-level load nesting, the
-// encoder's depth-64 guard), or keep a render from crashing the process
-// (the 50,000-level Go value walk, the 64-level and 16384-field embedding
-// searches), or are the cost model itself (the step units in
-// hbs/DETERMINISM.md, which hbs.Version pins). See DETERMINISM.md, "Limits".
+// and libjson (an ELPS context nests to the runtime's value-depth limit,
+// as libjson's encoder allows, and decodes within encoding/json's 10,000
+// levels; a native's load check refuses 10,000; a Go JSON-mode context
+// nests 1024 container levels), or keep a render from crashing the process
+// (hbs.MaxDepthCeiling, the 50,000-level Go value walk, the 64-level and
+// 16384-field embedding searches, the encode walk's stop at elps's default
+// value depth), or are the cost model itself (the step units in
+// hbs/DETERMINISM.md, which hbs.Version pins). See DETERMINISM.md,
+// "Configuration".
 type Config struct {
 	// Limits are the template, output, depth and step limits, and the
 	// produced-bytes factor (hbs.Limits; each consensus-visible):

@@ -108,9 +108,18 @@ output, errors and step charges are those of `LoadPackage`.
 
 Fixed, by design:
 - Bounds that mirror encoding/json and libjson, so a context encodes and
-  fails as `json:dump-bytes` does: the encoder's 1024-level nesting and
-  depth-64 guard, the load check's 10,000-level nesting, and Go JSON mode's
-  1024 levels (as the ELPS path's).
+  fails as `json:dump-bytes` does. An ELPS context nests as deep as the
+  runtime's value-depth limit allows (`Runtime.ValueDepthLimit`, elps's
+  default 1,000,000; libjson's encoder enforces it, with its depth-64
+  guard), and its JSON then decodes only within encoding/json's 10,000
+  levels, so a context nested deeper fails to render; the walk that
+  charges the encode stops at elps's default limit even where the embedder
+  raised the runtime's (it recurses; past that the encoder, which does not,
+  decides). The load check of a native's JSON refuses 10,000 levels, as
+  encoding/json does. A Go caller's JSON-mode context may nest 1024
+  container levels (`jsonGoMaxDepth`). None of this encode work counts
+  against MaxSteps: it is charged to the ELPS step budget, and bounded by
+  `Runtime.MaxAlloc`.
 - Bounds that keep a render from crashing or hanging the process:
   `hbs.MaxDepthCeiling` (10,000), the most MaxDepth may be, since MaxDepth
   bounds the parser's and evaluator's recursion and Go cannot recover from
