@@ -830,13 +830,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			if nilValueMethod(v) {
 				return len("<nil>") // goPrinter writes it without the call
 			}
-			c, ok, err := bigcost.MethodSteps(v, fmtMethodOf(v.Type()).name)
+			c, _, err := bigcost.MethodSteps(v, fmtMethodOf(v.Type()).name)
 			if err != nil {
 				z.r.fail("Go value's " + err.Error())
 			}
-			if ok {
-				z.steps += min(c, z.limit)
-			}
+			z.steps += min(c, z.limit) // math/big's conversion, and interface hops
 			return 0
 		}
 	}

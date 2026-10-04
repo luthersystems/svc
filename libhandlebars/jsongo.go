@@ -176,7 +176,7 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 func (w *jsonWalker) bigMethod(v reflect.Value, name string) (int64, error) {
 	n, _, err := bigcost.MethodSteps(v, name)
 	if err != nil {
-		return 0, errBigEmbedDeep
+		return 0, bigFailure(err)
 	}
 	return n, w.c.steps(n)
 }
@@ -199,9 +199,10 @@ const (
 // chain of 65 wrappers, with their own MarshalJSON): see DETERMINISM.md.
 var errEmbedDeep = &jsonFailure{fmt.Sprintf("json: Marshaler embedding nests deeper than %d", maxEmbedRaw)}
 
-// errBigEmbedDeep is the math/big method search past its bounds
-// (bigcost.ErrUnresolved): it fails closed, as errEmbedDeep does.
-var errBigEmbedDeep = &jsonFailure{"json: " + bigcost.ErrUnresolved.Error()}
+// bigFailure is the math/big method search's failure (past its bounds, or
+// an interface cycle) as encoding/json's kind of error: it fails closed,
+// as errEmbedDeep does.
+func bigFailure(err error) error { return &jsonFailure{"json: " + err.Error()} }
 
 type embedResult int
 
@@ -851,7 +852,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			for it := v.MapRange(); it.Next(); {
 				c, _, berr := bigcost.MethodSteps(it.Key(), "MarshalText")
 				if berr != nil {
-					return tot, errBigEmbedDeep
+					return tot, bigFailure(berr)
 				}
 				keySteps = min(keySteps+2*c, 1<<62)
 			}

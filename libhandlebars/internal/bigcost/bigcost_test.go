@@ -132,7 +132,7 @@ func TestMethodSteps(t *testing.T) {
 		{shadow{mine{}, f}, "Format", 0, false}, {shadow{mine{}, f}, "String", 0, false},
 		{deep{mine{}, inner2{f}}, "Format", 0, false}, {ownAll{f}, "String", 0, false}, {ownAll{f}, "Format", fs, true},
 		{fieldNamed{f, 1}, "String", 0, false}, {fieldNamed{f, 1}, "Format", fs, true},
-		{ifaceEmbed{f}, "String", fs, true}, {ifaceEmbed{}, "String", 0, false}, {ifaceEmbed{ifaceEmbed{f}}, "String", fs, true},
+		{ifaceEmbed{f}, "String", fs + 1, true}, {ifaceEmbed{}, "String", 0, false}, {ifaceEmbed{ifaceEmbed{f}}, "String", fs + 2, true},
 		{&selfEmbed{&selfEmbed{}}, "String", 0, false}, {(*wrapF)(nil), "Format", 0, false},
 		{struct{ A *big.Int }{i}, "Format", 0, false},
 	} {
@@ -146,10 +146,10 @@ func TestMethodSteps(t *testing.T) {
 	n, ok, err := MethodSteps(reflect.ValueOf(tms).Index(0), "MarshalText")
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, fs, n)
+	require.Equal(t, fs+1, n) // a step for the interface
 	holder := struct{ T encoding.TextMarshaler }{wrapF{f}}
 	n, ok, err = MethodSteps(reflect.ValueOf(holder).Field(0), "MarshalText")
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, fs, n)
+	require.Equal(t, fs+1, n)
 }

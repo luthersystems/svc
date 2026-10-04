@@ -516,7 +516,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 					// more work than its text shows: charged before it runs.
 					bigSteps, _, berr := bigcost.MethodSteps(v, "MarshalJSON")
 					if berr != nil {
-						w.nativeErr = errBigEmbedDeep
+						w.nativeErr = bigFailure(berr)
 						w.failAt(x)
 						return nil, true, nil
 					}

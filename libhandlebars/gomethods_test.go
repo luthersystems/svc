@@ -492,7 +492,7 @@ func TestBigMethodSearchFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	deep := Deep1{} // its Float, 65 levels down, is nil: the search fails on the type
 	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{deep}}, libhandlebars.WithGoContext())
-	require.EqualError(t, err, "Go value's method embedding nests deeper than 64 levels, 16384 fields or 64 interfaces")
+	require.EqualError(t, err, "Go value's method embedding nests deeper than 64 levels or 16384 embedded fields")
 	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": deep}, libhandlebars.WithJSONContext())
 	require.ErrorContains(t, err, "json: method embedding nests deeper than 64 levels")
 	env := newEnv(t)
@@ -504,4 +504,32 @@ func TestBigMethodSearchFailsClosed(t *testing.T) {
 	require.Contains(t, res.String(), "method embedding nests deeper than 64 levels")
 	// One level shallower, it is found (and, nil, prints as fmt prints it).
 	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{deep.Deep2}})
+}
+
+type StrChain struct{ fmt.Stringer }
+
+// TestBigMethodInterfaceChains: a method promoted through any number of
+// embedded interfaces is followed (a step a hop): 70 deep around a small
+// Float prints as raymond printed it, around a huge one fails fast. A
+// chain back to itself, whose call would overflow the stack, is an error.
+func TestBigMethodInterfaceChains(t *testing.T) {
+	chain := func(f *big.Float, n int) fmt.Stringer {
+		var s fmt.Stringer = f
+		for range n {
+			s = StrChain{s}
+		}
+		return s
+	}
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{chain(big.NewFloat(2.5), 70)}})
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	start := time.Now()
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{chain(new(big.Float).SetMantExp(big.NewFloat(1.5), -(1<<30)), 70)}}, libhandlebars.WithGoContext())
+	require.ErrorContains(t, err, "maximum of")
+	require.Less(t, time.Since(start), 5*time.Second)
+
+	loop := &StrChain{}
+	loop.Stringer = StrChain{loop}
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{loop}}, libhandlebars.WithGoContext())
+	require.EqualError(t, err, "Go value's method embedding cycles through an interface")
 }
