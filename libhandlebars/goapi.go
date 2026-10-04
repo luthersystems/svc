@@ -21,16 +21,20 @@ func Parse(template string) (Template, error) {
 	return hbs.ParseCached(template, hbs.DefaultLimits())
 }
 
-// ParseWith parses a template under lim's template-size and nesting
-// limits (a zero field takes its hbs.DefaultLimits() value; a negative one
-// is an error). Render it with WithLimits(lim) to render under the same
-// limits.
-func ParseWith(template string, lim hbs.Limits) (Template, error) {
-	eff, err := effectiveLimits(lim)
+// ParseWith parses a template under the configured template-size and
+// nesting limits (see Config). Render it with the same options to render
+// under the same limits. With the default cache bounds it parses through
+// the process-wide cache; with others it does not cache (a Template is
+// the caller's to keep).
+func ParseWith(template string, opts ...Option) (Template, error) {
+	cfg, err := buildConfig(opts)
 	if err != nil {
 		return nil, err
 	}
-	return hbs.ParseCached(template, eff)
+	if p := newParser(cfg); p.cache != nil {
+		return hbs.Parse(template, cfg.Limits)
+	}
+	return hbs.ParseCached(template, cfg.Limits)
 }
 
 // Render renders tpl with the Go value ctx in hbs.ModeCompat, under
@@ -39,35 +43,8 @@ func Render(tpl Template, ctx interface{}) (string, error) {
 	return RenderWith(tpl, ctx)
 }
 
-// RenderOption configures RenderWith.
-type RenderOption func(*renderConfig)
-
-type renderConfig struct {
-	lim  hbs.Limits
-	json bool
-}
-
-// WithLimits renders under lim instead of hbs.DefaultLimits(): a zero
-// field takes its default, and a negative one fails the render. Limits
-// change what renders, so where several parties must agree on a result,
-// they must use the same limits.
-func WithLimits(lim hbs.Limits) RenderOption {
-	return func(c *renderConfig) { c.lim = lim }
-}
-
-// WithJSONContext converts ctx through JSON, as handlebars:render converts
-// an ELPS context: json.Marshal, then hbs.FromJSON. Every number becomes a
-// float64, so a Go int 3 renders {{to-str n}} as "3.000000" and is not a
-// literal zero for includeZero. ctx must marshal to a JSON object or null.
-func WithJSONContext() RenderOption {
-	return func(c *renderConfig) { c.json = true }
-}
-
-// WithGoContext renders the Go value ctx itself (see RenderWith), whatever
-// SVC_HANDLEBARS_JSON_GO_CONTEXT says.
-func WithGoContext() RenderOption {
-	return func(c *renderConfig) { c.json = false }
-}
+// RenderOption configures RenderWith: any Option (see Config).
+type RenderOption = Option
 
 // JSONGoContextEnv is the environment variable that makes JSON conversion
 // the default for Render and RenderWith. It is read once, at the first
@@ -95,8 +72,8 @@ func jsonGoContextSetting(v string, ok bool, log logrus.FieldLogger) bool {
 	}
 }
 
-// RenderWith renders tpl with the Go value ctx in hbs.ModeCompat, under
-// hbs.DefaultLimits() unless WithLimits sets others.
+// RenderWith renders tpl with the Go value ctx in hbs.ModeCompat, configured
+// by opts (see Config: under DefaultConfig() unless they set otherwise).
 //
 // By default the engine reads ctx itself, lazily and by reflection, with
 // the Go semantics raymond gave Go values (see "Go values in a render
@@ -124,16 +101,14 @@ func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (out string
 }
 
 func renderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
-	cfg := renderConfig{json: jsonGoContextDefault()}
-	for _, o := range opts {
-		o(&cfg)
-	}
-	lim, err := effectiveLimits(cfg.lim)
+	cfg, err := buildConfig(opts)
 	if err != nil {
 		return "", err
 	}
+	lim := cfg.Limits
+	asJSON := cfg.GoContext == GoContextJSON || cfg.GoContext == GoContextDefault && jsonGoContextDefault()
 	var v hbs.Value
-	if cfg.json {
+	if asJSON {
 		// The conversion counts against the render's MaxSteps: the
 		// marshal is charged by a walk first, then the decode.
 		bud := &goBudget{max: lim.MaxSteps}

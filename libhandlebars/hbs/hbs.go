@@ -35,7 +35,14 @@ type Limits struct {
 	MaxDepth         int   // nesting of blocks, subexpressions and paths
 	MaxOutputBytes   int   // rendered output length
 	MaxSteps         int64 // evaluation steps (the Meter's units), with or without a Meter
+	// ProducedFactor bounds the bytes a render may produce in all (its
+	// output, sections a helper captured, strings helpers build) at
+	// ProducedFactor times MaxOutputBytes. Zero means DefaultProducedFactor.
+	ProducedFactor int
 }
+
+// DefaultProducedFactor is Limits.ProducedFactor's default.
+const DefaultProducedFactor = 8
 
 // DefaultLimits returns the production limits. It is a function, not a
 // variable, so no package can change the limits every caller applies.
@@ -45,6 +52,7 @@ func DefaultLimits() Limits {
 		MaxDepth:         256,
 		MaxOutputBytes:   16 << 20,
 		MaxSteps:         1 << 25,
+		ProducedFactor:   DefaultProducedFactor,
 	}
 }
 

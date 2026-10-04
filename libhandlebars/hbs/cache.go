@@ -16,10 +16,17 @@ import (
 // plus cacheEntryOverhead; an error verdict as its message plus the
 // overhead. A template over cacheMaxEntryBytes is never cached.
 const (
-	cacheMaxBytes      = 64 << 20
-	cacheMaxEntryBytes = 1 << 20
+	cacheMaxBytes      = DefaultParseCacheMaxBytes
+	cacheMaxEntryBytes = DefaultParseCacheMaxEntryBytes
 	cacheEntryOverhead = 256
 	astBytesPerToken   = 128
+)
+
+// The process-wide parse cache's bounds (ParseCached), and NewParseCache's
+// defaults.
+const (
+	DefaultParseCacheMaxBytes      = 64 << 20
+	DefaultParseCacheMaxEntryBytes = 1 << 20
 )
 
 // cacheKey identifies a parse: the source's SHA-256 and the limits Parse
@@ -41,18 +48,42 @@ type cacheEntry struct {
 
 // parseCache is a byte-bounded LRU of parse verdicts.
 type parseCache struct {
-	entries  map[cacheKey]*list.Element
-	lru      list.List // of *cacheEntry, most recent first
-	bytes    int
-	maxBytes int
-	mu       sync.Mutex
+	entries       map[cacheKey]*list.Element
+	lru           list.List // of *cacheEntry, most recent first
+	bytes         int
+	maxBytes      int
+	maxEntryBytes int // a longer template is never cached
+	mu            sync.Mutex
 }
 
 var defaultCache = newParseCache(cacheMaxBytes)
 
 func newParseCache(maxBytes int) *parseCache {
-	return &parseCache{entries: make(map[cacheKey]*list.Element), maxBytes: maxBytes}
+	return &parseCache{entries: make(map[cacheKey]*list.Element), maxBytes: maxBytes, maxEntryBytes: cacheMaxEntryBytes}
 }
+
+// ParseCache is a cache of parse verdicts like ParseCached's, with bounds
+// of its own. A cache only saves work: a Program it returns, an error and
+// the steps charged are exactly what Parse would give, hit or miss, so
+// caches of any size render alike.
+type ParseCache struct{ c *parseCache }
+
+// NewParseCache returns an empty cache retaining at most maxBytes (each
+// program weighed by its AST) that does not keep a template longer than
+// maxEntryBytes. Zero or less disables it.
+func NewParseCache(maxBytes, maxEntryBytes int) *ParseCache {
+	c := newParseCache(max(maxBytes, 0))
+	c.maxEntryBytes = max(maxEntryBytes, 0)
+	return &ParseCache{c}
+}
+
+// Parse is ParseCachedMetered through this cache (m may be nil).
+func (pc *ParseCache) Parse(src string, lim Limits, m Meter) (*Program, error) {
+	return pc.c.parse(src, lim, m)
+}
+
+// Stats returns the number of verdicts cached and the bytes they weigh.
+func (pc *ParseCache) Stats() (entries, bytes int) { return pc.c.stats() } //nolint:nonamedreturns // documents the pair
 
 // ParseCached is Parse with a process-wide cache of verdicts, programs and
 // errors alike, keyed by the SHA-256 of src and the effective limits. It
@@ -76,7 +107,7 @@ func ParseCachedMetered(src string, lim Limits, m Meter) (*Program, error) {
 }
 
 func (c *parseCache) parse(src string, lim Limits, m Meter) (*Program, error) {
-	if len(src) > cacheMaxEntryBytes {
+	if len(src) > c.maxEntryBytes {
 		p, _, err := parseMetered(src, lim, m)
 		return p, err
 	}

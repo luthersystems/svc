@@ -73,26 +73,50 @@ literal of 9223372036854775295 or less is in range and unchanged.
 The harness allowlist entry for non-amd64 reference runs covers these
 cases too. On amd64 nothing changes.
 
-## Limits
+## Configuration
 
-`hbs.DefaultLimits()` is 1 MiB of template, 256 levels of nesting, 16 MiB
-of output (and 8× that produced in all) and 2^25 steps. An embedder can
-choose others: `libhandlebars.NewLoader(lim)` loads the ELPS package with
-`render`, `render-fixed` and `must-parse` parsing and rendering under
-`lim`, and Go callers use `ParseWith(tpl, lim)` and
-`RenderWith(..., WithLimits(lim))`. A zero field takes its default and a
-negative one is an error; `LoadPackage`, `Parse` and `Render` keep the
-defaults, and there is no package-level setting. The process-wide parse
-cache keys each verdict on the effective template-size and nesting limits,
-so a hit never skips a limit a caller set.
+`libhandlebars.Config` is every setting an embedder may choose, with
+`DefaultConfig()` the values `LoadPackage`, `Parse` and `Render` use.
+`LoadPackageWith(opts...)` loads the ELPS package configured by options
+(`WithConfig(cfg)` sets them all; `WithLimits`, `WithMaxTemplateBytes` and
+the like set one; later options override earlier ones), and Go callers pass
+the same options to `ParseWith` and `RenderWith`. A zero field takes its
+default and a negative one is an error. There is no package-level setting:
+a loader's settings are its own, in every environment it loads.
 
-Limits change results: a template over MaxTemplateBytes fails to parse
-where a larger limit renders it, and a render past MaxSteps or the output
-bound fails where a larger one succeeds. Every peer that endorses a
-transaction, and every check made before a deploy, must therefore use the
-same limits; the embedder ensures it. Under the default limits nothing
-changes: output, errors and step charges are the same as through
-`LoadPackage`.
+| Field | Default | Kind | What it governs |
+|---|---|---|---|
+| `Limits.MaxTemplateBytes` | 1 MiB (1048576) | consensus-visible | a longer template fails to parse (`handlebars-parse`) |
+| `Limits.MaxDepth` | 256 | consensus-visible | deeper nesting of blocks, subexpressions and paths fails to parse or render |
+| `Limits.MaxOutputBytes` | 16 MiB (16777216) | consensus-visible | longer output fails to render |
+| `Limits.MaxSteps` | 2^25 (33554432) | consensus-visible | a render charging more steps fails, with or without an ELPS budget |
+| `Limits.ProducedFactor` | 8 | consensus-visible | a render producing more than this × MaxOutputBytes in all (captured sections, helper strings) fails |
+| `ParseCacheMaxBytes` | 64 MiB (67108864) | performance-only | the bytes of parse verdicts kept (each program weighed by its AST) |
+| `ParseCacheMaxEntryBytes` | 1 MiB (1048576) | performance-only | a longer template is not cached |
+| `GoContext` | `""` (follows `SVC_HANDLEBARS_JSON_GO_CONTEXT`) | Go API only; output-visible | how `RenderWith` reads a Go context: `reflect` or `json` |
+
+Consensus-visible fields change what a render returns (its output, its
+error, or the steps it charges): every peer that endorses a transaction, and
+every check made before a deploy, must use the same values, and the embedder
+ensures it. Performance-only fields change speed and memory only, and may
+differ between peers: a cache hit returns and charges exactly what a miss
+does. With both cache fields at their defaults, a loader shares the
+process-wide parse cache; otherwise it has a cache of its own. Every cache
+keys a verdict on the effective template-size and nesting limits, so a hit
+never skips a limit a caller set. Under `DefaultConfig()` nothing changes:
+output, errors and step charges are those of `LoadPackage`.
+
+Fixed, by design:
+- Bounds that mirror encoding/json and libjson, so a context encodes and
+  fails as `json:dump-bytes` does: the encoder's 1024-level nesting and
+  depth-64 guard, the load check's 10,000-level nesting, and Go JSON mode's
+  1024 levels (as the ELPS path's).
+- Bounds that keep a render from crashing or hanging the process: the
+  Go-value JSON walk's 50,000 levels (its stack), and the embedding
+  searches' 64 levels, 16384 embedded fields and interface cycles, which
+  fail closed.
+- The cost model's units (the table below), which define the steps charged
+  and are pinned by `hbs.Version`.
 
 ## Cost model
 

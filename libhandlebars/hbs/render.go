@@ -29,7 +29,7 @@ import (
 //
 // Limits beyond the output size: the render fails with KindLimit when its
 // steps pass o.Limits.MaxSteps (whether or not a Meter is set), or when its
-// produced bytes pass producedFactor times MaxOutputBytes.
+// produced bytes pass ProducedFactor times MaxOutputBytes.
 //
 // ModeFixed's differences are listed in helpers_svc.go.
 //
@@ -38,10 +38,6 @@ import (
 func (p *Program) Render(ctx Value, o Options) (string, error) {
 	return render(p.ast, ctx, o)
 }
-
-// producedFactor bounds the bytes a render may produce, captured sections
-// and helper strings included, as a multiple of MaxOutputBytes.
-const producedFactor = 8
 
 func render(prog *ast.Program, ctx Value, o Options) (string, error) {
 	lim := o.Limits
@@ -54,12 +50,16 @@ func render(prog *ast.Program, ctx Value, o Options) (string, error) {
 	if lim.MaxSteps <= 0 {
 		lim.MaxSteps = DefaultLimits().MaxSteps
 	}
+	if lim.ProducedFactor <= 0 {
+		lim.ProducedFactor = DefaultProducedFactor
+	}
+	factor := int64(lim.ProducedFactor)
 	r := &renderer{
 		meter:       o.Meter,
 		mode:        o.Mode,
 		maxDepth:    lim.MaxDepth,
 		maxOut:      lim.MaxOutputBytes,
-		maxProduced: int64(min(lim.MaxOutputBytes, math.MaxInt64/producedFactor)) * producedFactor, // saturated
+		maxProduced: min(int64(lim.MaxOutputBytes), math.MaxInt64/factor) * factor, // saturated
 		maxSteps:    lim.MaxSteps,
 		frame:       &dataFrame{},
 		ctx:         make([]any, 1, 16),

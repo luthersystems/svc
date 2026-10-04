@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"math/bits"
 	"reflect"
@@ -31,7 +30,8 @@ const (
 // handlebarsPackage implements the elpsutil Package interfaces for the
 // handlebars ELPS package. Its builtins parse and render under lim.
 type handlebarsPackage struct {
-	lim hbs.Limits
+	parser parser
+	lim    hbs.Limits
 }
 
 func (handlebarsPackage) PackageName() string { return DefaultPackageName }
@@ -44,7 +44,7 @@ JSON context data, powered by the hbs engine (luthersystems/svc).`
 }
 
 func (p handlebarsPackage) Builtins() []lisp.LBuiltinDef {
-	return builtins(p.lim)
+	return builtins(p.lim, p.parser)
 }
 
 // documentedBuiltin wraps an LBuiltinDef with a docstring.
@@ -58,55 +58,15 @@ func (b *documentedBuiltin) Docstring() string { return b.docs }
 // LoadPackage loads the package, which parses and renders under
 // hbs.DefaultLimits().
 func LoadPackage(env *lisp.LEnv) *lisp.LVal {
-	return elpsutil.PackageLoader(&handlebarsPackage{lim: hbs.DefaultLimits()})(env)
+	return elpsutil.PackageLoader(&handlebarsPackage{lim: hbs.DefaultLimits()})(env) // LoadPackageWith()
 }
 
-// NewLoader returns a loader for the package whose render, render-fixed
-// and must-parse parse and render under lim: a zero field takes its
-// hbs.DefaultLimits() value, and a negative one is an error. The limits
-// are the loader's own (there is no package-level setting); every
-// environment it loads uses them.
-//
-// Limits change what renders (a template over MaxTemplateBytes fails to
-// parse, one that passes MaxSteps fails to render), so they are part of a
-// transaction's result: every peer that endorses, and every check made
-// before a deploy, must use the same limits. That is the embedder's to
-// ensure.
-func NewLoader(lim hbs.Limits) (elpsutil.Loader, error) {
-	eff, err := effectiveLimits(lim)
-	if err != nil {
-		return nil, err
-	}
-	return elpsutil.PackageLoader(&handlebarsPackage{lim: eff}), nil
-}
-
-// effectiveLimits is lim with each zero field set to its
-// hbs.DefaultLimits() value; a negative field is an error.
-func effectiveLimits(lim hbs.Limits) (hbs.Limits, error) {
-	if lim.MaxTemplateBytes < 0 || lim.MaxDepth < 0 || lim.MaxOutputBytes < 0 || lim.MaxSteps < 0 {
-		return hbs.Limits{}, fmt.Errorf("libhandlebars: negative limit in %+v", lim)
-	}
-	def := hbs.DefaultLimits()
-	if lim.MaxTemplateBytes == 0 {
-		lim.MaxTemplateBytes = def.MaxTemplateBytes
-	}
-	if lim.MaxDepth == 0 {
-		lim.MaxDepth = def.MaxDepth
-	}
-	if lim.MaxOutputBytes == 0 {
-		lim.MaxOutputBytes = def.MaxOutputBytes
-	}
-	if lim.MaxSteps == 0 {
-		lim.MaxSteps = def.MaxSteps
-	}
-	return lim, nil
-}
-
-// builtins are the package's functions, parsing and rendering under lim.
-func builtins(lim hbs.Limits) []lisp.LBuiltinDef {
-	builtInMustParse := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return mustParse(env, args, lim) }
-	builtInRender := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeCompat, lim) }
-	builtInRenderFixed := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeFixed, lim) }
+// builtins are the package's functions, parsing through ps and parsing
+// and rendering under lim.
+func builtins(lim hbs.Limits, ps parser) []lisp.LBuiltinDef {
+	builtInMustParse := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return mustParse(env, args, lim, ps) }
+	builtInRender := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeCompat, lim, ps) }
+	builtInRenderFixed := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeFixed, lim, ps) }
 	return []lisp.LBuiltinDef{
 		&documentedBuiltin{
 			elpsutil.Function("libname", lisp.Formals(), builtInLibname),
@@ -170,9 +130,9 @@ func builtInVersion(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 // depth limits, so a hit never skips a limit. The charge, hbs.ParseCost
 // of the template's length and lexer tokens, is made on every call, so a
 // cache hit and a miss cost the same steps.
-func parse(env *lisp.LEnv, tpl string, lim hbs.Limits) (*hbs.Program, *lisp.LVal) {
+func parse(env *lisp.LEnv, tpl string, lim hbs.Limits, ps parser) (*hbs.Program, *lisp.LVal) {
 	m := &envMeter{env: env}
-	prog, err := hbs.ParseCachedMetered(tpl, lim, m)
+	prog, err := ps.parse(tpl, lim, m)
 	if err != nil {
 		if errors.Is(err, errBudget) {
 			return nil, m.lerr
@@ -183,18 +143,18 @@ func parse(env *lisp.LEnv, tpl string, lim hbs.Limits) (*hbs.Program, *lisp.LVal
 	return prog, nil
 }
 
-func mustParse(env *lisp.LEnv, args *lisp.LVal, lim hbs.Limits) *lisp.LVal {
+func mustParse(env *lisp.LEnv, args *lisp.LVal, lim hbs.Limits, ps parser) *lisp.LVal {
 	template := args.Cells[0]
 	if template.Type != lisp.LString {
 		return env.Errorf("non-string template: %v", template.Type)
 	}
-	if _, lerr := parse(env, template.Str, lim); lerr != nil {
+	if _, lerr := parse(env, template.Str, lim, ps); lerr != nil {
 		return lerr
 	}
 	return lisp.Nil()
 }
 
-func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits) *lisp.LVal {
+func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits, ps parser) *lisp.LVal {
 	template, context := args.Cells[0], args.Cells[1]
 	if template.Type != lisp.LString {
 		return env.Errorf("non-string template: %v", template.Type)
@@ -235,7 +195,7 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits) *lis
 		}
 	}
 
-	prog, lerr := parse(env, template.Str, lim)
+	prog, lerr := parse(env, template.Str, lim, ps)
 	if lerr != nil {
 		return lerr
 	}
