@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/luthersystems/svc/libhandlebars/hbs"
+	"github.com/luthersystems/svc/libhandlebars/internal/bigcost"
 )
 
 // The cost of json.Marshal on a Go value, charged before it runs.
@@ -130,6 +131,17 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	// encoding/json writes a nil pointer or a nil interface as null,
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
+		// math/big's methods do more work than their text shows: charged
+		// before encoding/json (or firstMarshalerError) calls them.
+		var bigSteps int64
+		if v.CanInterface() {
+			if c, ok := bigcost.Steps(v.Interface()); ok {
+				bigSteps = c
+				if err := w.c.steps(c); err != nil {
+					return jsonTotals{steps: c}, err
+				}
+			}
+		}
 		if !text {
 			w.mayUnload = true
 			if raw, ok := rawMessage(v); ok {
@@ -143,19 +155,22 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 				charge += 2 * units64(rawLen, 16)
 			}
 			if err := w.c.steps(charge); err != nil {
-				return jsonTotals{steps: charge}, err
+				return jsonTotals{steps: bigSteps + charge}, err
 			}
 			if found == embedTooDeep {
-				return jsonTotals{steps: charge}, errEmbedDeep
+				return jsonTotals{steps: bigSteps + charge}, errEmbedDeep
 			}
 			w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 			tot, err := w.leaf(1)
-			tot.steps += charge
+			tot.steps += bigSteps + charge
 			return tot, err
 		}
 		w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
+		tot, err := w.leaf(1) // its output is not known here: at least a byte
+		tot.steps += bigSteps
+		return tot, err
 	}
-	return w.leaf(1) // its output is not known here: at least a byte
+	return w.leaf(1) // at least a byte
 }
 
 // maxEmbedRaw bounds embeddedRaw's search: at most 64 hops through

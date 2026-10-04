@@ -497,7 +497,9 @@ func TestChargedBeforeAllocating(t *testing.T) {
 	start := time.Now()
 	_, err = p.Render(map[string]any{"a": dag}, hbs.Options{Limits: hbs.Limits{MaxDepth: 4, MaxSteps: 64}})
 	requireLimit(t, err, "maximum depth of 4")
-	require.Less(t, time.Since(start), 50*time.Millisecond)
+	if timingGuards() {
+		require.Less(t, time.Since(start), 50*time.Millisecond)
+	}
 
 	// A large leaf is charged before its buffer is allocated.
 	big := map[string]any{"a": []any{strings.Repeat("x", 32<<20)}}

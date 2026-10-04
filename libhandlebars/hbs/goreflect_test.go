@@ -3,8 +3,11 @@
 package hbs
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"strconv"
 	"testing"
@@ -242,5 +245,76 @@ func TestGoSizerExact(t *testing.T) {
 		got := z.size(reflect.ValueOf(x), 0)
 		require.False(t, z.addr, "%#v", x)
 		require.Equal(t, len(fmt.Sprintf("%v", x)), got, "%#v", x)
+	}
+}
+
+type printVal struct{ N int }
+
+func (v printVal) String() string { return "V" + strconv.Itoa(v.N) }
+
+type printPtr struct{ N int }
+
+func (p *printPtr) String() string {
+	if p == nil {
+		return "nil-ptr"
+	}
+	return "P" + strconv.Itoa(p.N)
+}
+
+type printPanic int
+
+func (printPanic) String() string { panic("boom") }
+
+type printFmt int
+
+func (f printFmt) Format(s fmt.State, c rune) { _, _ = fmt.Fprintf(s, "F%c%d", c, int(f)) }
+
+type printHolder struct {
+	D   time.Duration
+	d   time.Duration
+	V   printVal
+	v   printVal
+	P   printPtr
+	PP  *printPtr
+	VP  *printVal
+	I   any
+	i   any
+	E   error
+	R   reflect.Value
+	F   printFmt
+	N   json.Number
+	Big *big.Int
+}
+
+// TestGoPrintMatchesFmt: goPrint, the walk that prints a value holding
+// method-bearing values, writes fmt's %v exactly, wherever fmt calls the
+// method and wherever it cannot (unexported fields, pointer receivers,
+// nil pointers, panics), and sizes all but the method results exactly.
+func TestGoPrintMatchesFmt(t *testing.T) {
+	h := printHolder{
+		D: time.Second, d: time.Second, V: printVal{1}, v: printVal{2},
+		P: printPtr{3}, I: printVal{4}, i: printVal{5}, E: errors.New("e"),
+		R: reflect.ValueOf(7), F: 8, N: "9.5", Big: big.NewInt(10),
+	}
+	hp := h
+	hp.PP, hp.VP, hp.I, hp.R, hp.Big = &printPtr{11}, nil, printPanic(0), reflect.ValueOf("rv"), nil
+	for _, x := range []any{
+		time.Second, []time.Duration{1, 2}, []json.Number{"1", "2.5"}, h, &h, hp, []printHolder{h, hp},
+		[]any{printVal{1}, &printPtr{2}, (*printPtr)(nil), (*printVal)(nil), printPanic(1), printFmt(3), nil},
+		map[printVal]printPtr{{2}: {1}, {1}: {2}}, map[time.Duration]string{2: "b", 1: "a"},
+		map[any]int{printVal{1}: 1, 2: 2, "s": 3, time.Duration(4): 4},
+		map[float64]printVal{math.NaN(): {1}, 1: {2}, -1: {3}},
+		[]reflect.Value{reflect.ValueOf(1), reflect.ValueOf("s"), {}},
+		struct{ A []error }{[]error{nil, errors.New("x")}},
+		[2]printFmt{1, 2}, []*big.Int{big.NewInt(1), nil}, []byte{1, 2},
+		[]float32{0.1}, []complex64{complex(1, 2)}, map[string][]printVal{"k": {{1}}},
+	} {
+		r := &renderer{maxDepth: 64, maxSteps: 1 << 40, maxProduced: 1 << 40}
+		z := &goSizer{r: r, limit: 1 << 40}
+		size := z.size(reflect.ValueOf(x), 0)
+		require.False(t, z.addr, "%#v", x)
+		want := fmt.Sprintf("%v", x)
+		require.Equal(t, want, string((&goPrinter{r: r}).print(nil, reflect.ValueOf(x), 0)), "%#v", x)
+		require.LessOrEqual(t, size, len(want), "%#v", x)
 	}
 }

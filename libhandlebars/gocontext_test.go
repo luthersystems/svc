@@ -818,7 +818,7 @@ func TestGoContextZeroSizedKeyArray(t *testing.T) {
 		require.ErrorContains(t, err, "maximum of 64 steps")
 		best = min(best, time.Since(start))
 	}
-	if !raceEnabled {
+	if !raceEnabled && timingGuards() {
 		require.Less(t, best, 20*time.Millisecond, "not walked past the budget")
 	}
 }

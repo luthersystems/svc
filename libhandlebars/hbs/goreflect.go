@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/luthersystems/svc/libhandlebars/internal/bigcost"
 )
 
 // Go values in a render context.
@@ -535,9 +537,10 @@ func (r *renderer) goAppendKind(dst []byte, val reflect.Value) []byte {
 // not follow), the text would differ between processes: the value is
 // printed as "(T)", its type, instead.
 // fmt recurses without bound into maps, slices and interfaces, and sorts
-// map keys by reflection, so the value is sized first (goSize), and only
+// map keys by reflection, so the value is sized first (goSizer), and only
 // then does fmt print it. As raymond's did, fmt calls a value's String or
-// Error method.
+// Error method: a value holding such values is printed by goPrinter, which
+// calls fmt on each alone and checks its text before the next.
 func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
 	// fmt prints a top-level reflect.Value as the value it holds (methods
 	// honoured; one it cannot take the value of, by reflection alone: here
@@ -598,9 +601,121 @@ func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t 
 	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
-	dst = fmt.Appendf(dst, "%v", arg)
+	if z.methods {
+		// size is exact but for the method results: grow once for it.
+		p := goPrinter{r: r}
+		dst = p.print(slices.Grow(dst, size), sv, depth)
+	} else {
+		dst = fmt.Appendf(dst, "%v", arg)
+	}
 	r.produced(len(dst) - n)
 	return dst
+}
+
+// goPrinter prints fmt's %v of a value holding values with a Format, Error
+// or String method.
+type goPrinter struct {
+	r       *renderer
+	scratch []byte // a method's text, before it is checked
+}
+
+// print appends fmt's %v of v at depth, walking it as fmt's printValue
+// does (goSizer's walk), and calling fmt only for each value with a
+// Format, Error or String method. The bytes each such call produced are
+// charged and checked against the produced-bytes bound before they are
+// appended, so one method's result is the most it builds past the bound.
+// goFormat has sized v first: it holds no address, no two NaN keys, and
+// nothing past MaxDepth.
+func (p *goPrinter) print(dst []byte, v reflect.Value, depth int) []byte {
+	if v.IsValid() && v.Type() == reflectValueType && depth > 0 && v.CanInterface() {
+		rv, _ := v.Interface().(reflect.Value)
+		return append(dst, rv.String()...)
+	}
+	if v.IsValid() && v.Kind() != reflect.Interface && v.CanInterface() {
+		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
+			p.scratch = fmt.Appendf(p.scratch[:0], "%v", v.Interface())
+			n := len(p.scratch)
+			p.r.scanBytes(n)
+			p.r.checkProduced(len(dst) + n)
+			if n > cap(dst)-len(dst) {
+				// Double (these may be many), but not past the bound.
+				room := int(min(p.r.maxProduced-p.r.written, math.MaxInt)) - len(dst)
+				dst = slices.Grow(dst, max(n, min(cap(dst), room)))
+			}
+			return append(dst, p.scratch...)
+		}
+	}
+	switch v.Kind() {
+	case reflect.Invalid:
+		return append(dst, "<nil>"...)
+	case reflect.String:
+		return append(dst, v.String()...)
+	case reflect.Interface:
+		if v.IsNil() {
+			return append(dst, "<nil>"...)
+		}
+		return p.print(dst, v.Elem(), depth+1)
+	case reflect.Pointer:
+		// Not an address (goSizer): nil, or followed at the top.
+		if v.IsNil() {
+			return append(dst, "<nil>"...)
+		}
+		return p.print(append(dst, '&'), v.Elem(), depth+1)
+	case reflect.Array, reflect.Slice:
+		dst = append(dst, '[')
+		for i := range v.Len() {
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = p.print(dst, v.Index(i), depth+1)
+		}
+		return append(dst, ']')
+	case reflect.Map:
+		type entry struct{ k, v reflect.Value }
+		entries := make([]entry, 0, v.Len())
+		it := v.MapRange()
+		for it.Next() {
+			entries = append(entries, entry{it.Key(), it.Value()})
+		}
+		// fmtsort's stable sort. goSizer refused keys whose order Go's
+		// map order or an address decides.
+		var byAddr bool
+		slices.SortStableFunc(entries, func(a, b entry) int { return fmtsortCompare(a.k, b.k, &byAddr) })
+		dst = append(dst, "map["...)
+		for i, e := range entries {
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = append(p.print(dst, e.k, depth+1), ':')
+			dst = p.print(dst, e.v, depth+1)
+		}
+		return append(dst, ']')
+	case reflect.Struct:
+		dst = append(dst, '{')
+		for i := range v.NumField() {
+			if i > 0 {
+				dst = append(dst, ' ')
+			}
+			dst = p.print(dst, v.Field(i), depth+1)
+		}
+		return append(dst, '}')
+	case reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return append(dst, "<nil>"...) // not an address (goSizer): nil
+	case reflect.Bool:
+		return strconv.AppendBool(dst, v.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.AppendInt(dst, v.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return strconv.AppendUint(dst, v.Uint(), 10)
+	case reflect.Float32:
+		return fmt.Appendf(dst, "%v", float32(v.Float()))
+	case reflect.Float64:
+		return fmt.Appendf(dst, "%v", v.Float())
+	case reflect.Complex64:
+		return fmt.Appendf(dst, "%v", complex64(v.Complex()))
+	default:
+		return fmt.Appendf(dst, "%v", v.Complex())
+	}
 }
 
 // appendValueString appends rv.String(), as fmt prints a reflect.Value it
@@ -631,6 +746,7 @@ type goSizer struct {
 	steps, limit int64
 	deep         bool
 	nanKeys      bool // a map with more than one key not equal to itself (NaN)
+	methods      bool // fmt would call a Format, Error or String method (sized as 0)
 	addr         bool // fmt would print an address (a chan, func, unsafe or nested pointer)
 }
 
@@ -666,11 +782,17 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 	// fmt prints a value with a Format, Error or String method by calling
 	// it (wherever it can take the value: at the top always, but for a
 	// reflect.Value of an unexported field), so it does
-	// not look inside: neither does the walk. The method's cost is the
-	// caller's.
+	// not look inside: neither does the walk. Its text is counted as it
+	// is printed (goPrinter); math/big's methods, whose work grows faster
+	// than their text, are charged here, before they run. Another
+	// method's own cost is the caller's.
 	if v.IsValid() && v.Kind() != reflect.Interface && v.CanInterface() {
 		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
-			return 64
+			z.methods = true
+			if c, ok := bigcost.Steps(v.Interface()); ok {
+				z.steps += min(c, z.limit)
+			}
+			return 0
 		}
 	}
 	switch v.Kind() {

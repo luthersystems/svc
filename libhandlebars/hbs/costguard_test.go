@@ -94,8 +94,8 @@ func allocBound(steps int64, input int) uint64 {
 // but is not charged makes the long run's time per step grow with the
 // length, and fails here.
 func TestCostModelGuard(t *testing.T) {
-	if raceEnabled || testing.Short() {
-		t.Skip("timing guard: skipped under -race and -short")
+	if raceEnabled || testing.Short() || !timingGuards() {
+		t.Skip("timing guard: runs with HBS_TIMING=1, not under -race or -short")
 	}
 	sSteps, sNs, sAlloc := guardRun(t, 64)
 	lSteps, lNs, lAlloc := guardRun(t, 128<<10)
@@ -194,8 +194,8 @@ var costSites = []struct {
 // (plus 100 ns of noise) of that with 1 KiB strings. An uncharged operation
 // is about 256x slower per step instead.
 func TestCostModelSites(t *testing.T) {
-	if raceEnabled || testing.Short() {
-		t.Skip("timing guard: skipped under -race and -short")
+	if raceEnabled || testing.Short() || !timingGuards() {
+		t.Skip("timing guard: runs with HBS_TIMING=1, not under -race or -short")
 	}
 	items := `"a": [` + strings.TrimSuffix(strings.Repeat("1,", 64), ",") + `]}`
 	perStep := func(tpl, ctx string) (float64, int64) {

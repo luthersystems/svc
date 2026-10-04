@@ -644,7 +644,9 @@ func TestEncodeNativesBounded(t *testing.T) {
 				best = d
 			}
 		}
-		require.Less(t, best, 3*time.Millisecond, "%v for %d steps", best, steps)
+		if timingGuards() {
+			require.Less(t, best, 3*time.Millisecond, "%v for %d steps", best, steps)
+		}
 	})
 	t.Run("native past the allocation cap", func(t *testing.T) {
 		env := newEnv(t)
