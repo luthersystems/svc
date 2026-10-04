@@ -486,7 +486,7 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 type encodeWalk struct {
 	env         *lisp.LEnv
 	path        map[*lisp.LVal]struct{}
-	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once
+	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once by the walk
 	hasNative   map[*lisp.LVal]bool   // the containers on the way to a marshalled native
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
 	mayUnload   bool                  // the native just walked may fail libjson's load check
@@ -503,13 +503,16 @@ type encodeWalk struct {
 	depth       int
 }
 
-// native marshals a native value's JSON once, as the encoder would through
+// native marshals a native value's JSON, as the encoder would through
 // encoding/json, charging it first: a value encoding/json walks by
 // reflection is sized by nativeCost before it is marshalled; a
 // json.Marshaler's own work is the embedder's, and its bytes are charged
 // by JSONCost after, as the encoder decodes them to check they load. The
-// bytes are reused for the encode (dumpContext), so a Marshaler is called
-// once. stop is set where the encoder would fail.
+// walk marshals each native once, and the encode (dumpContext) reuses the
+// bytes along the path the walk first reached it by (markPath); where the
+// same native also sits under another container, the encoder marshals it
+// again there, as json:dump-bytes would (the output is the same). stop is
+// set where the encoder would fail.
 func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 	b, done := w.natives[x]
 	before := w.lower
@@ -770,10 +773,12 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		return lerr == nil
 	}
 	// A container being copied: its contents (a map's are its entries'
-	// values), and their substitutes so far.
+	// values), the next one to visit, and their substitutes once one
+	// differs (nil until then).
 	type frame struct {
 		x, ents    *lisp.LVal // ents: a map's entries
 		kids, subs []*lisp.LVal
+		next       int
 	}
 	kid := func(f *frame, i int) *lisp.LVal {
 		if f.ents != nil {
@@ -843,17 +848,25 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		default:
 			return x, true
 		}
-		f.subs = make([]*lisp.LVal, 0, size(&f))
 		frames = append(frames, f)
 		return nil, false
 	}
+	// put records the substitute of f's next child.
+	put := func(f *frame, r *lisp.LVal) {
+		if f.subs == nil && r != kid(f, f.next) {
+			f.subs = make([]*lisp.LVal, size(f))
+			for i := range f.next {
+				f.subs[i] = kid(f, i)
+			}
+		}
+		if f.subs != nil {
+			f.subs[f.next] = r
+		}
+		f.next++
+	}
 	// leave builds a finished frame's substitute.
 	leave := func(f *frame) *lisp.LVal {
-		changed := false
-		for i, s := range f.subs {
-			changed = changed || s != kid(f, i)
-		}
-		if !changed {
+		if f.subs == nil {
 			return f.x
 		}
 		var out *lisp.LVal
@@ -880,9 +893,9 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 	out, done := enter(v)
 	for !done {
 		top := &frames[len(frames)-1]
-		if len(top.subs) < size(top) {
-			if r, ok := enter(kid(top, len(top.subs))); ok {
-				top.subs = append(top.subs, r)
+		if top.next < size(top) {
+			if r, ok := enter(kid(top, top.next)); ok {
+				put(top, r)
 			}
 			continue
 		}
@@ -891,8 +904,7 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		if len(frames) == 0 {
 			out, done = r, true
 		} else {
-			parent := &frames[len(frames)-1]
-			parent.subs = append(parent.subs, r)
+			put(&frames[len(frames)-1], r)
 		}
 	}
 	return out, lerr
