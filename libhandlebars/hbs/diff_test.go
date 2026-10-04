@@ -181,6 +181,10 @@ const quirkCtx = `{
 
 // diffCases cover every helper, the quirks in the brief and the error texts.
 var diffCases = []string{
+	// whitespace control around an inverse and a chained one (setBlockInverseStrip)
+	"{{#if no}} a {{~else~}} b {{/if}}|{{#if no}} a {{~else if t~}} b {{~/if}} |",
+	"{{#if no}} a {{else if no}} b {{~else~}} c {{~/if}} |{{^t}} a {{~^~}} b {{/t}}|",
+	"x {{~#if t~}} a {{~else if no~}} b {{~/if~}} y",
 	// printing and escaping
 	`{{s}}|{{{s}}}|{{&s}}`, `{{m}}|{{arr}}|{{earr}}|{{eobj}}|{{nul}}|{{missing}}`,
 	`{{n}} {{f}} {{big}} {{huge}} {{neg}} {{zero}} {{t}} {{no}}`,

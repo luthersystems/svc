@@ -452,13 +452,17 @@ func (p *parser) parseBlock() *ast.BlockStatement {
 	return result
 }
 
-// setBlockInverseStrip is called when parsing `block` (openBlock | openInverse) and `inverseChain`
+// setBlockInverseStrip records a block's whitespace control around its
+// inverse, for the whitespace pass (whitespace.go), as handlebars.js's
+// prepareBlock does (lib/handlebars/compiler/helper.js), and raymond with
+// it. It is called when parsing `block` (openBlock | openInverse) and
+// `inverseChain`:
 //
-// TODO: This was totally cargo culted ! CHECK THAT !
-//
-// cf. prepareBlock() in:
-//
-//	https://github.com/wycats/handlebars.js/blob/master/lib/handlebars/compiler/helper.js
+//   - InverseStrip is the strip flags of the `{{else}}` (or `{{^}}`) that
+//     opens the inverse: `{{~else~}}` trims around it.
+//   - A chained inverse (`{{else if c}}`) is itself a block with no closing
+//     tag of its own: the outer block's `{{/if}}` closes it, so it takes the
+//     outer block's CloseStrip, and `{{~/if}}` trims the end of its program.
 func setBlockInverseStrip(block *ast.BlockStatement) {
 	if block.Inverse == nil {
 		return
