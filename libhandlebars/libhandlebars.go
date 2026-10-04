@@ -467,6 +467,8 @@ type encodeWalk struct {
 	hasNative   map[*lisp.LVal]bool   // the containers on the way to a marshalled native
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
 	mayUnload   bool                  // the native just walked may fail libjson's load check
+	walked      *jsonWalker           // the native just walked, with the marshalers it passed over
+	walkCost    *walkCoster           // its coster
 	failed      *lisp.LVal            // that native
 	deepest     int                   // the deepest value the walk reached
 	stack       []*lisp.LVal          // the containers the walk is inside
@@ -540,6 +542,14 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 			// time.Time say, or a json.Number): then marshal it, and let
 			// the encoder decide (below).
 			if w.lower > w.limit && !w.mayUnload {
+				// json.Marshal calls its MarshalText methods first: one
+				// that fails is the error.
+				if stop, lerr := w.skippedError(); stop {
+					if lerr == nil {
+						w.failAt(x)
+					}
+					return nil, true, lerr
+				}
 				w.capErr, w.capNative = true, true
 				return nil, true, nil
 			}
@@ -615,10 +625,15 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	var fail *jsonFailure
 	switch {
 	case err == nil:
+		w.walked, w.walkCost = jw, c
 		if lerr := jw.loadFailure(); lerr != nil {
 			// The encoder marshals it, then its load check fails: known
 			// without marshalling it (nativeFailure reports an earlier
-			// allocation error first, as the encoder does).
+			// allocation error first, as the encoder does), unless one of
+			// its MarshalText methods fails first, in json.Marshal.
+			if stop, berr := w.skippedError(); stop {
+				return true, berr
+			}
 			w.nativeErr = lerr
 			return true, nil
 		}
@@ -630,6 +645,27 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	default:
 		return true, c.lerr
 	}
+}
+
+// skippedError calls the marshalers the native just walked passed over, in
+// encoding/json's order, as json.Marshal would before the result the walk
+// would otherwise report without marshalling (the load check's error, or
+// the allocation cap): it reports stop where one fails, recording its error
+// (or returning a budget error).
+func (w *encodeWalk) skippedError() (bool, *lisp.LVal) {
+	if w.walked == nil || len(w.walked.skipped) == 0 {
+		return false, nil
+	}
+	merr := w.walked.firstMarshalerError()
+	if merr == nil {
+		return false, nil
+	}
+	var fail *jsonFailure
+	if errors.As(merr, &fail) {
+		w.nativeErr = fail
+		return true, nil
+	}
+	return true, w.walkCost.lerr
 }
 
 // jsonNesting is the deepest nesting of objects and arrays in valid JSON

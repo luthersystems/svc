@@ -807,6 +807,14 @@ func TestNativeNumberNotMarshalledPastCap(t *testing.T) {
 	require.Less(t, alloc, uint64(64<<20)) // known from the walk: not marshalled
 }
 
+type failText struct{}
+
+func (failText) MarshalText() ([]byte, error) { return nil, errors.New("boom") }
+
+type okText struct{}
+
+func (okText) MarshalText() ([]byte, error) { return []byte("ok"), nil }
+
 type quotedNum struct {
 	N json.Number `json:",string"`
 }
@@ -819,15 +827,22 @@ type quotedNum struct {
 func TestNativeNumberLoadErrorParity(t *testing.T) {
 	big := strings.Repeat("y", 1<<17)
 	for _, c := range []struct {
-		before string
-		native any
+		before   string
+		native   any
+		maxAlloc int
 	}{
-		{"", map[string]any{"a": json.Number("1e400")}},
-		{"", map[string]any{"b": json.Number("-2e999"), "a": []any{1, json.Number("1e400")}}},
-		{"", struct{ X, Y json.Number }{"3", "4e500"}},
-		{"", []any{quotedNum{"1e400"}, json.Number("5e600")}},
-		{"", []any{quotedNum{"1e400"}}},
-		{big, map[string]any{"a": json.Number("1e400")}},
+		{"", map[string]any{"a": failText{}, "b": json.Number("1e400")}, 0},
+		{"", map[string]any{"b": failText{}, "a": json.Number("1e400")}, 0},
+		{"", map[string]any{"a": failText{}, "b": make([]byte, 2048)}, 1024},
+		{"", map[string]any{"b": failText{}, "a": make([]byte, 2048)}, 1024},
+		{"", map[string]any{"a": okText{}, "b": make([]byte, 2048)}, 1024},
+		{big, map[string]any{"a": failText{}, "b": json.Number("1e400")}, 0},
+		{"", map[string]any{"a": json.Number("1e400")}, 0},
+		{"", map[string]any{"b": json.Number("-2e999"), "a": []any{1, json.Number("1e400")}}, 0},
+		{"", struct{ X, Y json.Number }{"3", "4e500"}, 0},
+		{"", []any{quotedNum{"1e400"}, json.Number("5e600")}, 0},
+		{"", []any{quotedNum{"1e400"}}, 0},
+		{big, map[string]any{"a": json.Number("1e400")}, 0},
 	} {
 		build := func(env *lisp.LEnv) *lisp.LVal {
 			ctx := lisp.SortedMap()
@@ -837,11 +852,15 @@ func TestNativeNumberLoadErrorParity(t *testing.T) {
 			ctx.MapSetString("z", lisp.Native(c.native))
 			return ctx
 		}
+		maxAlloc := c.maxAlloc
+		if maxAlloc == 0 {
+			maxAlloc = 65536
+		}
 		env := newEnv(t)
-		env.Runtime.MaxAlloc = 65536
+		env.Runtime.MaxAlloc = maxAlloc
 		want := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{build(env), lisp.Bool(false)}))
 		env = newEnv(t)
-		env.Runtime.MaxAlloc = 65536
+		env.Runtime.MaxAlloc = maxAlloc
 		env.Put(lisp.Symbol("ctx"), build(env))
 		got := env.LoadStringContext(t.Context(), "test", `(handlebars:render "" ctx)`)
 		if want.Type != lisp.LError {
