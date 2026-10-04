@@ -50,28 +50,14 @@ Organize into categories based on commit prefixes:
 
 ### 6. Create Tag and GitHub Release
 
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
+Cut the release with the `Release (tag)` workflow (`.github/workflows/release-tag.yml`). Never run `git tag` and `git push origin vX.Y.Z`: agent sandboxes cannot push tags, and the workflow is the one release path.
 
-gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
-## What's Changed
-
-### Features
-- Description of feature (#PR)
-
-### Fixes
-- Description of fix (#PR)
-
-### Dependencies
-- Bump package from vA to vB (#PR)
-
-**Full Changelog**: https://github.com/luthersystems/svc/compare/<previous-tag>...vX.Y.Z
-EOF
-)"
-```
-
-Use `gh release create --generate-notes` as a starting point if there are many changes, then edit for clarity.
+1. Dispatch a dry run on `main`, with `version` set to the confirmed version (for example `v0.18.0`) and `dry_run` set to `true`. Leave `version` empty to take the next patch.
+   - GitHub MCP: `actions_run_trigger` with `method: run_workflow`, `workflow_id: release-tag.yml`, `ref: main`, `inputs: {"version": "vX.Y.Z", "dry_run": "true"}`.
+   - CLI: `gh workflow run release-tag.yml --ref main -f version=vX.Y.Z -f dry_run=true`.
+2. Check the run succeeded and printed the expected version and commit.
+3. Dispatch it again with `dry_run` set to `false`. The workflow refuses a version that is not strictly newer than the latest tag, creates the tag on main HEAD, and creates the GitHub release with generated notes.
+4. Edit the release notes on the release page if the generated notes need the categories above.
 
 ### 7. Verify
 
@@ -92,5 +78,6 @@ Use `gh release create --generate-notes` as a starting point if there are many c
 - [ ] On main branch, up to date
 - [ ] `verify` skill passed
 - [ ] Version number confirmed with user
-- [ ] Tag created and pushed
+- [ ] Dry run of the `Release (tag)` workflow passed
+- [ ] Real run created the tag and release
 - [ ] GitHub release created with release notes
