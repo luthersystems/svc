@@ -616,7 +616,10 @@ func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t 
 // a method (Format, else Error, else String), and, for a pointer type,
 // whether that method is declared on the value type (called through a
 // nil pointer it panics, and fmt prints "<nil>").
-type fmtMethod struct{ has, onValue bool }
+type fmtMethod struct {
+	name         string // the method fmt calls
+	has, onValue bool
+}
 
 var fmtMethods sync.Map // reflect.Type -> fmtMethod
 
@@ -629,7 +632,7 @@ func fmtMethodOf(t reflect.Type) fmtMethod {
 	var m fmtMethod
 	for _, it := range []reflect.Type{formatterType, errorType, stringerType} {
 		if t.Implements(it) {
-			m = fmtMethod{has: true, onValue: t.Kind() == reflect.Pointer && t.Elem().Implements(it)}
+			m = fmtMethod{name: it.Method(0).Name, has: true, onValue: t.Kind() == reflect.Pointer && t.Elem().Implements(it)}
 			break
 		}
 	}
@@ -827,7 +830,7 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			if nilValueMethod(v) {
 				return len("<nil>") // goPrinter writes it without the call
 			}
-			if c, ok := bigcost.ValueSteps(v); ok {
+			if c, ok := bigcost.MethodSteps(v, fmtMethodOf(v.Type()).name); ok {
 				z.steps += min(c, z.limit)
 			}
 			return 0

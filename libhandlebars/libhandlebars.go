@@ -15,6 +15,7 @@ import (
 	"github.com/luthersystems/elps/lisp"
 	"github.com/luthersystems/elps/lisp/lisplib/libjson"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
+	"github.com/luthersystems/svc/libhandlebars/internal/bigcost"
 )
 
 // DefaultPackageName is the package name used by LoadPackage.
@@ -500,7 +501,10 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 				// A Marshaler reaching a RawMessage by embedding: its
 				// search is charged whatever it finds.
 				_, cost, found := embeddedRaw(v)
-				if lerr := w.env.ChargeSteps(cost); lerr.Type == lisp.LError {
+				// math/big's MarshalJSON (its own, or promoted) does more
+				// work than its text shows: charged before it runs.
+				bigSteps, _ := bigcost.MethodSteps(v, "MarshalJSON")
+				if lerr := w.env.ChargeSteps(cost + bigSteps); lerr.Type == lisp.LError {
 					return nil, true, lerr
 				}
 				switch found {

@@ -3,8 +3,11 @@
 package bigcost
 
 import (
+	"encoding"
+	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -64,40 +67,86 @@ type outer struct {
 
 type byValue struct{ big.Rat }
 
-type twoAtOneDepth struct {
+type floatRat struct {
+	*big.Float
+	*big.Rat
+}
+
+type floatInt struct {
+	*big.Float
 	*big.Int
+}
+
+type mine struct{}
+
+func (mine) Format(s fmt.State, _ rune) { _, _ = fmt.Fprint(s, "mineF") }
+func (mine) String() string             { return "mineS" }
+
+type shadow struct {
+	mine
 	*big.Float
 }
 
-type shallowWins struct {
-	*big.Int
-	inner
+type deep struct {
+	mine
+	inner2
 }
+
+type inner2 struct{ *big.Float }
+
+type ownAll struct{ *big.Float }
+
+func (ownAll) String() string { return "own" }
+
+type fieldNamed struct {
+	*big.Float
+	String int
+}
+
+type ifaceEmbed struct{ fmt.Stringer }
 
 type selfEmbed struct{ *selfEmbed }
 
-// TestStepsEmbedded: methods promoted from an embedded math/big field are
-// charged as the field's, found by Go's selector rules.
-func TestStepsEmbedded(t *testing.T) {
+// TestMethodSteps: the method a call reaches is found by Go's selector
+// rules, per name: math/big's is charged, a type's own (or one Go does not
+// promote: shadowed or ambiguous) is not.
+func TestMethodSteps(t *testing.T) {
 	f := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 12))
 	fs, _ := Steps(f)
 	i := new(big.Int).Lsh(big.NewInt(1), 1<<16)
 	is, _ := Steps(i)
+	r := big.NewRat(1, 3)
+	rs, _ := Steps(r)
+	var tm encoding.TextMarshaler = f
 	for _, c := range []struct {
 		x    any
+		name string
 		want int64
 		ok   bool
 	}{
-		{wrapF{f}, fs, true}, {&wrapF{f}, fs, true}, {wrapF{}, 1, true},
-		{outer{inner{i}, 1}, is, true}, {&outer{inner{i}, 1}, is, true},
-		{&byValue{*big.NewRat(1, 3)}, 2 * IntSteps(2), true},
-		{byValue{}, 0, false},           // not addressable: its methods are not promoted
-		{twoAtOneDepth{i, f}, 0, false}, // ambiguous
-		{shallowWins{big.NewInt(1), inner{i}}, IntSteps(1), true},
-		{&selfEmbed{&selfEmbed{}}, 0, false}, {(*wrapF)(nil), 0, false}, {struct{ A *big.Int }{i}, 0, false},
+		{f, "Format", fs, true}, {wrapF{f}, "Format", fs, true}, {&wrapF{f}, "String", fs, true}, {wrapF{}, "Format", 1, true},
+		{outer{inner{i}, 1}, "Format", is, true}, {&outer{inner{i}, 1}, "MarshalJSON", is, true},
+		{&byValue{*r}, "String", rs, true}, {byValue{}, "String", 0, false},
+		{floatRat{f, r}, "Format", fs, true}, {floatRat{f, r}, "String", 0, false}, // String: ambiguous
+		{floatInt{f, i}, "MarshalJSON", is, true}, {floatInt{f, i}, "MarshalText", 0, false},
+		{shadow{mine{}, f}, "Format", 0, false}, {shadow{mine{}, f}, "String", 0, false},
+		{deep{mine{}, inner2{f}}, "Format", 0, false}, {ownAll{f}, "String", 0, false}, {ownAll{f}, "Format", fs, true},
+		{fieldNamed{f, 1}, "String", 0, false}, {fieldNamed{f, 1}, "Format", fs, true},
+		{ifaceEmbed{f}, "String", fs, true}, {ifaceEmbed{}, "String", 0, false}, {ifaceEmbed{ifaceEmbed{f}}, "String", fs, true},
+		{&selfEmbed{&selfEmbed{}}, "String", 0, false}, {(*wrapF)(nil), "Format", 0, false},
+		{struct{ A *big.Int }{i}, "Format", 0, false},
 	} {
-		n, ok := Steps(c.x)
-		require.Equal(t, c.ok, ok, "%T", c.x)
-		require.Equal(t, c.want, n, "%T", c.x)
+		n, ok := MethodSteps(reflect.ValueOf(c.x), c.name)
+		require.Equal(t, c.ok, ok, "%T %s", c.x, c.name)
+		require.Equal(t, c.want, n, "%T %s", c.x, c.name)
 	}
+	// An interface's static type is followed to its dynamic value.
+	tms := []encoding.TextMarshaler{tm}
+	n, ok := MethodSteps(reflect.ValueOf(tms).Index(0), "MarshalText")
+	require.True(t, ok)
+	require.Equal(t, fs, n)
+	holder := struct{ T encoding.TextMarshaler }{wrapF{f}}
+	n, ok = MethodSteps(reflect.ValueOf(holder).Field(0), "MarshalText")
+	require.True(t, ok)
+	require.Equal(t, fs, n)
 }

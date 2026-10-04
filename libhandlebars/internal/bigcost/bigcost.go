@@ -16,6 +16,7 @@ package bigcost
 import (
 	"math/big"
 	"reflect"
+	"runtime"
 	"sync"
 )
 
@@ -26,28 +27,59 @@ var (
 )
 
 // Steps returns the steps printing x takes, and whether x is a math/big
-// value whose methods this package knows (*big.Int, *big.Rat, *big.Float),
-// or embeds one whose methods it promotes (see ValueSteps).
-func Steps(x any) (int64, bool) { return ValueSteps(reflect.ValueOf(x)) }
+// value whose methods this package knows (*big.Int, *big.Rat, *big.Float).
+func Steps(x any) (int64, bool) { return direct(reflect.ValueOf(x)) }
 
-// ValueSteps is Steps for v. A struct, or a pointer to one, whose methods
-// are promoted from an embedded math/big field runs math/big's work when
-// they are called: the field is found by Go's selector rules (the
-// shallowest embedded *big.X, or addressable big.X, unique at its depth)
-// and charged. A type that declares its own method over such a field is
-// charged as if it did not (an overcharge). Values reached through
-// unexported fields are read too: their promoted methods run all the same.
-func ValueSteps(v reflect.Value) (int64, bool) {
-	if n, ok := direct(v); ok {
-		return n, true
+// MethodSteps returns the steps calling v's method name takes (fmt's
+// Format, Error or String; encoding/json's MarshalJSON or MarshalText),
+// and whether that call runs math/big's method: v is a *big.Int, *big.Rat
+// or *big.Float, or the method is promoted to v's type from one by
+// embedding, directly or through an embedded interface holding one. The
+// method's supplier is found by Go's selector rules: a method the type
+// declares itself is its own; else the shallowest embedded field
+// declaring the name, unless another field or method of that name is at
+// the same depth (then nothing is promoted). An interface (static type, or
+// embedded field) is followed to its dynamic value.
+func MethodSteps(v reflect.Value, name string) (int64, bool) {
+	for range maxHops {
+		for v.Kind() == reflect.Interface {
+			if v.IsNil() {
+				return 0, false
+			}
+			v = v.Elem()
+		}
+		if !v.IsValid() {
+			return 0, false
+		}
+		if n, ok := direct(v); ok {
+			return n, true
+		}
+		r := resolve(v.Type(), name)
+		if r.kind == supplierNone {
+			return 0, false
+		}
+		f := follow(v, r.path)
+		if !f.IsValid() {
+			return 0, false // behind a nil pointer: the call panics
+		}
+		if r.kind == supplierInterface {
+			v = f
+			continue
+		}
+		if f.Kind() != reflect.Pointer {
+			if !f.CanAddr() {
+				return 0, false
+			}
+			f = f.Addr()
+		}
+		return direct(f)
 	}
-	if !v.IsValid() || !mayEmbed(v.Type()) {
-		return 0, false
-	}
-	return embedded(v)
+	return 0, false
 }
 
-// direct charges v if it is a *big.Int, *big.Rat or *big.Float.
+// direct charges v if it is a *big.Int, *big.Rat or *big.Float. A value
+// reached through an unexported field is read too: its promoted methods
+// run all the same.
 func direct(v reflect.Value) (int64, bool) {
 	if !v.IsValid() || v.Kind() != reflect.Pointer {
 		return 0, false
@@ -71,106 +103,147 @@ func direct(v reflect.Value) (int64, bool) {
 	}
 }
 
-// The embedding search's bounds: deeper or wider embeddings are not
-// followed (Go code that builds them is the caller's).
+// The bounds of the supplier search: deeper or wider embeddings, or longer
+// chains of embedded interfaces, are not followed (Go code that builds
+// them is the caller's).
 const (
 	maxEmbedDepth  = 16
 	maxEmbedFields = 1 << 10
+	maxHops        = 64
 )
 
-// embeds caches mayEmbed per type.
-var embeds sync.Map // reflect.Type -> bool
+type supplierKind uint8
 
-// mayEmbed reports whether t, or what it points to, embeds a math/big
-// type within the search's bounds, looking at types only.
-func mayEmbed(t reflect.Type) bool {
-	if b, ok := embeds.Load(t); ok {
-		return b.(bool) //nolint:forcetypeassert // stored below
-	}
-	found := false
-	level, scanned := []reflect.Type{t}, 0
-	for depth := 0; depth < maxEmbedDepth && len(level) > 0 && !found; depth++ {
-		var next []reflect.Type
-		for _, st := range level {
-			if st.Kind() == reflect.Pointer {
-				st = st.Elem()
-			}
-			if st.Kind() != reflect.Struct {
-				continue
-			}
-			for i := 0; i < st.NumField() && scanned < maxEmbedFields; i++ {
-				scanned++
-				f := st.Field(i)
-				if !f.Anonymous {
-					continue
-				}
-				ft := f.Type
-				if ft.Kind() == reflect.Pointer {
-					ft = ft.Elem()
-				}
-				if ft == intType || ft == ratType || ft == floatType {
-					found = true
-				}
-				next = append(next, f.Type)
-			}
-		}
-		level = next
-	}
-	embeds.Store(t, found)
-	return found
+const (
+	supplierNone      supplierKind = iota // the type's own method, or none
+	supplierBig                           // a math/big field
+	supplierInterface                     // an embedded interface field
+)
+
+// supplier is where a type's method comes from: the field path to it.
+type supplier struct {
+	path []int
+	kind supplierKind
 }
 
-// embedded finds the math/big field v's promoted methods come from, by
-// Go's selector rules, and charges it.
-func embedded(v reflect.Value) (int64, bool) {
-	level, scanned := []reflect.Value{v}, 0
-	for depth := 0; depth < maxEmbedDepth && len(level) > 0; depth++ {
-		var found, next []reflect.Value
-		for _, s := range level {
-			if s.Kind() == reflect.Pointer {
-				if s.IsNil() {
-					continue
-				}
-				s = s.Elem()
-			}
-			if s.Kind() != reflect.Struct {
-				continue
-			}
-			for i := range s.NumField() {
+type resolveKey struct {
+	t    reflect.Type
+	name string
+}
+
+var resolved sync.Map // resolveKey -> supplier
+
+// resolve finds the field t's method name is promoted from (t a struct or
+// a pointer to one), by Go's selector rules, once per type and name.
+func resolve(t reflect.Type, name string) supplier {
+	key := resolveKey{t, name}
+	if r, ok := resolved.Load(key); ok {
+		return r.(supplier) //nolint:forcetypeassert // stored below
+	}
+	r := search(t, name)
+	resolved.Store(key, r)
+	return r
+}
+
+type embedNode struct {
+	t    reflect.Type // a struct type
+	path []int
+}
+
+func search(t reflect.Type, name string) supplier {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || declares(t, name) {
+		return supplier{}
+	}
+	level, scanned := []embedNode{{t: t}}, 0
+	for range maxEmbedDepth {
+		var hits []supplier
+		var next []embedNode
+		shadowed := false
+		for _, n := range level {
+			for i := range n.t.NumField() {
 				if scanned++; scanned > maxEmbedFields {
-					return 0, false
+					return supplier{}
 				}
-				f := s.Type().Field(i)
+				f := n.t.Field(i)
+				if f.Name == name {
+					shadowed = true // a field of that name at this depth
+				}
 				if !f.Anonymous {
 					continue
 				}
-				fv := s.Field(i)
-				switch f.Type {
-				case intType, ratType, floatType:
-					// Its methods are the pointer's: promoted only where
-					// the struct is addressable.
-					if fv.CanAddr() {
-						found = append(found, fv.Addr())
+				path := append(append([]int(nil), n.path...), i)
+				ft := f.Type
+				if ft.Kind() == reflect.Interface {
+					if _, ok := ft.MethodByName(name); ok {
+						hits = append(hits, supplier{path, supplierInterface})
 					}
 					continue
 				}
-				if _, ok := direct(reflect.Zero(f.Type)); ok {
-					found = append(found, fv)
-					continue
+				base := ft
+				if base.Kind() == reflect.Pointer {
+					base = base.Elem()
 				}
-				next = append(next, fv)
+				switch {
+				case declares(base, name):
+					kind := supplierNone // a type's own method
+					if base == intType || base == ratType || base == floatType {
+						kind = supplierBig
+					}
+					hits = append(hits, supplier{path, kind})
+				case base.Kind() == reflect.Struct:
+					next = append(next, embedNode{base, path})
+				}
 			}
 		}
-		switch len(found) {
-		case 0:
-			level = next
-		case 1:
-			return direct(found[0])
-		default:
-			return 0, false // ambiguous at this depth: nothing promoted
+		switch {
+		case shadowed || len(hits) > 1:
+			return supplier{} // shadowed or ambiguous: not promoted
+		case len(hits) == 1:
+			return hits[0]
+		}
+		level = next
+	}
+	return supplier{}
+}
+
+// declares reports whether t declares method name itself (on t or *t),
+// rather than having it promoted from a field: a promoted method, like a
+// value method seen through a pointer, is a compiler-generated wrapper.
+func declares(t reflect.Type, name string) bool {
+	for _, x := range []reflect.Type{t, reflect.PointerTo(t)} {
+		if m, ok := x.MethodByName(name); ok && !autogenerated(m.Func) {
+			return true
 		}
 	}
-	return 0, false
+	return false
+}
+
+// autogenerated reports whether fn is a compiler-generated wrapper.
+func autogenerated(fn reflect.Value) bool {
+	f := runtime.FuncForPC(fn.Pointer())
+	if f == nil {
+		return false
+	}
+	file, _ := f.FileLine(f.Entry())
+	return file == "<autogenerated>"
+}
+
+// follow walks v down path (field indices, through pointers), or returns
+// the zero Value at a nil pointer.
+func follow(v reflect.Value, path []int) reflect.Value {
+	for _, i := range path {
+		if v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return reflect.Value{}
+			}
+			v = v.Elem()
+		}
+		v = v.Field(i)
+	}
+	return v
 }
 
 // words is n bits in 64-bit words, at least one.

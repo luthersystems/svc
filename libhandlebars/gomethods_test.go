@@ -3,6 +3,7 @@
 package libhandlebars_test
 
 import (
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luthersystems/elps/lisp"
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 	"github.com/luthersystems/svc/libhandlebars/internal/bigcost"
@@ -306,5 +308,110 @@ func TestGoContextNaNKeysOrdered(t *testing.T) {
 	for _, x := range []any{map[float64]int{nan: 1, math.NaN(): 2}, map[nanKey]int{{nan, "a"}: 1, {math.NaN(), "a"}: 2}} {
 		_, err = libhandlebars.Render(tpl, map[string]any{"x": x})
 		require.EqualError(t, err, "Go map with more than one NaN key has no deterministic text")
+	}
+}
+
+type MineAll struct{}
+
+func (MineAll) Format(s fmt.State, _ rune) { _, _ = fmt.Fprint(s, "mineF") }
+func (MineAll) Error() string              { return "mineE" }
+func (MineAll) String() string             { return "mineS" }
+
+type ShadowBig struct {
+	MineAll
+	*big.Float
+}
+
+type DeepBig struct {
+	MineAll
+	BigWrap
+}
+
+type OwnAll struct{ *big.Float }
+
+func (OwnAll) Format(s fmt.State, _ rune)   { _, _ = fmt.Fprint(s, "ownF") }
+func (OwnAll) String() string               { return "ownS" }
+func (OwnAll) MarshalText() ([]byte, error) { return []byte("ownT"), nil }
+
+type FloatRat struct {
+	*big.Float
+	*big.Rat
+}
+
+type IntRat struct {
+	*big.Int
+	*big.Rat
+}
+
+type FloatInt struct {
+	*big.Float
+	*big.Int
+}
+
+type EmbFormatter struct{ fmt.Formatter }
+
+type EmbStringer struct{ fmt.Stringer }
+
+type EmbText struct{ encoding.TextMarshaler }
+
+type IfaceField struct{ T encoding.TextMarshaler }
+
+// TestBigMethodResolved: the method a call reaches is found by Go's
+// selector rules, per method name: math/big's (promoted through any
+// embedding, an embedded interface, or behind an interface type) is
+// charged and fails fast when huge; a type's own method, or one that
+// shadows math/big's, prints as raymond printed it.
+func TestBigMethodResolved(t *testing.T) {
+	huge := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30))
+	hugeInt := new(big.Int).Lsh(big.NewInt(1), 1<<26)
+	var tm encoding.TextMarshaler = huge
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
+	require.NoError(t, err)
+	run := func(x any, opt libhandlebars.RenderOption) {
+		t.Helper()
+		start := time.Now()
+		_, err := libhandlebars.RenderWith(tpl, map[string]any{"x": x}, opt)
+		require.ErrorContains(t, err, "maximum of", "%#v", x)
+		require.Less(t, time.Since(start), 5*time.Second, "%#v", x)
+	}
+	goMode, jsonMode := libhandlebars.WithGoContext(), libhandlebars.WithJSONContext()
+	for _, x := range []any{
+		[]any{EmbFormatter{huge}}, []any{EmbStringer{huge}}, []any{FloatRat{huge, big.NewRat(1, 3)}},
+		[]any{IntRat{hugeInt, big.NewRat(1, 3)}},
+	} {
+		run(x, goMode)
+	}
+	for _, x := range []any{
+		IfaceField{tm}, []encoding.TextMarshaler{tm}, map[encoding.TextMarshaler]int{huge: 1},
+		EmbText{huge}, []any{EmbText{huge}}, map[EmbText]int{{huge}: 1},
+		FloatInt{huge, hugeInt}, []any{IntRat{hugeInt, big.NewRat(1, 3)}},
+	} {
+		run(x, jsonMode)
+	}
+	for _, x := range []any{ShadowBig{MineAll{}, huge}, DeepBig{MineAll{}, BigWrap{huge}}, OwnAll{huge}} {
+		checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{x}})
+	}
+	checkJSON(t, `{{x}}`, map[string]any{"x": OwnAll{huge}})
+}
+
+// TestBigMethodNativesFailFast: an ELPS native holding math/big behind
+// embedding, an interface or a map key is charged before the encoder
+// runs its methods: with a 2^26 step budget the render fails at once.
+func TestBigMethodNativesFailFast(t *testing.T) {
+	huge := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30))
+	var tm encoding.TextMarshaler = huge
+	for _, x := range []any{
+		EmbText{huge}, IfaceField{tm}, map[*big.Float]int{huge: 1}, map[encoding.TextMarshaler]int{huge: 1},
+		BigWrap{huge}, FloatInt{huge, new(big.Int).Lsh(big.NewInt(1), 1<<26)}, new(big.Int).Lsh(big.NewInt(1), 1<<26),
+	} {
+		env := newEnv(t)
+		env.Runtime.SetStepBudget(1 << 26)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("x", lisp.Native(x))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		start := time.Now()
+		res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "{{x}}" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%T: %v", x, res)
+		require.Less(t, time.Since(start), 5*time.Second, "%T", x)
 	}
 }

@@ -133,7 +133,11 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		// math/big's methods do more work than their text shows: charged
 		// before encoding/json (or firstMarshalerError) calls them.
-		bigSteps, _ := bigcost.ValueSteps(v)
+		method := "MarshalJSON"
+		if text {
+			method = "MarshalText"
+		}
+		bigSteps, _ := bigcost.MethodSteps(v, method)
 		if err := w.c.steps(bigSteps); err != nil {
 			return jsonTotals{steps: bigSteps}, err
 		}
@@ -832,7 +836,7 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			// map order.
 			var keySteps int64
 			for it := v.MapRange(); it.Next(); {
-				c, _ := bigcost.ValueSteps(it.Key())
+				c, _ := bigcost.MethodSteps(it.Key(), "MarshalText")
 				keySteps = min(keySteps+2*c, 1<<62)
 			}
 			if err := w.c.steps(keySteps); err != nil {
