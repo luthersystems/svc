@@ -3,10 +3,12 @@
 package hbs
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"math/bits"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -645,13 +647,10 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 	}
 	// A reflect.Value below the top prints by its String method (fmt
 	// unwraps only a top-level one, which goAppendV does too): "<T Value>",
-	// or a string Value's string. One fmt cannot take prints its fields,
-	// addresses among them.
-	if v.IsValid() && v.Type() == reflectValueType && depth > 0 {
-		if !v.CanInterface() {
-			z.addr = true
-			return 20
-		}
+	// or a string Value's string.
+	// (One fmt cannot take, it prints by reflection, as the struct it is:
+	// the Struct case below walks it, finding its pointers' addresses.)
+	if v.IsValid() && v.Type() == reflectValueType && depth > 0 && v.CanInterface() {
 		rv, _ := v.Interface().(reflect.Value)
 		if rv.Kind() == reflect.String {
 			z.steps += units(rv.Len(), hashUnit)
@@ -739,6 +738,12 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		if kw.deep && v.Len() > 1 {
 			z.deep = true
 		}
+		// Keys holding pointers (behind a String or Error method, say,
+		// where the size walk stops) may be ordered by address: then the
+		// text would differ between runs, and it prints as its type.
+		if kw.sawPtr && v.Len() > 1 && !z.deep && !z.over() && keysOrderedByAddress(v) {
+			z.addr = true
+		}
 		return n
 	case reflect.Struct:
 		n := 2
@@ -793,9 +798,10 @@ const cmpUnit = 256
 // have), stopping at maxDepth and recording that it did.
 type keyWalk struct {
 	limit    int64 // stop counting past it
-	maxDepth int
-	deep     bool  // a key goes past maxDepth
 	visits   int64 // values nan and cmp have visited, all keys together
+	maxDepth int
+	deep     bool // a key goes past maxDepth
+	sawPtr   bool // a key holds a non-nil pointer, chan or unsafe pointer
 }
 
 // past reports whether depth is past maxDepth, recording it.
@@ -845,8 +851,100 @@ func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
 			n += kw.cmp(k.Field(i), depth+1)
 		}
 		return n
+	case reflect.Pointer, reflect.Chan, reflect.UnsafePointer:
+		if !k.IsNil() {
+			kw.sawPtr = true // fmtsort compares these by address
+		}
+		return 1
 	default:
 		return 1
+	}
+}
+
+// keysOrderedByAddress reports whether fmt's sort of map m's keys would be
+// decided, for some pair, by an address (fmtsort compares pointers, chans
+// and unsafe pointers by address: their order follows the heap, so the
+// text would differ between runs). It sorts the keys with fmtsort's
+// comparison, noting where an address decides: two keys whose order an
+// address decides are compared at it by any comparison sort, directly or
+// through a key equal to both up to it. The comparisons are charged with
+// the sizer's key costs (keyWalk.cmp).
+func keysOrderedByAddress(m reflect.Value) bool {
+	keys := make([]reflect.Value, 0, m.Len())
+	it := m.MapRange()
+	for it.Next() {
+		keys = append(keys, it.Key())
+	}
+	byAddr := false
+	slices.SortFunc(keys, func(a, b reflect.Value) int { return fmtsortCompare(a, b, &byAddr) })
+	return byAddr
+}
+
+// fmtsortCompare is internal/fmtsort's compare, setting *byAddr where two
+// different addresses decide it. (An interface's dynamic types are
+// ordered by their type descriptors' addresses too, which are fixed in a
+// build: not noted.)
+func fmtsortCompare(a, b reflect.Value, byAddr *bool) int {
+	switch a.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return cmp.Compare(a.Int(), b.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return cmp.Compare(a.Uint(), b.Uint())
+	case reflect.String:
+		return cmp.Compare(a.String(), b.String())
+	case reflect.Float32, reflect.Float64:
+		return cmp.Compare(a.Float(), b.Float())
+	case reflect.Complex64, reflect.Complex128:
+		ac, bc := a.Complex(), b.Complex()
+		if c := cmp.Compare(real(ac), real(bc)); c != 0 {
+			return c
+		}
+		return cmp.Compare(imag(ac), imag(bc))
+	case reflect.Bool:
+		switch {
+		case a.Bool() == b.Bool():
+			return 0
+		case a.Bool():
+			return 1
+		default:
+			return -1
+		}
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
+		ap, bp := a.Pointer(), b.Pointer()
+		if ap != bp && ap != 0 && bp != 0 {
+			*byAddr = true
+		}
+		return cmp.Compare(ap, bp)
+	case reflect.Struct:
+		for i := range a.NumField() {
+			if c := fmtsortCompare(a.Field(i), b.Field(i), byAddr); c != 0 {
+				return c
+			}
+		}
+		return 0
+	case reflect.Array:
+		for i := range a.Len() {
+			if c := fmtsortCompare(a.Index(i), b.Index(i), byAddr); c != 0 {
+				return c
+			}
+		}
+		return 0
+	case reflect.Interface:
+		switch an, bn := a.IsNil(), b.IsNil(); {
+		case an && bn:
+			return 0
+		case an:
+			return -1
+		case bn:
+			return 1
+		}
+		at, bt := a.Elem().Type(), b.Elem().Type()
+		if at != bt {
+			return cmp.Compare(reflect.ValueOf(at).Pointer(), reflect.ValueOf(bt).Pointer())
+		}
+		return fmtsortCompare(a.Elem(), b.Elem(), byAddr)
+	default:
+		return 0
 	}
 }
 

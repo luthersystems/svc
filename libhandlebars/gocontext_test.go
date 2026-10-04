@@ -944,3 +944,40 @@ func TestGoContextReflectValueFmt(t *testing.T) {
 	_, err = libhandlebars.Render(tpl, map[string]any{"x": reflect.ValueOf(reflect.ValueOf(make([]int, 1<<22)))})
 	require.ErrorContains(t, err, "got: <[]int Value>", "the inner Value's String, not its 4M elements")
 }
+
+type ptrStringer struct{ p *int }
+
+func (ptrStringer) String() string { return "s" }
+
+// TestGoContextKeysByAddress: %v of a map whose keys fmt orders by address
+// (pointers behind an error or String method, or a time's Location) would
+// differ between runs: it prints as its type. Keys that hold pointers
+// fmt never needs to compare print as before.
+func TestGoContextKeysByAddress(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	a, b := 1, 2
+	same := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		x    any
+		want string
+	}{
+		{map[error]int{errors.New("a"): 1, errors.New("b"): 2}, "got: (map[error]int)"},
+		{map[time.Time]int{same.In(time.FixedZone("X", 0)): 1, same.In(time.FixedZone("Y", 0)): 2}, "got: (map[time.Time]int)"},
+		{map[time.Time]int{same: 1, same.In(time.FixedZone("X", 0)): 2}, "got: map["}, // UTC's Location is nil: ordered first, always
+		{map[any]int{ptrStringer{&a}: 1, ptrStringer{&b}: 2}, "got: (map[interface {}]int)"},
+		{map[time.Time]int{same: 1, same.Add(time.Hour).In(time.FixedZone("X", 0)): 2}, "got: map["},
+		{map[ptrStringer]int{{&a}: 1}, "got: map[s:1]"},
+	} {
+		for range 3 {
+			_, err = libhandlebars.Render(tpl, map[string]any{"x": tc.x})
+			require.ErrorContains(t, err, tc.want, "%T", tc.x)
+		}
+	}
+}
+
+// TestGoContextUnexportedZeroValue: an unexported zero reflect.Value field
+// prints by reflection, as fmt prints it (no address in it).
+func TestGoContextUnexportedZeroValue(t *testing.T) {
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": struct{ rv reflect.Value }{}})
+}

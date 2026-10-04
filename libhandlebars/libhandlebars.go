@@ -448,9 +448,10 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 		w.depth = lisp.MaxValueDepth
 	}
 	_, lerr := w.walk(v, 0)
-	// libjson encodes a value nested past its guard depth (64) twice: a
-	// first pass stops there, and a second, deep-safe one starts over.
-	if lerr == nil && w.deepest >= 64 {
+	// libjson encodes a value nested to its guard depth (64, counting the
+	// top value as 1: the walk's 63) twice: a first pass stops there, and
+	// a second, deep-safe one starts over.
+	if lerr == nil && w.deepest >= 63 {
 		if e := env.ChargeSteps(w.charged); e.Type == lisp.LError {
 			lerr = e
 		}
@@ -961,7 +962,13 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		}
 		n, lower = int64(len(b)), 0 // native() counted it
 	case lisp.LBytes:
-		n, lower = int64(len(x.Bytes()))*4/3+4, int64(base64.StdEncoding.EncodedLen(len(x.Bytes())))
+		enc := int64(base64.StdEncoding.EncodedLen(len(x.Bytes())))
+		// Encoding it is charged as a string's scan, a step per started
+		// 32 bytes written (as a native []byte's).
+		if lerr := w.env.ChargeSteps(units64(enc, 32)); lerr.Type == lisp.LError {
+			return true, lerr
+		}
+		n, lower = enc+2, enc
 	case lisp.LSExpr:
 		n, children, lower, closer = int64(len(x.Cells))+2, x.Cells, 1, 1
 	case lisp.LQuote, lisp.LTaggedVal:

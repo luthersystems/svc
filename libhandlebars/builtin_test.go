@@ -1520,3 +1520,61 @@ func TestEncodeNativeFailureAfterUndercounted(t *testing.T) {
 		require.Contains(t, res.Cells[0].Str, "allocation size exceeds maximum (1024)", name)
 	}
 }
+
+// TestEncodeErrorOrderRows: Codex's round-19 shapes, as json:dump-bytes
+// reports them: an unloadable native before a failing one, and a symbol
+// key (json:null) before a chan at a tiny cap.
+func TestEncodeErrorOrderRows(t *testing.T) {
+	check := func(t *testing.T, ctx *lisp.LVal, maxAlloc int, want string) {
+		t.Helper()
+		env := newEnv(t)
+		if maxAlloc > 0 {
+			env.Runtime.MaxAlloc = maxAlloc
+		}
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type)
+		require.Contains(t, dump.String(), want)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%v", res)
+		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
+	}
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("a", lisp.Native(json.RawMessage("1e1000")))
+	ctx.MapSetString("b", lisp.Native(make(chan int)))
+	check(t, ctx, 0, "unable to encode native value")
+
+	ctx = lisp.SortedMap()
+	ctx.MapSetLVal(lisp.Symbol("json:null"), lisp.String(""))
+	ctx.MapSetString("z", lisp.Native(make(chan int)))
+	check(t, ctx, 18, "allocation size exceeds maximum (18)")
+}
+
+// TestEncodeBytesThenNaNCeiling: bytes encoded as base64, then a NaN (the
+// encode fails, so its own charge is not made): the base64 is charged by
+// the walk, flat and at libjson's guard depth.
+func TestEncodeBytesThenNaNCeiling(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	for _, depth := range []int{0, 61, 62} {
+		best := math.Inf(1)
+		for range 3 {
+			last := lisp.Float(math.NaN())
+			for range depth {
+				last = lisp.QExpr([]*lisp.LVal{last})
+			}
+			env := newEnv(t)
+			env.Put(lisp.Symbol("ctx"), lisp.SortedMap())
+			ctx := lisp.SortedMap()
+			ctx.MapSetString("a", lisp.QExpr([]*lisp.LVal{lisp.Bytes(make([]byte, 6<<20)), last}))
+			env.Put(lisp.Symbol("ctx"), ctx)
+			start := time.Now()
+			res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+			require.Equal(t, lisp.LError, res.Type)
+			best = min(best, float64(time.Since(start).Nanoseconds())/float64(steps))
+		}
+		t.Logf("6 MiB bytes then NaN %d lists deep: %.0f ns/step", depth, best)
+		require.False(t, ceilingFails(t, best), "depth %d: %.0f ns/step", depth, best)
+	}
+}
