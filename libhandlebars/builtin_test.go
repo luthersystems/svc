@@ -1495,3 +1495,28 @@ func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 	t.Logf("cap replay after %d escaped bytes: %.0f ns/step", 6*len(past), best)
 	require.False(t, ceilingFails(t, best), "cap replay: %.0f ns/step", best)
 }
+
+// TestEncodeNativeFailureAfterUndercounted: values the walk's estimate
+// undercounts (empty maps, one-byte bytes) before a failing native, past
+// the cap: the encoder decides, as json:dump-bytes does (the cap).
+func TestEncodeNativeFailureAfterUndercounted(t *testing.T) {
+	for name, fill := range map[string]func() *lisp.LVal{
+		"empty maps": func() *lisp.LVal { return lisp.SortedMap() },
+		"bytes":      func() *lisp.LVal { return lisp.Bytes([]byte{1}) },
+	} {
+		cells := make([]*lisp.LVal, 0, 451)
+		for range 450 {
+			cells = append(cells, fill())
+		}
+		cells = append(cells, lisp.Native(make(chan int)))
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 1024
+		env.Put(lisp.Symbol("ctx"), lisp.QExpr(cells))
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type, name)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, name)
+		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str, name)
+		require.Contains(t, res.Cells[0].Str, "allocation size exceeds maximum (1024)", name)
+	}
+}

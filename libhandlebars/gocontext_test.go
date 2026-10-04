@@ -916,3 +916,31 @@ func TestGoContextScalarsSizedExactly(t *testing.T) {
 		require.NotContains(t, err.Error(), "produces more than", "%T", x)
 	}
 }
+
+type unexpF struct {
+	f float64
+	c complex64
+}
+
+// TestGoContextReflectValueFmt: fmt's %v of reflect.Values and of
+// unexported float fields, as raymond printed them: a Value holding a
+// Value prints by the inner one's String; a Value of an unexported field
+// prints by reflection; unexported floats print without being taken.
+func TestGoContextReflectValueFmt(t *testing.T) {
+	inner := reflect.ValueOf(struct {
+		x int
+		y string
+		z []float64
+	}{5, "hi", []float64{1.5}})
+	for _, x := range []any{
+		reflect.ValueOf(reflect.ValueOf(7)),
+		inner.Field(0), inner.Field(1), inner.Field(2),
+		unexpF{1.5, 2}, []unexpF{{1.5, 2}}, map[string]any{"k": unexpF{1.5, 2}},
+	} {
+		checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": x})
+	}
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	_, err = libhandlebars.Render(tpl, map[string]any{"x": reflect.ValueOf(reflect.ValueOf(make([]int, 1<<22)))})
+	require.ErrorContains(t, err, "got: <[]int Value>", "the inner Value's String, not its 4M elements")
+}

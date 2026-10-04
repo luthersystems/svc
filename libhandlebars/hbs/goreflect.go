@@ -545,24 +545,39 @@ func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
 		case nested:
 			// Nested, fmt calls its String method: "<T Value>", or a
 			// string Value's string. fmt given it here would unwrap it.
-			str := rv.String()
-			r.steps1(units(len(str), hashUnit))
-			r.checkProduced(len(dst) + len(str))
-			r.produced(len(str))
-			return append(dst, str...)
+			return r.appendValueString(dst, rv)
 		case !rv.IsValid():
 		case !rv.CanInterface():
-			return r.appendTypeName(dst, rv.Type())
+			// fmt prints it by reflection alone, calling no method at
+			// the top: size it so, and print it, unless that holds an
+			// address.
+			return r.goAppendFmt(dst, rv, rv.Type())
 		default:
 			v = rv.Interface()
+			if inner, ok := v.(reflect.Value); ok {
+				// fmt unwraps once, then calls the inner Value's String.
+				return r.appendValueString(dst, inner)
+			}
 		}
 	}
-	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
 	depth := 0
 	if nested {
 		depth = 1 // fmt follows a pointer only at the top
 	}
-	size := z.size(reflect.ValueOf(v), depth)
+	return r.goFormat(dst, reflect.ValueOf(v), v, depth, reflect.TypeOf(v))
+}
+
+// goAppendFmt appends fmt's %v of rv, a reflect.Value fmt prints by
+// reflection alone (its value cannot be taken), sized the same way.
+func (r *renderer) goAppendFmt(dst []byte, rv reflect.Value, t reflect.Type) []byte {
+	return r.goFormat(dst, rv, rv, 0, t)
+}
+
+// goFormat sizes sv (at depth), then appends fmt's %v of arg, or "(T)"
+// for t where the text would hold an address.
+func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t reflect.Type) []byte {
+	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
+	size := z.size(sv, depth)
 	// The walk's charge, size and outcome do not depend on Go's map
 	// order: it counts every node up to MaxDepth, or stops once the count
 	// passes what MaxSteps leaves, and reports depth only after.
@@ -577,13 +592,23 @@ func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
 		r.fail("Go map with more than one NaN key has no deterministic text")
 	}
 	if z.addr {
-		return r.appendTypeName(dst, reflect.TypeOf(v))
+		return r.appendTypeName(dst, t)
 	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
-	dst = fmt.Appendf(dst, "%v", v)
+	dst = fmt.Appendf(dst, "%v", arg)
 	r.produced(len(dst) - n)
 	return dst
+}
+
+// appendValueString appends rv.String(), as fmt prints a reflect.Value it
+// does not unwrap: "<T Value>", or a string Value's string.
+func (r *renderer) appendValueString(dst []byte, rv reflect.Value) []byte {
+	str := rv.String()
+	r.steps1(units(len(str), hashUnit))
+	r.checkProduced(len(dst) + len(str))
+	r.produced(len(str))
+	return append(dst, str...)
 }
 
 // appendTypeName appends "(T)", t's name in parentheses: the deterministic
@@ -640,10 +665,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		return len(ts) + len("< Value>")
 	}
 	// fmt prints a value with a Format, Error or String method by calling
-	// it (at the top, and below wherever it can take the value), so it does
+	// it (wherever it can take the value: at the top always, but for a
+	// reflect.Value of an unexported field), so it does
 	// not look inside: neither does the walk. The method's cost is the
 	// caller's.
-	if v.IsValid() && v.Kind() != reflect.Interface && (depth == 0 || v.CanInterface()) {
+	if v.IsValid() && v.Kind() != reflect.Interface && v.CanInterface() {
 		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
 			return 64
 		}
@@ -737,10 +763,22 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		var buf [24]byte
 		return len(strconv.AppendUint(buf[:0], v.Uint(), 10))
 	case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
-		// fmt's own %v text, exactly (about 100 ns: a step more).
+		// fmt's own %v text, exactly (about 100 ns: a step more), from the
+		// value itself: an unexported field's cannot be taken (Interface).
 		z.steps++
 		var buf [64]byte
-		return len(fmt.Appendf(buf[:0], "%v", v.Interface()))
+		var x any
+		switch v.Kind() {
+		case reflect.Float32:
+			x = float32(v.Float())
+		case reflect.Float64:
+			x = v.Float()
+		case reflect.Complex64:
+			x = complex64(v.Complex())
+		default:
+			x = v.Complex()
+		}
+		return len(fmt.Appendf(buf[:0], "%v", x))
 	default:
 		return 64
 	}

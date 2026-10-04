@@ -385,9 +385,7 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 // cap if the bytes before the native pass it.
 func (w *encodeWalk) nativeFailure(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 	native := env.Errorf("error while serializing: %s", w.nativeErr.Error())
-	// The estimate bounds the bytes written from above: within the cap,
-	// the encoder cannot fail on it before the native.
-	if w.failed == nil || w.sizeAtFail <= w.limit {
+	if w.failed == nil {
 		return native
 	}
 	sub, lerr := w.withNatives(v)
@@ -468,7 +466,6 @@ type encodeWalk struct {
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
 	mayUnload   bool                  // the native just walked may fail libjson's load check
 	failed      *lisp.LVal            // that native
-	sizeAtFail  int64                 // the estimate (an upper bound of the bytes written) when it failed
 	deepest     int                   // the deepest value the walk reached
 	stack       []*lisp.LVal          // the containers the walk is inside
 	lower       int64                 // a lower bound of the JSON's length so far
@@ -650,7 +647,6 @@ func jsonNesting(b []byte) int {
 // containers on the way to it, so withNatives can put a marker there.
 func (w *encodeWalk) failAt(x *lisp.LVal) {
 	w.failed = x
-	w.sizeAtFail = w.size
 	w.markPath()
 }
 
