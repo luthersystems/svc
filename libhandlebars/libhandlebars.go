@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"math/bits"
 	"reflect"
@@ -28,8 +29,10 @@ const (
 )
 
 // handlebarsPackage implements the elpsutil Package interfaces for the
-// handlebars ELPS package.
-type handlebarsPackage struct{}
+// handlebars ELPS package. Its builtins parse and render under lim.
+type handlebarsPackage struct {
+	lim hbs.Limits
+}
 
 func (handlebarsPackage) PackageName() string { return DefaultPackageName }
 
@@ -40,8 +43,8 @@ Provides functions for parsing and rendering Handlebars templates with
 JSON context data, powered by the hbs engine (luthersystems/svc).`
 }
 
-func (handlebarsPackage) Builtins() []lisp.LBuiltinDef {
-	return builtins
+func (p handlebarsPackage) Builtins() []lisp.LBuiltinDef {
+	return builtins(p.lim)
 }
 
 // documentedBuiltin wraps an LBuiltinDef with a docstring.
@@ -52,26 +55,73 @@ type documentedBuiltin struct {
 
 func (b *documentedBuiltin) Docstring() string { return b.docs }
 
-// LoadPackage loads the package.
+// LoadPackage loads the package, which parses and renders under
+// hbs.DefaultLimits().
 func LoadPackage(env *lisp.LEnv) *lisp.LVal {
-	return elpsutil.PackageLoader(&handlebarsPackage{})(env)
+	return elpsutil.PackageLoader(&handlebarsPackage{lim: hbs.DefaultLimits()})(env)
 }
 
-var builtins = []lisp.LBuiltinDef{
-	&documentedBuiltin{
-		elpsutil.Function("libname", lisp.Formals(), builtInLibname),
-		`Returns the name of the template engine ("` + hbs.Name + `").`,
-	},
-	&documentedBuiltin{
-		elpsutil.Function("version", lisp.Formals(), builtInVersion),
-		`Returns the template engine's version string.
+// NewLoader returns a loader for the package whose render, render-fixed
+// and must-parse parse and render under lim: a zero field takes its
+// hbs.DefaultLimits() value, and a negative one is an error. The limits
+// are the loader's own (there is no package-level setting); every
+// environment it loads uses them.
+//
+// Limits change what renders (a template over MaxTemplateBytes fails to
+// parse, one that passes MaxSteps fails to render), so they are part of a
+// transaction's result: every peer that endorses, and every check made
+// before a deploy, must use the same limits. That is the embedder's to
+// ensure.
+func NewLoader(lim hbs.Limits) (elpsutil.Loader, error) {
+	eff, err := effectiveLimits(lim)
+	if err != nil {
+		return nil, err
+	}
+	return elpsutil.PackageLoader(&handlebarsPackage{lim: eff}), nil
+}
+
+// effectiveLimits is lim with each zero field set to its
+// hbs.DefaultLimits() value; a negative field is an error.
+func effectiveLimits(lim hbs.Limits) (hbs.Limits, error) {
+	if lim.MaxTemplateBytes < 0 || lim.MaxDepth < 0 || lim.MaxOutputBytes < 0 || lim.MaxSteps < 0 {
+		return hbs.Limits{}, fmt.Errorf("libhandlebars: negative limit in %+v", lim)
+	}
+	def := hbs.DefaultLimits()
+	if lim.MaxTemplateBytes == 0 {
+		lim.MaxTemplateBytes = def.MaxTemplateBytes
+	}
+	if lim.MaxDepth == 0 {
+		lim.MaxDepth = def.MaxDepth
+	}
+	if lim.MaxOutputBytes == 0 {
+		lim.MaxOutputBytes = def.MaxOutputBytes
+	}
+	if lim.MaxSteps == 0 {
+		lim.MaxSteps = def.MaxSteps
+	}
+	return lim, nil
+}
+
+// builtins are the package's functions, parsing and rendering under lim.
+func builtins(lim hbs.Limits) []lisp.LBuiltinDef {
+	builtInMustParse := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return mustParse(env, args, lim) }
+	builtInRender := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeCompat, lim) }
+	builtInRenderFixed := func(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal { return render(env, args, hbs.ModeFixed, lim) }
+	return []lisp.LBuiltinDef{
+		&documentedBuiltin{
+			elpsutil.Function("libname", lisp.Formals(), builtInLibname),
+			`Returns the name of the template engine ("` + hbs.Name + `").`,
+		},
+		&documentedBuiltin{
+			elpsutil.Function("version", lisp.Formals(), builtInVersion),
+			`Returns the template engine's version string.
 
 The version changes whenever a release changes any render output, error
 or step charge, so peers that return the same version render alike.`,
-	},
-	&documentedBuiltin{
-		elpsutil.Function("render", lisp.Formals("tpl", "ctx"), builtInRender),
-		`Renders a Handlebars template string with the given context.
+		},
+		&documentedBuiltin{
+			elpsutil.Function("render", lisp.Formals("tpl", "ctx"), builtInRender),
+			`Renders a Handlebars template string with the given context.
 
 tpl is a Handlebars template string and ctx is a JSON-serializable
 value used as the template context. Returns the rendered string.
@@ -81,10 +131,10 @@ errors, including output over the size limit.
 
 Output is byte-compatible with earlier releases, helper bugs included.
 render-fixed renders with those bugs fixed.`,
-	},
-	&documentedBuiltin{
-		elpsutil.Function("render-fixed", lisp.Formals("tpl", "ctx"), builtInRenderFixed),
-		`Renders like render, with the known helper bugs fixed.
+		},
+		&documentedBuiltin{
+			elpsutil.Function("render-fixed", lisp.Formals("tpl", "ctx"), builtInRenderFixed),
+			`Renders like render, with the known helper bugs fixed.
 
 Takes the same arguments and signals the same conditions as render. The
 template language is the same; only these helpers differ: to-str prints
@@ -95,15 +145,16 @@ number from the context; includeZero also accepts a context number 0.
 
 A phylum opts in by calling render-fixed. Its output can differ from
 render's for the same template and context.`,
-	},
-	&documentedBuiltin{
-		elpsutil.Function("must-parse", lisp.Formals("tpl"), builtInMustParse),
-		`Validates that tpl is a syntactically correct Handlebars template.
+		},
+		&documentedBuiltin{
+			elpsutil.Function("must-parse", lisp.Formals("tpl"), builtInMustParse),
+			`Validates that tpl is a syntactically correct Handlebars template.
 
 Returns nil on success. Signals handlebars-parse if the template
 contains syntax errors or exceeds the size or nesting limit. Use this
 to validate templates at load time without rendering them.`,
-	},
+		},
+	}
 }
 
 func builtInLibname(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -114,12 +165,14 @@ func builtInVersion(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	return lisp.String(hbs.Version)
 }
 
-// parse charges the parse and parses tpl through the process-wide cache.
-// The charge, hbs.ParseCost of the template's length and lexer tokens, is
-// made on every call, so a cache hit and a miss cost the same steps.
-func parse(env *lisp.LEnv, tpl string) (*hbs.Program, *lisp.LVal) {
+// parse charges the parse and parses tpl under lim through the
+// process-wide cache, whose key holds the effective template-size and
+// depth limits, so a hit never skips a limit. The charge, hbs.ParseCost
+// of the template's length and lexer tokens, is made on every call, so a
+// cache hit and a miss cost the same steps.
+func parse(env *lisp.LEnv, tpl string, lim hbs.Limits) (*hbs.Program, *lisp.LVal) {
 	m := &envMeter{env: env}
-	prog, err := hbs.ParseCachedMetered(tpl, hbs.DefaultLimits(), m)
+	prog, err := hbs.ParseCachedMetered(tpl, lim, m)
 	if err != nil {
 		if errors.Is(err, errBudget) {
 			return nil, m.lerr
@@ -130,26 +183,18 @@ func parse(env *lisp.LEnv, tpl string) (*hbs.Program, *lisp.LVal) {
 	return prog, nil
 }
 
-func builtInMustParse(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+func mustParse(env *lisp.LEnv, args *lisp.LVal, lim hbs.Limits) *lisp.LVal {
 	template := args.Cells[0]
 	if template.Type != lisp.LString {
 		return env.Errorf("non-string template: %v", template.Type)
 	}
-	if _, lerr := parse(env, template.Str); lerr != nil {
+	if _, lerr := parse(env, template.Str, lim); lerr != nil {
 		return lerr
 	}
 	return lisp.Nil()
 }
 
-func builtInRender(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	return render(env, args, hbs.ModeCompat)
-}
-
-func builtInRenderFixed(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	return render(env, args, hbs.ModeFixed)
-}
-
-func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
+func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits) *lisp.LVal {
 	template, context := args.Cells[0], args.Cells[1]
 	if template.Type != lisp.LString {
 		return env.Errorf("non-string template: %v", template.Type)
@@ -190,11 +235,11 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode) *lisp.LVal {
 		}
 	}
 
-	prog, lerr := parse(env, template.Str)
+	prog, lerr := parse(env, template.Str, lim)
 	if lerr != nil {
 		return lerr
 	}
-	out, err := prog.Render(ctx, hbs.Options{Meter: m, Limits: hbs.DefaultLimits(), Mode: mode})
+	out, err := prog.Render(ctx, hbs.Options{Meter: m, Limits: lim, Mode: mode})
 	if err != nil {
 		if errors.Is(err, errBudget) {
 			return m.lerr

@@ -21,6 +21,18 @@ func Parse(template string) (Template, error) {
 	return hbs.ParseCached(template, hbs.DefaultLimits())
 }
 
+// ParseWith parses a template under lim's template-size and nesting
+// limits (a zero field takes its hbs.DefaultLimits() value; a negative one
+// is an error). Render it with WithLimits(lim) to render under the same
+// limits.
+func ParseWith(template string, lim hbs.Limits) (Template, error) {
+	eff, err := effectiveLimits(lim)
+	if err != nil {
+		return nil, err
+	}
+	return hbs.ParseCached(template, eff)
+}
+
 // Render renders tpl with the Go value ctx in hbs.ModeCompat, under
 // hbs.DefaultLimits(). It is RenderWith with no options.
 func Render(tpl Template, ctx interface{}) (string, error) {
@@ -31,7 +43,16 @@ func Render(tpl Template, ctx interface{}) (string, error) {
 type RenderOption func(*renderConfig)
 
 type renderConfig struct {
+	lim  hbs.Limits
 	json bool
+}
+
+// WithLimits renders under lim instead of hbs.DefaultLimits(): a zero
+// field takes its default, and a negative one fails the render. Limits
+// change what renders, so where several parties must agree on a result,
+// they must use the same limits.
+func WithLimits(lim hbs.Limits) RenderOption {
+	return func(c *renderConfig) { c.lim = lim }
 }
 
 // WithJSONContext converts ctx through JSON, as handlebars:render converts
@@ -75,7 +96,7 @@ func jsonGoContextSetting(v string, ok bool, log logrus.FieldLogger) bool {
 }
 
 // RenderWith renders tpl with the Go value ctx in hbs.ModeCompat, under
-// hbs.DefaultLimits().
+// hbs.DefaultLimits() unless WithLimits sets others.
 //
 // By default the engine reads ctx itself, lazily and by reflection, with
 // the Go semantics raymond gave Go values (see "Go values in a render
@@ -107,7 +128,10 @@ func renderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, er
 	for _, o := range opts {
 		o(&cfg)
 	}
-	lim := hbs.DefaultLimits()
+	lim, err := effectiveLimits(cfg.lim)
+	if err != nil {
+		return "", err
+	}
 	var v hbs.Value
 	if cfg.json {
 		// The conversion counts against the render's MaxSteps: the

@@ -73,6 +73,27 @@ literal of 9223372036854775295 or less is in range and unchanged.
 The harness allowlist entry for non-amd64 reference runs covers these
 cases too. On amd64 nothing changes.
 
+## Limits
+
+`hbs.DefaultLimits()` is 1 MiB of template, 256 levels of nesting, 16 MiB
+of output (and 8× that produced in all) and 2^25 steps. An embedder can
+choose others: `libhandlebars.NewLoader(lim)` loads the ELPS package with
+`render`, `render-fixed` and `must-parse` parsing and rendering under
+`lim`, and Go callers use `ParseWith(tpl, lim)` and
+`RenderWith(..., WithLimits(lim))`. A zero field takes its default and a
+negative one is an error; `LoadPackage`, `Parse` and `Render` keep the
+defaults, and there is no package-level setting. The process-wide parse
+cache keys each verdict on the effective template-size and nesting limits,
+so a hit never skips a limit a caller set.
+
+Limits change results: a template over MaxTemplateBytes fails to parse
+where a larger limit renders it, and a render past MaxSteps or the output
+bound fails where a larger one succeeds. Every peer that endorses a
+transaction, and every check made before a deploy, must therefore use the
+same limits; the embedder ensures it. Under the default limits nothing
+changes: output, errors and step charges are the same as through
+`LoadPackage`.
+
 ## Cost model
 
 A render's steps (the `Meter`'s units, bounded by `Limits.MaxSteps`) are a
