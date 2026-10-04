@@ -183,7 +183,7 @@ func resolve(t reflect.Type, name string) supplier {
 type embedNode struct {
 	t     reflect.Type // a struct type
 	path  []int        // the first path to it
-	count int          // the paths to it at this depth
+	count int          // the paths to it at this depth, saturated at 2 (more than one is all that matters)
 }
 
 // search is Go's selector rule for name on t, as reflect.FieldByNameFunc
@@ -241,7 +241,7 @@ func search(t reflect.Type, name string) supplier {
 					hit, hits = supplier{path, kind}, hits+n.count
 				case base.Kind() == reflect.Struct && !visited[base]:
 					if j, ok := at[base]; ok {
-						next[j].count += n.count
+						next[j].count = min(next[j].count+n.count, 2)
 					} else {
 						at[base] = len(next)
 						next = append(next, embedNode{base, path, n.count})
