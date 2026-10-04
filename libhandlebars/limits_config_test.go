@@ -433,8 +433,9 @@ type deepNode struct{ Next *deepNode }
 // whose limit the embedder raised: the encode walk reaches each, so a
 // native nested past the 50,000-level Go value bound fails with that
 // error, before encoding/json would recurse through it, under a list or a
-// chain of quotes, for render and render-fixed; and a shallow native
-// there renders as it does at the top.
+// chain of quotes, for render and render-fixed; a shallow native there
+// renders as it does at the top; and one under a million scalar arrays,
+// which add no bytes, renders where its JSON fits Runtime.MaxAlloc.
 func TestRaisedDepthNatives(t *testing.T) {
 	if os.Getenv("HBS_RAISED_NATIVES_CHILD") == "1" {
 		var chain *deepNode
@@ -485,6 +486,22 @@ func TestRaisedDepthNatives(t *testing.T) {
 				fmt.Printf("%s %s: %.120v\n", fn, c.tpl, res)
 			}
 		}
+		// A native under 1,000,002 scalar arrays, its JSON within
+		// Runtime.MaxAlloc: no brackets, so it renders.
+		big := sortedMap("a", scalarArrays(lisp.Native(strings.Repeat("x", 9_485_790)), lisp.MaxValueDepth+2))
+		for _, fn := range []string{"render", "render-fixed"} {
+			env := newEnvWith(t, mustLoader(t))
+			if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
+				t.Fatal(res)
+			}
+			dump := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{big, lisp.Bool(false)}))
+			if dump.Type != lisp.LBytes || len(dump.Bytes()) != 9_485_798 {
+				t.Fatalf("dump: %.200v", dump)
+			}
+			if res, _ := renderIn(t, env, fn, "ok", big); res.Type != lisp.LString || res.Str != "ok" {
+				t.Fatalf("%s scalar arrays: %.300v", fn, res)
+			}
+		}
 		fmt.Println("RAISED-NATIVES-OK")
 		return
 	}
@@ -496,4 +513,63 @@ func TestRaisedDepthNatives(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%.2000s", out)
 	require.Contains(t, string(out), "RAISED-NATIVES-OK")
+}
+
+// scalarArrays wraps v in n zero-dimensional arrays, which libjson writes
+// as their one element: no brackets.
+func scalarArrays(v *lisp.LVal, n int) *lisp.LVal {
+	for range n {
+		v = lisp.Array(lisp.QExpr(nil), []*lisp.LVal{v})
+	}
+	return v
+}
+
+// TestEncodeScalarArrays: a zero-dimensional array encodes as its element,
+// so the encode walk counts no brackets for it. Under 20,000 of them, a
+// native whose JSON nearly fills Runtime.MaxAlloc renders, as
+// json:dump-bytes encodes it (counting 2 bytes a level, the walk refused it
+// before any marshal); one past it fails with dump-bytes's error. An array
+// of more dimensions is the encoder's error, not a native's below it, and
+// render-fixed keeps an int under scalar arrays an int, as under quotes.
+func TestEncodeScalarArrays(t *testing.T) {
+	const maxAlloc = 64 << 10
+	for _, c := range []struct {
+		n    int
+		want string
+	}{
+		{maxAlloc - 1024, "ok"},
+		{maxAlloc + 1024, "allocation size exceeds maximum"},
+	} {
+		ctx := sortedMap("a", scalarArrays(lisp.Native(strings.Repeat("x", c.n)), 20_000))
+		for _, fn := range []string{"render", "render-fixed"} {
+			env := newEnvWith(t, mustLoader(t))
+			env.Runtime.MaxAlloc = maxAlloc
+			dump := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{ctx, lisp.Bool(false)}))
+			res, _ := renderIn(t, env, fn, "ok", ctx)
+			if c.want == "ok" {
+				require.Equal(t, lisp.LBytes, dump.Type, "%.200v", dump)
+				require.Equal(t, lisp.LString, res.Type, "%s: %.300v", fn, res)
+				require.Equal(t, "ok", res.Str)
+				continue
+			}
+			require.Equal(t, lisp.LError, dump.Type)
+			require.Equal(t, lisp.LError, res.Type, "%s: %.300v", fn, res)
+			require.Contains(t, dump.String(), c.want)
+			require.Contains(t, res.String(), c.want)
+		}
+	}
+
+	type bad struct{ C chan int }
+	grid := lisp.Array(lisp.QExpr([]*lisp.LVal{lisp.Int(1), lisp.Int(1)}), []*lisp.LVal{lisp.Native(bad{})})
+	for _, fn := range []string{"render", "render-fixed"} {
+		env := newEnvWith(t, mustLoader(t))
+		res, _ := renderIn(t, env, fn, "ok", sortedMap("a", grid))
+		require.Equal(t, lisp.LError, res.Type, "%s: %.300v", fn, res)
+		require.Contains(t, res.String(), "cannot serialize array with dimensions")
+	}
+
+	env := newEnvWith(t, mustLoader(t))
+	res, _ := renderIn(t, env, "render-fixed", "{{to-str a}}", sortedMap("a", scalarArrays(lisp.Int(1<<53+1), 3)))
+	require.Equal(t, lisp.LString, res.Type, "%.300v", res)
+	require.Equal(t, "9007199254740993", res.Str)
 }

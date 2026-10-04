@@ -240,12 +240,16 @@ func (t *intTyper) flush() error {
 // walk retypes the ints of x within v, its decoded form, and returns v.
 //
 // Its recursion follows v's nesting, which encoding/json bounds at 10,000
-// levels; a quote or tagged value adds no JSON level, so a chain of them is
-// unwrapped in a loop, not by recursion.
+// levels; a quote, a tagged value or a scalar array adds no JSON level, so
+// a chain of them is unwrapped in a loop, not by recursion.
 func (t *intTyper) walk(x *lisp.LVal, v hbs.Value) hbs.Value {
-	for t.err == nil && !x.IsNil() && (x.Type == lisp.LQuote || x.Type == lisp.LTaggedVal) {
+	for t.err == nil && !x.IsNil() && (x.Type == lisp.LQuote || x.Type == lisp.LTaggedVal || scalarArray(x)) {
 		t.step()
-		x = x.Cells[0]
+		if x.Type == lisp.LArray {
+			x = x.Cells[1].Cells[0]
+		} else {
+			x = x.Cells[0]
+		}
 	}
 	if t.err != nil || x.IsNil() {
 		return v
@@ -289,6 +293,14 @@ func (t *intTyper) walk(x *lisp.LVal, v hbs.Value) hbs.Value {
 	default:
 	}
 	return v
+}
+
+// scalarArray reports whether x is a zero-dimensional array, which
+// libjson writes as its one element, as it writes a quote's: no brackets,
+// no JSON level.
+func scalarArray(x *lisp.LVal) bool {
+	return x.Type == lisp.LArray && len(x.Cells) == 2 && x.Cells[0] != nil && x.Cells[1] != nil &&
+		x.Cells[0].Len() == 0 && len(x.Cells[1].Cells) > 0
 }
 
 func (t *intTyper) list(cells []*lisp.LVal, v hbs.Value) {
@@ -757,10 +769,23 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		}
 		return lerr == nil
 	}
-	// A container being copied: its contents, and their substitutes so far.
+	// A container being copied: its contents (a map's are its entries'
+	// values), and their substitutes so far.
 	type frame struct {
 		x, ents    *lisp.LVal // ents: a map's entries
 		kids, subs []*lisp.LVal
+	}
+	kid := func(f *frame, i int) *lisp.LVal {
+		if f.ents != nil {
+			return f.ents.Cells[i].Cells[1]
+		}
+		return f.kids[i]
+	}
+	size := func(f *frame) int {
+		if f.ents != nil {
+			return len(f.ents.Cells)
+		}
+		return len(f.kids)
 	}
 	var frames []frame
 	// enter returns x's substitute, or pushes a frame to compute it.
@@ -803,10 +828,6 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 			if f.ents.Type == lisp.LError {
 				return x, true
 			}
-			f.kids = make([]*lisp.LVal, len(f.ents.Cells))
-			for i, e := range f.ents.Cells {
-				f.kids[i] = e.Cells[1]
-			}
 		case lisp.LArray:
 			// The elements are the cells of Cells[1], which the walk
 			// visited as the array's own children.
@@ -822,7 +843,7 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		default:
 			return x, true
 		}
-		f.subs = make([]*lisp.LVal, 0, len(f.kids))
+		f.subs = make([]*lisp.LVal, 0, size(&f))
 		frames = append(frames, f)
 		return nil, false
 	}
@@ -830,7 +851,7 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 	leave := func(f *frame) *lisp.LVal {
 		changed := false
 		for i, s := range f.subs {
-			changed = changed || s != f.kids[i]
+			changed = changed || s != kid(f, i)
 		}
 		if !changed {
 			return f.x
@@ -859,8 +880,8 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 	out, done := enter(v)
 	for !done {
 		top := &frames[len(frames)-1]
-		if len(top.subs) < len(top.kids) {
-			if r, ok := enter(top.kids[len(top.subs)]); ok {
+		if len(top.subs) < size(top) {
+			if r, ok := enter(kid(top, len(top.subs))); ok {
 				top.subs = append(top.subs, r)
 			}
 			continue
@@ -1120,7 +1141,14 @@ func (w *encodeWalk) visit(x *lisp.LVal, depth int) (bool, *lisp.LVal, []*lisp.L
 	case lisp.LArray:
 		lower = 0
 		if len(x.Cells) == 2 {
-			n, children, lower, closer = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells, 1, 1
+			switch {
+			case scalarArray(x):
+				n, children = 1, x.Cells[1].Cells[:1]
+			case x.Cells[0] != nil && x.Cells[0].Len() == 1:
+				n, children, lower, closer = int64(len(x.Cells[1].Cells))+2, x.Cells[1].Cells, 1, 1
+			default:
+				return true, nil, nil, 0 // the encoder refuses its dimensions
+			}
 		}
 	case lisp.LSortMap:
 		m := x.Map()
