@@ -615,6 +615,13 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	var fail *jsonFailure
 	switch {
 	case err == nil:
+		if lerr := jw.loadFailure(); lerr != nil {
+			// The encoder marshals it, then its load check fails: known
+			// without marshalling it (nativeFailure reports an earlier
+			// allocation error first, as the encoder does).
+			w.nativeErr = lerr
+			return true, nil
+		}
 		w.mayUnload = jw.mayFailLoad()
 		return false, nil
 	case errors.As(err, &fail):

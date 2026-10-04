@@ -324,11 +324,12 @@ func hPossessive(c *hcall) any {
 	if name == "" {
 		return ""
 	}
-	c.r.reserveProduced(len(name) + 2) // before building the result
+	suffix := "'s"
 	if name[len(name)-1] == 's' {
-		return name + "'"
+		suffix = "'"
 	}
-	return name + "'s"
+	c.r.reserveProduced(len(name) + len(suffix)) // before building the result
+	return name + suffix
 }
 
 func dateFormatHelper(name, layout string) func(c *hcall) any {

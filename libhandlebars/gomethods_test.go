@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/luthersystems/elps/lisp"
+	"github.com/luthersystems/elps/lisp/lisplib/libjson"
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
 	"github.com/luthersystems/svc/libhandlebars/internal/bigcost"
+	"github.com/luthersystems/svc/libhandlebars/internal/hbref"
 	"github.com/stretchr/testify/require"
 )
 
@@ -738,5 +740,1163 @@ func TestBigMethodErrorsOrderFree(t *testing.T) {
 			seen[err.Error()] = true
 		}
 		require.Len(t, seen, 1, "%v", seen)
+	}
+}
+
+// TestReserveExact: a helper's result and an evaluation error are checked
+// against the produced-bytes bound at their exact length: within a small
+// bound they render as raymond rendered them.
+func TestReserveExact(t *testing.T) {
+	for _, c := range []struct {
+		tpl, ctx string
+		maxOut   int
+	}{
+		{`{{#if (to-str x)}}{{/if}}{{#if (possessive "s")}}{{/if}}`, `{"x": "xxxxxx"}`, 1},
+		{`{{eq}}`, `{}`, 19},
+	} {
+		want, werr := hbref.RenderJSON(c.tpl, []byte(c.ctx))
+		tpl, err := libhandlebars.Parse(c.tpl)
+		require.NoError(t, err)
+		v, err := hbs.FromJSON([]byte(c.ctx))
+		require.NoError(t, err)
+		lim := hbs.DefaultLimits()
+		lim.MaxOutputBytes = c.maxOut
+		got, gerr := tpl.Render(v, hbs.Options{Mode: hbs.ModeCompat, Limits: lim})
+		if werr == nil {
+			require.NoError(t, gerr, c.tpl)
+			require.Equal(t, want, got, c.tpl)
+			continue
+		}
+		require.Error(t, gerr, c.tpl)
+		require.Equal(t, refRaw(werr), gotRaw(gerr), c.tpl)
+	}
+}
+
+// TestNativeNumberNotMarshalledPastCap: a json.Number libjson's load check
+// accepts (in float64 range) does not make a native past the allocation
+// cap worth marshalling: the render fails at the cap without building the
+// native's 256 MiB. An out-of-range one still does, and its load error
+// comes first, as json:dump-bytes reports it.
+func TestNativeNumberNotMarshalledPastCap(t *testing.T) {
+	s := strings.Repeat("x", 1<<20)
+	a := make([]string, 256)
+	for i := range a {
+		a[i] = s
+	}
+	run := func(num json.Number) (*lisp.LVal, uint64) {
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 65536
+		env.Runtime.SetStepBudget(1 << 26)
+		ctx := lisp.SortedMap()
+		ctx.MapSetString("ctx", lisp.Native(map[string]any{"a": num, "b": a}))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "" ctx)`)
+		runtime.ReadMemStats(&after)
+		return res, after.TotalAlloc - before.TotalAlloc
+	}
+	res, alloc := run("1")
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "allocation size exceeds maximum (65536)")
+	require.Less(t, alloc, uint64(64<<20))
+	res, alloc = run("1e400")
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "error while serializing: unable to encode native value: json: cannot unmarshal number 1e400 into Go value of type float64")
+	require.Less(t, alloc, uint64(64<<20)) // known from the walk: not marshalled
+}
+
+type quotedNum struct {
+	N json.Number `json:",string"`
+}
+
+// TestNativeNumberLoadErrorParity: where a native's only bytes libjson's
+// load check could refuse are json.Numbers out of float64 range, the walk
+// reports the error without marshalling it, exactly as json:dump-bytes
+// does: the first such number in the encoder's order, after an allocation
+// error the bytes before it meet first.
+func TestNativeNumberLoadErrorParity(t *testing.T) {
+	big := strings.Repeat("y", 1<<17)
+	for _, c := range []struct {
+		before string
+		native any
+	}{
+		{"", map[string]any{"a": json.Number("1e400")}},
+		{"", map[string]any{"b": json.Number("-2e999"), "a": []any{1, json.Number("1e400")}}},
+		{"", struct{ X, Y json.Number }{"3", "4e500"}},
+		{"", []any{quotedNum{"1e400"}, json.Number("5e600")}},
+		{"", []any{quotedNum{"1e400"}}},
+		{big, map[string]any{"a": json.Number("1e400")}},
+	} {
+		build := func(env *lisp.LEnv) *lisp.LVal {
+			ctx := lisp.SortedMap()
+			if c.before != "" {
+				ctx.MapSetString("a", lisp.String(c.before))
+			}
+			ctx.MapSetString("z", lisp.Native(c.native))
+			return ctx
+		}
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = 65536
+		want := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{build(env), lisp.Bool(false)}))
+		env = newEnv(t)
+		env.Runtime.MaxAlloc = 65536
+		env.Put(lisp.Symbol("ctx"), build(env))
+		got := env.LoadStringContext(t.Context(), "test", `(handlebars:render "" ctx)`)
+		if want.Type != lisp.LError {
+			require.NotEqual(t, lisp.LError, got.Type, "%#v: %v", c.native, got)
+			continue
+		}
+		require.Equal(t, lisp.LError, got.Type, "%#v", c.native)
+		wantMsg := want.Cells[0].Str
+		if !strings.HasPrefix(wantMsg, "allocation size exceeds maximum") {
+			wantMsg = "error while serializing: " + wantMsg
+		}
+		require.Contains(t, got.String(), wantMsg, "%#v", c.native)
+	}
+}
+
+// WideBig embeds a *big.Float after 1024 zero-sized plain fields: only
+// embedded fields count toward the search's bound.
+type WideBig struct {
+	F0    [0]int
+	F1    [0]int
+	F2    [0]int
+	F3    [0]int
+	F4    [0]int
+	F5    [0]int
+	F6    [0]int
+	F7    [0]int
+	F8    [0]int
+	F9    [0]int
+	F10   [0]int
+	F11   [0]int
+	F12   [0]int
+	F13   [0]int
+	F14   [0]int
+	F15   [0]int
+	F16   [0]int
+	F17   [0]int
+	F18   [0]int
+	F19   [0]int
+	F20   [0]int
+	F21   [0]int
+	F22   [0]int
+	F23   [0]int
+	F24   [0]int
+	F25   [0]int
+	F26   [0]int
+	F27   [0]int
+	F28   [0]int
+	F29   [0]int
+	F30   [0]int
+	F31   [0]int
+	F32   [0]int
+	F33   [0]int
+	F34   [0]int
+	F35   [0]int
+	F36   [0]int
+	F37   [0]int
+	F38   [0]int
+	F39   [0]int
+	F40   [0]int
+	F41   [0]int
+	F42   [0]int
+	F43   [0]int
+	F44   [0]int
+	F45   [0]int
+	F46   [0]int
+	F47   [0]int
+	F48   [0]int
+	F49   [0]int
+	F50   [0]int
+	F51   [0]int
+	F52   [0]int
+	F53   [0]int
+	F54   [0]int
+	F55   [0]int
+	F56   [0]int
+	F57   [0]int
+	F58   [0]int
+	F59   [0]int
+	F60   [0]int
+	F61   [0]int
+	F62   [0]int
+	F63   [0]int
+	F64   [0]int
+	F65   [0]int
+	F66   [0]int
+	F67   [0]int
+	F68   [0]int
+	F69   [0]int
+	F70   [0]int
+	F71   [0]int
+	F72   [0]int
+	F73   [0]int
+	F74   [0]int
+	F75   [0]int
+	F76   [0]int
+	F77   [0]int
+	F78   [0]int
+	F79   [0]int
+	F80   [0]int
+	F81   [0]int
+	F82   [0]int
+	F83   [0]int
+	F84   [0]int
+	F85   [0]int
+	F86   [0]int
+	F87   [0]int
+	F88   [0]int
+	F89   [0]int
+	F90   [0]int
+	F91   [0]int
+	F92   [0]int
+	F93   [0]int
+	F94   [0]int
+	F95   [0]int
+	F96   [0]int
+	F97   [0]int
+	F98   [0]int
+	F99   [0]int
+	F100  [0]int
+	F101  [0]int
+	F102  [0]int
+	F103  [0]int
+	F104  [0]int
+	F105  [0]int
+	F106  [0]int
+	F107  [0]int
+	F108  [0]int
+	F109  [0]int
+	F110  [0]int
+	F111  [0]int
+	F112  [0]int
+	F113  [0]int
+	F114  [0]int
+	F115  [0]int
+	F116  [0]int
+	F117  [0]int
+	F118  [0]int
+	F119  [0]int
+	F120  [0]int
+	F121  [0]int
+	F122  [0]int
+	F123  [0]int
+	F124  [0]int
+	F125  [0]int
+	F126  [0]int
+	F127  [0]int
+	F128  [0]int
+	F129  [0]int
+	F130  [0]int
+	F131  [0]int
+	F132  [0]int
+	F133  [0]int
+	F134  [0]int
+	F135  [0]int
+	F136  [0]int
+	F137  [0]int
+	F138  [0]int
+	F139  [0]int
+	F140  [0]int
+	F141  [0]int
+	F142  [0]int
+	F143  [0]int
+	F144  [0]int
+	F145  [0]int
+	F146  [0]int
+	F147  [0]int
+	F148  [0]int
+	F149  [0]int
+	F150  [0]int
+	F151  [0]int
+	F152  [0]int
+	F153  [0]int
+	F154  [0]int
+	F155  [0]int
+	F156  [0]int
+	F157  [0]int
+	F158  [0]int
+	F159  [0]int
+	F160  [0]int
+	F161  [0]int
+	F162  [0]int
+	F163  [0]int
+	F164  [0]int
+	F165  [0]int
+	F166  [0]int
+	F167  [0]int
+	F168  [0]int
+	F169  [0]int
+	F170  [0]int
+	F171  [0]int
+	F172  [0]int
+	F173  [0]int
+	F174  [0]int
+	F175  [0]int
+	F176  [0]int
+	F177  [0]int
+	F178  [0]int
+	F179  [0]int
+	F180  [0]int
+	F181  [0]int
+	F182  [0]int
+	F183  [0]int
+	F184  [0]int
+	F185  [0]int
+	F186  [0]int
+	F187  [0]int
+	F188  [0]int
+	F189  [0]int
+	F190  [0]int
+	F191  [0]int
+	F192  [0]int
+	F193  [0]int
+	F194  [0]int
+	F195  [0]int
+	F196  [0]int
+	F197  [0]int
+	F198  [0]int
+	F199  [0]int
+	F200  [0]int
+	F201  [0]int
+	F202  [0]int
+	F203  [0]int
+	F204  [0]int
+	F205  [0]int
+	F206  [0]int
+	F207  [0]int
+	F208  [0]int
+	F209  [0]int
+	F210  [0]int
+	F211  [0]int
+	F212  [0]int
+	F213  [0]int
+	F214  [0]int
+	F215  [0]int
+	F216  [0]int
+	F217  [0]int
+	F218  [0]int
+	F219  [0]int
+	F220  [0]int
+	F221  [0]int
+	F222  [0]int
+	F223  [0]int
+	F224  [0]int
+	F225  [0]int
+	F226  [0]int
+	F227  [0]int
+	F228  [0]int
+	F229  [0]int
+	F230  [0]int
+	F231  [0]int
+	F232  [0]int
+	F233  [0]int
+	F234  [0]int
+	F235  [0]int
+	F236  [0]int
+	F237  [0]int
+	F238  [0]int
+	F239  [0]int
+	F240  [0]int
+	F241  [0]int
+	F242  [0]int
+	F243  [0]int
+	F244  [0]int
+	F245  [0]int
+	F246  [0]int
+	F247  [0]int
+	F248  [0]int
+	F249  [0]int
+	F250  [0]int
+	F251  [0]int
+	F252  [0]int
+	F253  [0]int
+	F254  [0]int
+	F255  [0]int
+	F256  [0]int
+	F257  [0]int
+	F258  [0]int
+	F259  [0]int
+	F260  [0]int
+	F261  [0]int
+	F262  [0]int
+	F263  [0]int
+	F264  [0]int
+	F265  [0]int
+	F266  [0]int
+	F267  [0]int
+	F268  [0]int
+	F269  [0]int
+	F270  [0]int
+	F271  [0]int
+	F272  [0]int
+	F273  [0]int
+	F274  [0]int
+	F275  [0]int
+	F276  [0]int
+	F277  [0]int
+	F278  [0]int
+	F279  [0]int
+	F280  [0]int
+	F281  [0]int
+	F282  [0]int
+	F283  [0]int
+	F284  [0]int
+	F285  [0]int
+	F286  [0]int
+	F287  [0]int
+	F288  [0]int
+	F289  [0]int
+	F290  [0]int
+	F291  [0]int
+	F292  [0]int
+	F293  [0]int
+	F294  [0]int
+	F295  [0]int
+	F296  [0]int
+	F297  [0]int
+	F298  [0]int
+	F299  [0]int
+	F300  [0]int
+	F301  [0]int
+	F302  [0]int
+	F303  [0]int
+	F304  [0]int
+	F305  [0]int
+	F306  [0]int
+	F307  [0]int
+	F308  [0]int
+	F309  [0]int
+	F310  [0]int
+	F311  [0]int
+	F312  [0]int
+	F313  [0]int
+	F314  [0]int
+	F315  [0]int
+	F316  [0]int
+	F317  [0]int
+	F318  [0]int
+	F319  [0]int
+	F320  [0]int
+	F321  [0]int
+	F322  [0]int
+	F323  [0]int
+	F324  [0]int
+	F325  [0]int
+	F326  [0]int
+	F327  [0]int
+	F328  [0]int
+	F329  [0]int
+	F330  [0]int
+	F331  [0]int
+	F332  [0]int
+	F333  [0]int
+	F334  [0]int
+	F335  [0]int
+	F336  [0]int
+	F337  [0]int
+	F338  [0]int
+	F339  [0]int
+	F340  [0]int
+	F341  [0]int
+	F342  [0]int
+	F343  [0]int
+	F344  [0]int
+	F345  [0]int
+	F346  [0]int
+	F347  [0]int
+	F348  [0]int
+	F349  [0]int
+	F350  [0]int
+	F351  [0]int
+	F352  [0]int
+	F353  [0]int
+	F354  [0]int
+	F355  [0]int
+	F356  [0]int
+	F357  [0]int
+	F358  [0]int
+	F359  [0]int
+	F360  [0]int
+	F361  [0]int
+	F362  [0]int
+	F363  [0]int
+	F364  [0]int
+	F365  [0]int
+	F366  [0]int
+	F367  [0]int
+	F368  [0]int
+	F369  [0]int
+	F370  [0]int
+	F371  [0]int
+	F372  [0]int
+	F373  [0]int
+	F374  [0]int
+	F375  [0]int
+	F376  [0]int
+	F377  [0]int
+	F378  [0]int
+	F379  [0]int
+	F380  [0]int
+	F381  [0]int
+	F382  [0]int
+	F383  [0]int
+	F384  [0]int
+	F385  [0]int
+	F386  [0]int
+	F387  [0]int
+	F388  [0]int
+	F389  [0]int
+	F390  [0]int
+	F391  [0]int
+	F392  [0]int
+	F393  [0]int
+	F394  [0]int
+	F395  [0]int
+	F396  [0]int
+	F397  [0]int
+	F398  [0]int
+	F399  [0]int
+	F400  [0]int
+	F401  [0]int
+	F402  [0]int
+	F403  [0]int
+	F404  [0]int
+	F405  [0]int
+	F406  [0]int
+	F407  [0]int
+	F408  [0]int
+	F409  [0]int
+	F410  [0]int
+	F411  [0]int
+	F412  [0]int
+	F413  [0]int
+	F414  [0]int
+	F415  [0]int
+	F416  [0]int
+	F417  [0]int
+	F418  [0]int
+	F419  [0]int
+	F420  [0]int
+	F421  [0]int
+	F422  [0]int
+	F423  [0]int
+	F424  [0]int
+	F425  [0]int
+	F426  [0]int
+	F427  [0]int
+	F428  [0]int
+	F429  [0]int
+	F430  [0]int
+	F431  [0]int
+	F432  [0]int
+	F433  [0]int
+	F434  [0]int
+	F435  [0]int
+	F436  [0]int
+	F437  [0]int
+	F438  [0]int
+	F439  [0]int
+	F440  [0]int
+	F441  [0]int
+	F442  [0]int
+	F443  [0]int
+	F444  [0]int
+	F445  [0]int
+	F446  [0]int
+	F447  [0]int
+	F448  [0]int
+	F449  [0]int
+	F450  [0]int
+	F451  [0]int
+	F452  [0]int
+	F453  [0]int
+	F454  [0]int
+	F455  [0]int
+	F456  [0]int
+	F457  [0]int
+	F458  [0]int
+	F459  [0]int
+	F460  [0]int
+	F461  [0]int
+	F462  [0]int
+	F463  [0]int
+	F464  [0]int
+	F465  [0]int
+	F466  [0]int
+	F467  [0]int
+	F468  [0]int
+	F469  [0]int
+	F470  [0]int
+	F471  [0]int
+	F472  [0]int
+	F473  [0]int
+	F474  [0]int
+	F475  [0]int
+	F476  [0]int
+	F477  [0]int
+	F478  [0]int
+	F479  [0]int
+	F480  [0]int
+	F481  [0]int
+	F482  [0]int
+	F483  [0]int
+	F484  [0]int
+	F485  [0]int
+	F486  [0]int
+	F487  [0]int
+	F488  [0]int
+	F489  [0]int
+	F490  [0]int
+	F491  [0]int
+	F492  [0]int
+	F493  [0]int
+	F494  [0]int
+	F495  [0]int
+	F496  [0]int
+	F497  [0]int
+	F498  [0]int
+	F499  [0]int
+	F500  [0]int
+	F501  [0]int
+	F502  [0]int
+	F503  [0]int
+	F504  [0]int
+	F505  [0]int
+	F506  [0]int
+	F507  [0]int
+	F508  [0]int
+	F509  [0]int
+	F510  [0]int
+	F511  [0]int
+	F512  [0]int
+	F513  [0]int
+	F514  [0]int
+	F515  [0]int
+	F516  [0]int
+	F517  [0]int
+	F518  [0]int
+	F519  [0]int
+	F520  [0]int
+	F521  [0]int
+	F522  [0]int
+	F523  [0]int
+	F524  [0]int
+	F525  [0]int
+	F526  [0]int
+	F527  [0]int
+	F528  [0]int
+	F529  [0]int
+	F530  [0]int
+	F531  [0]int
+	F532  [0]int
+	F533  [0]int
+	F534  [0]int
+	F535  [0]int
+	F536  [0]int
+	F537  [0]int
+	F538  [0]int
+	F539  [0]int
+	F540  [0]int
+	F541  [0]int
+	F542  [0]int
+	F543  [0]int
+	F544  [0]int
+	F545  [0]int
+	F546  [0]int
+	F547  [0]int
+	F548  [0]int
+	F549  [0]int
+	F550  [0]int
+	F551  [0]int
+	F552  [0]int
+	F553  [0]int
+	F554  [0]int
+	F555  [0]int
+	F556  [0]int
+	F557  [0]int
+	F558  [0]int
+	F559  [0]int
+	F560  [0]int
+	F561  [0]int
+	F562  [0]int
+	F563  [0]int
+	F564  [0]int
+	F565  [0]int
+	F566  [0]int
+	F567  [0]int
+	F568  [0]int
+	F569  [0]int
+	F570  [0]int
+	F571  [0]int
+	F572  [0]int
+	F573  [0]int
+	F574  [0]int
+	F575  [0]int
+	F576  [0]int
+	F577  [0]int
+	F578  [0]int
+	F579  [0]int
+	F580  [0]int
+	F581  [0]int
+	F582  [0]int
+	F583  [0]int
+	F584  [0]int
+	F585  [0]int
+	F586  [0]int
+	F587  [0]int
+	F588  [0]int
+	F589  [0]int
+	F590  [0]int
+	F591  [0]int
+	F592  [0]int
+	F593  [0]int
+	F594  [0]int
+	F595  [0]int
+	F596  [0]int
+	F597  [0]int
+	F598  [0]int
+	F599  [0]int
+	F600  [0]int
+	F601  [0]int
+	F602  [0]int
+	F603  [0]int
+	F604  [0]int
+	F605  [0]int
+	F606  [0]int
+	F607  [0]int
+	F608  [0]int
+	F609  [0]int
+	F610  [0]int
+	F611  [0]int
+	F612  [0]int
+	F613  [0]int
+	F614  [0]int
+	F615  [0]int
+	F616  [0]int
+	F617  [0]int
+	F618  [0]int
+	F619  [0]int
+	F620  [0]int
+	F621  [0]int
+	F622  [0]int
+	F623  [0]int
+	F624  [0]int
+	F625  [0]int
+	F626  [0]int
+	F627  [0]int
+	F628  [0]int
+	F629  [0]int
+	F630  [0]int
+	F631  [0]int
+	F632  [0]int
+	F633  [0]int
+	F634  [0]int
+	F635  [0]int
+	F636  [0]int
+	F637  [0]int
+	F638  [0]int
+	F639  [0]int
+	F640  [0]int
+	F641  [0]int
+	F642  [0]int
+	F643  [0]int
+	F644  [0]int
+	F645  [0]int
+	F646  [0]int
+	F647  [0]int
+	F648  [0]int
+	F649  [0]int
+	F650  [0]int
+	F651  [0]int
+	F652  [0]int
+	F653  [0]int
+	F654  [0]int
+	F655  [0]int
+	F656  [0]int
+	F657  [0]int
+	F658  [0]int
+	F659  [0]int
+	F660  [0]int
+	F661  [0]int
+	F662  [0]int
+	F663  [0]int
+	F664  [0]int
+	F665  [0]int
+	F666  [0]int
+	F667  [0]int
+	F668  [0]int
+	F669  [0]int
+	F670  [0]int
+	F671  [0]int
+	F672  [0]int
+	F673  [0]int
+	F674  [0]int
+	F675  [0]int
+	F676  [0]int
+	F677  [0]int
+	F678  [0]int
+	F679  [0]int
+	F680  [0]int
+	F681  [0]int
+	F682  [0]int
+	F683  [0]int
+	F684  [0]int
+	F685  [0]int
+	F686  [0]int
+	F687  [0]int
+	F688  [0]int
+	F689  [0]int
+	F690  [0]int
+	F691  [0]int
+	F692  [0]int
+	F693  [0]int
+	F694  [0]int
+	F695  [0]int
+	F696  [0]int
+	F697  [0]int
+	F698  [0]int
+	F699  [0]int
+	F700  [0]int
+	F701  [0]int
+	F702  [0]int
+	F703  [0]int
+	F704  [0]int
+	F705  [0]int
+	F706  [0]int
+	F707  [0]int
+	F708  [0]int
+	F709  [0]int
+	F710  [0]int
+	F711  [0]int
+	F712  [0]int
+	F713  [0]int
+	F714  [0]int
+	F715  [0]int
+	F716  [0]int
+	F717  [0]int
+	F718  [0]int
+	F719  [0]int
+	F720  [0]int
+	F721  [0]int
+	F722  [0]int
+	F723  [0]int
+	F724  [0]int
+	F725  [0]int
+	F726  [0]int
+	F727  [0]int
+	F728  [0]int
+	F729  [0]int
+	F730  [0]int
+	F731  [0]int
+	F732  [0]int
+	F733  [0]int
+	F734  [0]int
+	F735  [0]int
+	F736  [0]int
+	F737  [0]int
+	F738  [0]int
+	F739  [0]int
+	F740  [0]int
+	F741  [0]int
+	F742  [0]int
+	F743  [0]int
+	F744  [0]int
+	F745  [0]int
+	F746  [0]int
+	F747  [0]int
+	F748  [0]int
+	F749  [0]int
+	F750  [0]int
+	F751  [0]int
+	F752  [0]int
+	F753  [0]int
+	F754  [0]int
+	F755  [0]int
+	F756  [0]int
+	F757  [0]int
+	F758  [0]int
+	F759  [0]int
+	F760  [0]int
+	F761  [0]int
+	F762  [0]int
+	F763  [0]int
+	F764  [0]int
+	F765  [0]int
+	F766  [0]int
+	F767  [0]int
+	F768  [0]int
+	F769  [0]int
+	F770  [0]int
+	F771  [0]int
+	F772  [0]int
+	F773  [0]int
+	F774  [0]int
+	F775  [0]int
+	F776  [0]int
+	F777  [0]int
+	F778  [0]int
+	F779  [0]int
+	F780  [0]int
+	F781  [0]int
+	F782  [0]int
+	F783  [0]int
+	F784  [0]int
+	F785  [0]int
+	F786  [0]int
+	F787  [0]int
+	F788  [0]int
+	F789  [0]int
+	F790  [0]int
+	F791  [0]int
+	F792  [0]int
+	F793  [0]int
+	F794  [0]int
+	F795  [0]int
+	F796  [0]int
+	F797  [0]int
+	F798  [0]int
+	F799  [0]int
+	F800  [0]int
+	F801  [0]int
+	F802  [0]int
+	F803  [0]int
+	F804  [0]int
+	F805  [0]int
+	F806  [0]int
+	F807  [0]int
+	F808  [0]int
+	F809  [0]int
+	F810  [0]int
+	F811  [0]int
+	F812  [0]int
+	F813  [0]int
+	F814  [0]int
+	F815  [0]int
+	F816  [0]int
+	F817  [0]int
+	F818  [0]int
+	F819  [0]int
+	F820  [0]int
+	F821  [0]int
+	F822  [0]int
+	F823  [0]int
+	F824  [0]int
+	F825  [0]int
+	F826  [0]int
+	F827  [0]int
+	F828  [0]int
+	F829  [0]int
+	F830  [0]int
+	F831  [0]int
+	F832  [0]int
+	F833  [0]int
+	F834  [0]int
+	F835  [0]int
+	F836  [0]int
+	F837  [0]int
+	F838  [0]int
+	F839  [0]int
+	F840  [0]int
+	F841  [0]int
+	F842  [0]int
+	F843  [0]int
+	F844  [0]int
+	F845  [0]int
+	F846  [0]int
+	F847  [0]int
+	F848  [0]int
+	F849  [0]int
+	F850  [0]int
+	F851  [0]int
+	F852  [0]int
+	F853  [0]int
+	F854  [0]int
+	F855  [0]int
+	F856  [0]int
+	F857  [0]int
+	F858  [0]int
+	F859  [0]int
+	F860  [0]int
+	F861  [0]int
+	F862  [0]int
+	F863  [0]int
+	F864  [0]int
+	F865  [0]int
+	F866  [0]int
+	F867  [0]int
+	F868  [0]int
+	F869  [0]int
+	F870  [0]int
+	F871  [0]int
+	F872  [0]int
+	F873  [0]int
+	F874  [0]int
+	F875  [0]int
+	F876  [0]int
+	F877  [0]int
+	F878  [0]int
+	F879  [0]int
+	F880  [0]int
+	F881  [0]int
+	F882  [0]int
+	F883  [0]int
+	F884  [0]int
+	F885  [0]int
+	F886  [0]int
+	F887  [0]int
+	F888  [0]int
+	F889  [0]int
+	F890  [0]int
+	F891  [0]int
+	F892  [0]int
+	F893  [0]int
+	F894  [0]int
+	F895  [0]int
+	F896  [0]int
+	F897  [0]int
+	F898  [0]int
+	F899  [0]int
+	F900  [0]int
+	F901  [0]int
+	F902  [0]int
+	F903  [0]int
+	F904  [0]int
+	F905  [0]int
+	F906  [0]int
+	F907  [0]int
+	F908  [0]int
+	F909  [0]int
+	F910  [0]int
+	F911  [0]int
+	F912  [0]int
+	F913  [0]int
+	F914  [0]int
+	F915  [0]int
+	F916  [0]int
+	F917  [0]int
+	F918  [0]int
+	F919  [0]int
+	F920  [0]int
+	F921  [0]int
+	F922  [0]int
+	F923  [0]int
+	F924  [0]int
+	F925  [0]int
+	F926  [0]int
+	F927  [0]int
+	F928  [0]int
+	F929  [0]int
+	F930  [0]int
+	F931  [0]int
+	F932  [0]int
+	F933  [0]int
+	F934  [0]int
+	F935  [0]int
+	F936  [0]int
+	F937  [0]int
+	F938  [0]int
+	F939  [0]int
+	F940  [0]int
+	F941  [0]int
+	F942  [0]int
+	F943  [0]int
+	F944  [0]int
+	F945  [0]int
+	F946  [0]int
+	F947  [0]int
+	F948  [0]int
+	F949  [0]int
+	F950  [0]int
+	F951  [0]int
+	F952  [0]int
+	F953  [0]int
+	F954  [0]int
+	F955  [0]int
+	F956  [0]int
+	F957  [0]int
+	F958  [0]int
+	F959  [0]int
+	F960  [0]int
+	F961  [0]int
+	F962  [0]int
+	F963  [0]int
+	F964  [0]int
+	F965  [0]int
+	F966  [0]int
+	F967  [0]int
+	F968  [0]int
+	F969  [0]int
+	F970  [0]int
+	F971  [0]int
+	F972  [0]int
+	F973  [0]int
+	F974  [0]int
+	F975  [0]int
+	F976  [0]int
+	F977  [0]int
+	F978  [0]int
+	F979  [0]int
+	F980  [0]int
+	F981  [0]int
+	F982  [0]int
+	F983  [0]int
+	F984  [0]int
+	F985  [0]int
+	F986  [0]int
+	F987  [0]int
+	F988  [0]int
+	F989  [0]int
+	F990  [0]int
+	F991  [0]int
+	F992  [0]int
+	F993  [0]int
+	F994  [0]int
+	F995  [0]int
+	F996  [0]int
+	F997  [0]int
+	F998  [0]int
+	F999  [0]int
+	F1000 [0]int
+	F1001 [0]int
+	F1002 [0]int
+	F1003 [0]int
+	F1004 [0]int
+	F1005 [0]int
+	F1006 [0]int
+	F1007 [0]int
+	F1008 [0]int
+	F1009 [0]int
+	F1010 [0]int
+	F1011 [0]int
+	F1012 [0]int
+	F1013 [0]int
+	F1014 [0]int
+	F1015 [0]int
+	F1016 [0]int
+	F1017 [0]int
+	F1018 [0]int
+	F1019 [0]int
+	F1020 [0]int
+	F1021 [0]int
+	F1022 [0]int
+	F1023 [0]int
+	*big.Float
+}
+
+// TestBigMethodWideStruct: plain fields do not count toward the supplier
+// search's bound, so a huge Float behind 1024 of them is charged.
+func TestBigMethodWideStruct(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
+	require.NoError(t, err)
+	x := WideBig{Float: new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30))}
+	for _, opt := range []libhandlebars.RenderOption{libhandlebars.WithGoContext(), libhandlebars.WithJSONContext()} {
+		start := time.Now()
+		_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{x}}, opt)
+		require.ErrorContains(t, err, "maximum of")
+		require.Less(t, time.Since(start), 5*time.Second)
 	}
 }

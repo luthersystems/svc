@@ -111,24 +111,18 @@ func (r *renderer) at(n ast.Node) {
 // errorf fails the render with raymond's evaluation error text.
 //
 // The message, which can hold template text (a name, and the node dump
-// repeating it), counts as produced bytes. Its length is bounded before it
-// is built: the format, its string arguments, 24 bytes for any other
-// argument, and the node dump's exact length; that bound is checked against
-// the produced-bytes limit and charged a step per scanUnit bytes, the cost
-// of formatting it.
+// repeating it), counts as produced bytes. Its exact length is checked
+// against the produced-bytes limit before the whole is built: the error
+// itself first (a copy of its arguments, which are already held), then the
+// node dump's exact length. It is charged a step per scanUnit bytes, the
+// cost of formatting it.
 func (r *renderer) errorf(format string, args ...any) {
-	n := len("Evaluation error: \nCurrent node:\n\t") + len(format) + dumpLen(r.curNode)
-	for _, a := range args {
-		if s, ok := a.(string); ok {
-			n += len(s)
-		} else {
-			n += 24
-		}
-	}
+	inner := fmt.Sprintf(format, args...)
+	n := len("Evaluation error: \nCurrent node:\n\t") + len(inner) + dumpLen(r.curNode)
 	r.reserveProduced(n)
 	r.steps1(units(n, scanUnit))
 	r.flush()
-	msg := fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", fmt.Sprintf(format, args...), r.curNode)
+	msg := fmt.Sprintf("Evaluation error: %s\nCurrent node:\n\t%s", inner, r.curNode)
 	r.produced(len(msg))
 	panic(&Error{Kind: KindRender, Msg: msg})
 }
