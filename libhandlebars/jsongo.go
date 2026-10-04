@@ -131,16 +131,6 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	// encoding/json writes a nil pointer or a nil interface as null,
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
-		// math/big's methods do more work than their text shows: charged
-		// before encoding/json (or firstMarshalerError) calls them.
-		method := "MarshalJSON"
-		if text {
-			method = "MarshalText"
-		}
-		bigSteps, _ := bigcost.MethodSteps(v, method)
-		if err := w.c.steps(bigSteps); err != nil {
-			return jsonTotals{steps: bigSteps}, err
-		}
 		if !text {
 			w.mayUnload = true
 			if raw, ok := rawMessage(v); ok {
@@ -154,15 +144,23 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 				charge += 2 * units64(rawLen, 16)
 			}
 			if err := w.c.steps(charge); err != nil {
-				return jsonTotals{steps: bigSteps + charge}, err
+				return jsonTotals{steps: charge}, err
 			}
 			if found == embedTooDeep {
-				return jsonTotals{steps: bigSteps + charge}, errEmbedDeep
+				return jsonTotals{steps: charge}, errEmbedDeep
+			}
+			bigSteps, err := w.bigMethod(v, "MarshalJSON")
+			if err != nil {
+				return jsonTotals{steps: charge + bigSteps}, err
 			}
 			w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 			tot, err := w.leaf(1)
-			tot.steps += bigSteps + charge
+			tot.steps += charge + bigSteps
 			return tot, err
+		}
+		bigSteps, err := w.bigMethod(v, "MarshalText")
+		if err != nil {
+			return jsonTotals{steps: bigSteps}, err
 		}
 		w.skipped = append(w.skipped, skippedMarshaler{v, typ, text})
 		tot, err := w.leaf(1) // its output is not known here: at least a byte
@@ -170,6 +168,17 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 		return tot, err
 	}
 	return w.leaf(1) // at least a byte
+}
+
+// bigMethod charges the call of v's method name when it runs math/big's,
+// whose work grows faster than its text, before encoding/json (or
+// firstMarshalerError) makes it; past the search's bounds it fails.
+func (w *jsonWalker) bigMethod(v reflect.Value, name string) (int64, error) {
+	n, _, err := bigcost.MethodSteps(v, name)
+	if err != nil {
+		return 0, errBigEmbedDeep
+	}
+	return n, w.c.steps(n)
 }
 
 // maxEmbedRaw bounds embeddedRaw's search: at most 64 hops through
@@ -189,6 +198,10 @@ const (
 // encoding/json encodes are refused too (a self-embedding node, or a
 // chain of 65 wrappers, with their own MarshalJSON): see DETERMINISM.md.
 var errEmbedDeep = &jsonFailure{fmt.Sprintf("json: Marshaler embedding nests deeper than %d", maxEmbedRaw)}
+
+// errBigEmbedDeep is the math/big method search past its bounds
+// (bigcost.ErrUnresolved): it fails closed, as errEmbedDeep does.
+var errBigEmbedDeep = &jsonFailure{"json: " + bigcost.ErrUnresolved.Error()}
 
 type embedResult int
 
@@ -836,7 +849,10 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			// map order.
 			var keySteps int64
 			for it := v.MapRange(); it.Next(); {
-				c, _ := bigcost.MethodSteps(it.Key(), "MarshalText")
+				c, _, berr := bigcost.MethodSteps(it.Key(), "MarshalText")
+				if berr != nil {
+					return tot, errBigEmbedDeep
+				}
 				keySteps = min(keySteps+2*c, 1<<62)
 			}
 			if err := w.c.steps(keySteps); err != nil {

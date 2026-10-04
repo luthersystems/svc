@@ -501,10 +501,7 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 				// A Marshaler reaching a RawMessage by embedding: its
 				// search is charged whatever it finds.
 				_, cost, found := embeddedRaw(v)
-				// math/big's MarshalJSON (its own, or promoted) does more
-				// work than its text shows: charged before it runs.
-				bigSteps, _ := bigcost.MethodSteps(v, "MarshalJSON")
-				if lerr := w.env.ChargeSteps(cost + bigSteps); lerr.Type == lisp.LError {
+				if lerr := w.env.ChargeSteps(cost); lerr.Type == lisp.LError {
 					return nil, true, lerr
 				}
 				switch found {
@@ -515,6 +512,17 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 					w.failAt(x)
 					return nil, true, nil
 				default:
+					// math/big's MarshalJSON (its own, or promoted) does
+					// more work than its text shows: charged before it runs.
+					bigSteps, _, berr := bigcost.MethodSteps(v, "MarshalJSON")
+					if berr != nil {
+						w.nativeErr = errBigEmbedDeep
+						w.failAt(x)
+						return nil, true, nil
+					}
+					if lerr := w.env.ChargeSteps(bigSteps); lerr.Type == lisp.LError {
+						return nil, true, lerr
+					}
 				}
 			}
 		}

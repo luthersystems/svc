@@ -415,3 +415,93 @@ func TestBigMethodNativesFailFast(t *testing.T) {
 		require.Less(t, time.Since(start), 5*time.Second, "%T", x)
 	}
 }
+
+type Deep1 struct{ Deep2 }
+type Deep2 struct{ Deep3 }
+type Deep3 struct{ Deep4 }
+type Deep4 struct{ Deep5 }
+type Deep5 struct{ Deep6 }
+type Deep6 struct{ Deep7 }
+type Deep7 struct{ Deep8 }
+type Deep8 struct{ Deep9 }
+type Deep9 struct{ Deep10 }
+type Deep10 struct{ Deep11 }
+type Deep11 struct{ Deep12 }
+type Deep12 struct{ Deep13 }
+type Deep13 struct{ Deep14 }
+type Deep14 struct{ Deep15 }
+type Deep15 struct{ Deep16 }
+type Deep16 struct{ Deep17 }
+type Deep17 struct{ Deep18 }
+type Deep18 struct{ Deep19 }
+type Deep19 struct{ Deep20 }
+type Deep20 struct{ Deep21 }
+type Deep21 struct{ Deep22 }
+type Deep22 struct{ Deep23 }
+type Deep23 struct{ Deep24 }
+type Deep24 struct{ Deep25 }
+type Deep25 struct{ Deep26 }
+type Deep26 struct{ Deep27 }
+type Deep27 struct{ Deep28 }
+type Deep28 struct{ Deep29 }
+type Deep29 struct{ Deep30 }
+type Deep30 struct{ Deep31 }
+type Deep31 struct{ Deep32 }
+type Deep32 struct{ Deep33 }
+type Deep33 struct{ Deep34 }
+type Deep34 struct{ Deep35 }
+type Deep35 struct{ Deep36 }
+type Deep36 struct{ Deep37 }
+type Deep37 struct{ Deep38 }
+type Deep38 struct{ Deep39 }
+type Deep39 struct{ Deep40 }
+type Deep40 struct{ Deep41 }
+type Deep41 struct{ Deep42 }
+type Deep42 struct{ Deep43 }
+type Deep43 struct{ Deep44 }
+type Deep44 struct{ Deep45 }
+type Deep45 struct{ Deep46 }
+type Deep46 struct{ Deep47 }
+type Deep47 struct{ Deep48 }
+type Deep48 struct{ Deep49 }
+type Deep49 struct{ Deep50 }
+type Deep50 struct{ Deep51 }
+type Deep51 struct{ Deep52 }
+type Deep52 struct{ Deep53 }
+type Deep53 struct{ Deep54 }
+type Deep54 struct{ Deep55 }
+type Deep55 struct{ Deep56 }
+type Deep56 struct{ Deep57 }
+type Deep57 struct{ Deep58 }
+type Deep58 struct{ Deep59 }
+type Deep59 struct{ Deep60 }
+type Deep60 struct{ Deep61 }
+type Deep61 struct{ Deep62 }
+type Deep62 struct{ Deep63 }
+type Deep63 struct{ Deep64 }
+type Deep64 struct{ Deep65 }
+
+type Deep65 struct{ *big.Float }
+
+// TestBigMethodSearchFailsClosed: a math/big method promoted from deeper
+// than the supplier search's 64 levels is an error, not an uncharged call,
+// in the Go context, through JSON, and in an ELPS native; at 64 levels it
+// is found.
+func TestBigMethodSearchFailsClosed(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
+	require.NoError(t, err)
+	deep := Deep1{} // its Float, 65 levels down, is nil: the search fails on the type
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{deep}}, libhandlebars.WithGoContext())
+	require.EqualError(t, err, "Go value's method embedding nests deeper than 64 levels, 16384 fields or 64 interfaces")
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": deep}, libhandlebars.WithJSONContext())
+	require.ErrorContains(t, err, "json: method embedding nests deeper than 64 levels")
+	env := newEnv(t)
+	ctx := lisp.SortedMap()
+	ctx.MapSetString("x", lisp.Native(deep))
+	env.Put(lisp.Symbol("ctx"), ctx)
+	res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "{{x}}" ctx)`)
+	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	require.Contains(t, res.String(), "method embedding nests deeper than 64 levels")
+	// One level shallower, it is found (and, nil, prints as fmt prints it).
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{deep.Deep2}})
+}

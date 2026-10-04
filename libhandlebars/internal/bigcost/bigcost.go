@@ -14,6 +14,7 @@
 package bigcost
 
 import (
+	"fmt"
 	"math/big"
 	"reflect"
 	"runtime"
@@ -39,28 +40,36 @@ func Steps(x any) (int64, bool) { return direct(reflect.ValueOf(x)) }
 // declares itself is its own; else the shallowest embedded field
 // declaring the name, unless another field or method of that name is at
 // the same depth (then nothing is promoted). An interface (static type, or
-// embedded field) is followed to its dynamic value.
-func MethodSteps(v reflect.Value, name string) (int64, bool) {
-	for range maxHops {
+// embedded field) is followed to its dynamic value. Where the search passes
+// its bounds before it decides, it fails closed with ErrUnresolved.
+func MethodSteps(v reflect.Value, name string) (int64, bool, error) {
+	for range maxHops + 1 { // 64 hops: 65 values
 		for v.Kind() == reflect.Interface {
 			if v.IsNil() {
-				return 0, false
+				return 0, false, nil
 			}
 			v = v.Elem()
 		}
 		if !v.IsValid() {
-			return 0, false
+			return 0, false, nil
 		}
 		if n, ok := direct(v); ok {
-			return n, true
+			return n, true, nil
+		}
+		if _, ok := v.Type().MethodByName(name); !ok {
+			return 0, false, nil // not called
 		}
 		r := resolve(v.Type(), name)
-		if r.kind == supplierNone {
-			return 0, false
+		switch r.kind {
+		case supplierNone:
+			return 0, false, nil
+		case supplierUnresolved:
+			return 0, false, ErrUnresolved
+		default:
 		}
 		f := follow(v, r.path)
 		if !f.IsValid() {
-			return 0, false // behind a nil pointer: the call panics
+			return 0, false, nil // behind a nil pointer: the call panics
 		}
 		if r.kind == supplierInterface {
 			v = f
@@ -68,14 +77,19 @@ func MethodSteps(v reflect.Value, name string) (int64, bool) {
 		}
 		if f.Kind() != reflect.Pointer {
 			if !f.CanAddr() {
-				return 0, false
+				return 0, false, nil
 			}
 			f = f.Addr()
 		}
-		return direct(f)
+		n, ok := direct(f)
+		return n, ok, nil
 	}
-	return 0, false
+	return 0, false, ErrUnresolved
 }
+
+// ErrUnresolved is the supplier search past its bounds: callers fail
+// rather than leave a math/big method it could not rule out uncharged.
+var ErrUnresolved = fmt.Errorf("method embedding nests deeper than %d levels, %d fields or %d interfaces", maxEmbedDepth, maxEmbedFields, maxHops)
 
 // direct charges v if it is a *big.Int, *big.Rat or *big.Float. A value
 // reached through an unexported field is read too: its promoted methods
@@ -107,17 +121,18 @@ func direct(v reflect.Value) (int64, bool) {
 // chains of embedded interfaces, are not followed (Go code that builds
 // them is the caller's).
 const (
-	maxEmbedDepth  = 16
-	maxEmbedFields = 1 << 10
+	maxEmbedDepth  = 64 // as encoding/json's embedding search in jsongo
+	maxEmbedFields = 1 << 14
 	maxHops        = 64
 )
 
 type supplierKind uint8
 
 const (
-	supplierNone      supplierKind = iota // the type's own method, or none
-	supplierBig                           // a math/big field
-	supplierInterface                     // an embedded interface field
+	supplierNone       supplierKind = iota // the type's own method, or none
+	supplierBig                            // a math/big field
+	supplierInterface                      // an embedded interface field
+	supplierUnresolved                     // the search passed its bounds
 )
 
 // supplier is where a type's method comes from: the field path to it.
@@ -165,7 +180,7 @@ func search(t reflect.Type, name string) supplier {
 		for _, n := range level {
 			for i := range n.t.NumField() {
 				if scanned++; scanned > maxEmbedFields {
-					return supplier{}
+					return supplier{kind: supplierUnresolved}
 				}
 				f := n.t.Field(i)
 				if f.Name == name {
@@ -205,6 +220,9 @@ func search(t reflect.Type, name string) supplier {
 			return hits[0]
 		}
 		level = next
+	}
+	if len(level) > 0 {
+		return supplier{kind: supplierUnresolved} // deeper embeddings not searched
 	}
 	return supplier{}
 }

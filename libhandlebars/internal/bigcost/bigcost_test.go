@@ -136,17 +136,20 @@ func TestMethodSteps(t *testing.T) {
 		{&selfEmbed{&selfEmbed{}}, "String", 0, false}, {(*wrapF)(nil), "Format", 0, false},
 		{struct{ A *big.Int }{i}, "Format", 0, false},
 	} {
-		n, ok := MethodSteps(reflect.ValueOf(c.x), c.name)
+		n, ok, err := MethodSteps(reflect.ValueOf(c.x), c.name)
+		require.NoError(t, err)
 		require.Equal(t, c.ok, ok, "%T %s", c.x, c.name)
 		require.Equal(t, c.want, n, "%T %s", c.x, c.name)
 	}
 	// An interface's static type is followed to its dynamic value.
 	tms := []encoding.TextMarshaler{tm}
-	n, ok := MethodSteps(reflect.ValueOf(tms).Index(0), "MarshalText")
+	n, ok, err := MethodSteps(reflect.ValueOf(tms).Index(0), "MarshalText")
+	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, fs, n)
 	holder := struct{ T encoding.TextMarshaler }{wrapF{f}}
-	n, ok = MethodSteps(reflect.ValueOf(holder).Field(0), "MarshalText")
+	n, ok, err = MethodSteps(reflect.ValueOf(holder).Field(0), "MarshalText")
+	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, fs, n)
 }
