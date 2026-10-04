@@ -101,7 +101,7 @@ func MethodSteps(v reflect.Value, name string) (int64, bool, error) {
 
 // ErrUnresolved is the supplier search past its bounds: callers fail
 // rather than leave a math/big method it could not rule out uncharged.
-var ErrUnresolved = fmt.Errorf("method embedding nests deeper than %d levels or %d embedded fields", maxEmbedDepth, maxEmbedFields)
+var ErrUnresolved = fmt.Errorf("method embedding search passed its bound of %d levels or %d embedded fields", maxEmbedDepth, maxEmbedFields)
 
 // ErrCycle is a method promoted through interfaces back to a value it came
 // from: calling it would recurse until the stack overflows.
@@ -143,7 +143,7 @@ func direct(v reflect.Value) (int64, bool) {
 // fail closed (ErrUnresolved).
 const (
 	maxEmbedDepth  = 64      // as jsongo's embedding search (maxEmbedRaw)
-	maxEmbedFields = 1 << 14 // embedded fields looked at, as jsongo's (maxEmbedScan)
+	maxEmbedFields = 1 << 14 // embedded fields of distinct types looked at, as jsongo's (maxEmbedScan)
 )
 
 type supplierKind uint8
@@ -181,10 +181,15 @@ func resolve(t reflect.Type, name string) supplier {
 }
 
 type embedNode struct {
-	t    reflect.Type // a struct type
-	path []int
+	t     reflect.Type // a struct type
+	path  []int        // the first path to it
+	count int          // the paths to it at this depth
 }
 
+// search is Go's selector rule for name on t, as reflect.FieldByNameFunc
+// applies it: breadth first, each struct type looked at once (at its
+// shallowest depth), counting the paths that reach it so that a method
+// it brings by two is ambiguous.
 func search(t reflect.Type, name string) supplier {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -192,16 +197,22 @@ func search(t reflect.Type, name string) supplier {
 	if t.Kind() != reflect.Struct || declares(t, name) {
 		return supplier{}
 	}
-	level, scanned := []embedNode{{t: t}}, 0
+	level, scanned := []embedNode{{t: t, count: 1}}, 0
+	visited := map[reflect.Type]bool{}
 	for range maxEmbedDepth {
-		var hits []supplier
+		var hit supplier
+		hits := 0
 		var next []embedNode
-		shadowed := false
+		at := map[reflect.Type]int{} // index in next
 		for _, n := range level {
+			if visited[n.t] {
+				continue // looked at shallower: its fields are deeper here
+			}
+			visited[n.t] = true
 			for i := range n.t.NumField() {
 				f := n.t.Field(i)
 				if f.Name == name {
-					shadowed = true // a field of that name at this depth
+					hits += 2 // a field of that name at this depth: no method promoted
 				}
 				if !f.Anonymous {
 					continue
@@ -213,7 +224,7 @@ func search(t reflect.Type, name string) supplier {
 				ft := f.Type
 				if ft.Kind() == reflect.Interface {
 					if _, ok := ft.MethodByName(name); ok {
-						hits = append(hits, supplier{path, supplierInterface})
+						hit, hits = supplier{path, supplierInterface}, hits+n.count
 					}
 					continue
 				}
@@ -227,17 +238,22 @@ func search(t reflect.Type, name string) supplier {
 					if base == intType || base == ratType || base == floatType {
 						kind = supplierBig
 					}
-					hits = append(hits, supplier{path, kind})
-				case base.Kind() == reflect.Struct:
-					next = append(next, embedNode{base, path})
+					hit, hits = supplier{path, kind}, hits+n.count
+				case base.Kind() == reflect.Struct && !visited[base]:
+					if j, ok := at[base]; ok {
+						next[j].count += n.count
+					} else {
+						at[base] = len(next)
+						next = append(next, embedNode{base, path, n.count})
+					}
 				}
 			}
 		}
 		switch {
-		case shadowed || len(hits) > 1:
+		case hits > 1:
 			return supplier{} // shadowed or ambiguous: not promoted
-		case len(hits) == 1:
-			return hits[0]
+		case hits == 1:
+			return hit
 		}
 		level = next
 	}

@@ -849,12 +849,19 @@ func (w *jsonWalker) mapValue(v reflect.Value, t reflect.Type, depth int) (jsonT
 			// charged first, summed so a failure does not depend on Go's
 			// map order.
 			var keySteps int64
+			var bigErr string // the least, whatever Go's map order
 			for it := v.MapRange(); it.Next(); {
 				c, _, berr := bigcost.MethodSteps(it.Key(), "MarshalText")
 				if berr != nil {
-					return tot, bigFailure(berr)
+					if e := berr.Error(); bigErr == "" || e < bigErr {
+						bigErr = e
+					}
+					continue
 				}
 				keySteps = min(keySteps+2*c, 1<<62)
+			}
+			if bigErr != "" {
+				return tot, &jsonFailure{"json: " + bigErr}
 			}
 			if err := w.c.steps(keySteps); err != nil {
 				return tot, err

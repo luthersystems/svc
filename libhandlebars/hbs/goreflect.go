@@ -591,6 +591,11 @@ func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t 
 	if z.deep {
 		panic(errorf(KindLimit, "template evaluation exceeds the maximum depth of %d", r.maxDepth))
 	}
+	if z.methodErr != "" {
+		// The walk ran to its end (else MaxSteps failed it above): the
+		// least error text, whatever Go's map order.
+		r.fail("Go value's " + z.methodErr)
+	}
 	if z.nanKeys {
 		// fmt orders NaN keys among themselves by Go's map order, so the
 		// text would differ from run to run.
@@ -781,6 +786,7 @@ func (r *renderer) appendTypeName(dst []byte, t reflect.Type) []byte {
 // the bytes it prints.
 type goSizer struct {
 	r            *renderer
+	methodErr    string // the least error finding one's math/big work (bigcost)
 	steps, limit int64
 	deep         bool
 	nanKeys      bool // a map with two NaN keys fmt's sort ties (keysTied)
@@ -832,7 +838,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			}
 			c, _, err := bigcost.MethodSteps(v, fmtMethodOf(v.Type()).name)
 			if err != nil {
-				z.r.fail("Go value's " + err.Error())
+				// Reported once the walk is done, the least of them, so it
+				// does not depend on Go's map order (goFormat).
+				if e := err.Error(); z.methodErr == "" || e < z.methodErr {
+					z.methodErr = e
+				}
 			}
 			z.steps += min(c, z.limit) // math/big's conversion, and interface hops
 			return 0

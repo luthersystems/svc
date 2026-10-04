@@ -492,16 +492,16 @@ func TestBigMethodSearchFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	deep := Deep1{} // its Float, 65 levels down, is nil: the search fails on the type
 	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{deep}}, libhandlebars.WithGoContext())
-	require.EqualError(t, err, "Go value's method embedding nests deeper than 64 levels or 16384 embedded fields")
+	require.EqualError(t, err, "Go value's method embedding search passed its bound of 64 levels or 16384 embedded fields")
 	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": deep}, libhandlebars.WithJSONContext())
-	require.ErrorContains(t, err, "json: method embedding nests deeper than 64 levels")
+	require.ErrorContains(t, err, "json: method embedding search passed its bound of 64 levels")
 	env := newEnv(t)
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("x", lisp.Native(deep))
 	env.Put(lisp.Symbol("ctx"), ctx)
 	res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "{{x}}" ctx)`)
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.Contains(t, res.String(), "method embedding nests deeper than 64 levels")
+	require.Contains(t, res.String(), "method embedding search passed its bound of 64 levels")
 	// One level shallower, it is found (and, nil, prints as fmt prints it).
 	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{deep.Deep2}})
 }
@@ -532,4 +532,211 @@ func TestBigMethodInterfaceChains(t *testing.T) {
 	loop.Stringer = StrChain{loop}
 	_, err = libhandlebars.RenderWith(tpl, map[string]any{"x": []any{loop}}, libhandlebars.WithGoContext())
 	require.EqualError(t, err, "Go value's method embedding cycles through an interface")
+}
+
+type E3Top struct {
+	E3C1
+	E3X1
+}
+
+type E3C1 struct{ E3C2 }
+type E3C2 struct{ E3C3 }
+type E3C3 struct{ E3C4 }
+type E3C4 struct{ E3C5 }
+type E3C5 struct{ E3C6 }
+type E3C6 struct{ E3C7 }
+type E3C7 struct{ E3C8 }
+type E3C8 struct{ E3C9 }
+type E3C9 struct{ E3C10 }
+type E3C10 struct{ E3C11 }
+type E3C11 struct{ E3C12 }
+type E3C12 struct{ E3C13 }
+type E3C13 struct{ E3C14 }
+type E3C14 struct{ E3C15 }
+type E3C15 struct{ E3C16 }
+type E3C16 struct{ *big.Int }
+
+type E3X1 struct {
+	E3X2
+	E3Y2
+}
+
+type E3Y1 struct {
+	E3X2
+	E3Y2
+}
+
+type E3X2 struct {
+	E3X3
+	E3Y3
+}
+
+type E3Y2 struct {
+	E3X3
+	E3Y3
+}
+
+type E3X3 struct {
+	E3X4
+	E3Y4
+}
+
+type E3Y3 struct {
+	E3X4
+	E3Y4
+}
+
+type E3X4 struct {
+	E3X5
+	E3Y5
+}
+
+type E3Y4 struct {
+	E3X5
+	E3Y5
+}
+
+type E3X5 struct {
+	E3X6
+	E3Y6
+}
+
+type E3Y5 struct {
+	E3X6
+	E3Y6
+}
+
+type E3X6 struct {
+	E3X7
+	E3Y7
+}
+
+type E3Y6 struct {
+	E3X7
+	E3Y7
+}
+
+type E3X7 struct {
+	E3X8
+	E3Y8
+}
+
+type E3Y7 struct {
+	E3X8
+	E3Y8
+}
+
+type E3X8 struct {
+	E3X9
+	E3Y9
+}
+
+type E3Y8 struct {
+	E3X9
+	E3Y9
+}
+
+type E3X9 struct {
+	E3X10
+	E3Y10
+}
+
+type E3Y9 struct {
+	E3X10
+	E3Y10
+}
+
+type E3X10 struct {
+	E3X11
+	E3Y11
+}
+
+type E3Y10 struct {
+	E3X11
+	E3Y11
+}
+
+type E3X11 struct {
+	E3X12
+	E3Y12
+}
+
+type E3Y11 struct {
+	E3X12
+	E3Y12
+}
+
+type E3X12 struct {
+	E3X13
+	E3Y13
+}
+
+type E3Y12 struct {
+	E3X13
+	E3Y13
+}
+
+type E3X13 struct {
+	E3X14
+	E3Y14
+}
+
+type E3Y13 struct {
+	E3X14
+	E3Y14
+}
+
+type E3X14 struct {
+	E3X15
+	E3Y15
+}
+
+type E3Y14 struct {
+	E3X15
+	E3Y15
+}
+
+type E3X15 struct{}
+type E3Y15 struct{}
+
+// TestBigMethodSearchDiamonds: the supplier search looks at each embedded
+// type once (counting the paths to it), so a diamond of embeddings, here
+// 2^14 paths through 30 types, costs its types, not its paths: the Int 17
+// levels down is found, as Go finds it.
+func TestBigMethodSearchDiamonds(t *testing.T) {
+	var x E3Top
+	x.Int = big.NewInt(42)
+	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{x}})
+	checkJSON(t, `{{x}}`, map[string]any{"x": x})
+}
+
+type TMLoop struct{ encoding.TextMarshaler }
+
+// TestBigMethodErrorsOrderFree: of several map keys whose math/big search
+// fails (or a step limit), the error reported does not depend on Go's map
+// order: the step limit where the walk stops, else the least error text.
+func TestBigMethodErrorsOrderFree(t *testing.T) {
+	strLoop := &StrChain{}
+	strLoop.Stringer = StrChain{strLoop}
+	tmLoop := &TMLoop{}
+	tmLoop.TextMarshaler = tmLoop
+	huge := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30))
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
+	require.NoError(t, err)
+	for _, c := range []struct {
+		x   any
+		opt libhandlebars.RenderOption
+	}{
+		{[]any{map[fmt.Stringer]int{strLoop: 0, huge: 1}}, libhandlebars.WithGoContext()},
+		{[]any{map[fmt.Stringer]int{strLoop: 0, Deep1{}: 1}}, libhandlebars.WithGoContext()},
+		{map[encoding.TextMarshaler]int{tmLoop: 0, &Deep1{}: 1}, libhandlebars.WithJSONContext()},
+	} {
+		seen := map[string]bool{}
+		for range 200 {
+			_, err := libhandlebars.RenderWith(tpl, map[string]any{"x": c.x}, c.opt)
+			require.Error(t, err)
+			seen[err.Error()] = true
+		}
+		require.Len(t, seen, 1, "%v", seen)
+	}
 }
