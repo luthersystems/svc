@@ -1462,6 +1462,7 @@ func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 	}{
 		"native": {lisp.Native(make(chan int)), 0}, "lambda": {fn, 0},
 		"native, 70 deep": {lisp.Native(make(chan int)), 70}, "lambda, 70 deep": {fn, 70},
+		"NaN": {lisp.Float(math.NaN()), 0},
 	} {
 		best := math.Inf(1)
 		for range 3 {
@@ -1479,4 +1480,18 @@ func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 		t.Logf("%s after %d escaped bytes: %.0f ns/step", name, 6*len(escaped), best)
 		require.False(t, ceilingFails(t, best), "%s: %.0f ns/step", name, best)
 	}
+	// Past the cap by its escapes, then another value: the walk stops at
+	// the cap and the encoder replays up to it.
+	past := strings.Repeat("<", (env.Runtime.MaxAllocBytes()+4096)/6)
+	best := math.Inf(1)
+	for range 3 {
+		env.Put(lisp.Symbol("ctx"), lisp.QExpr([]*lisp.LVal{lisp.String(past), lisp.Int(1)}))
+		start := time.Now()
+		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%v", res)
+		require.Contains(t, res.String(), "allocation size exceeds maximum")
+		best = min(best, float64(time.Since(start).Nanoseconds())/float64(steps))
+	}
+	t.Logf("cap replay after %d escaped bytes: %.0f ns/step", 6*len(past), best)
+	require.False(t, ceilingFails(t, best), "cap replay: %.0f ns/step", best)
 }
