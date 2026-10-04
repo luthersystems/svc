@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -361,23 +363,35 @@ func dateFormatHelper(name, layout string) func(c *hcall) any {
 	}
 }
 
-// init warms phonenumbers: the library compiles each region's regular
-// expressions the first time a number from that region is parsed or
-// checked (milliseconds), which no render should pay for. Warming every
-// supported region's example number, in the international and national
-// forms a template would pass, takes about 55-70 ms and allocates about
-// 21 MB once per process, of which about 10 MB (the compiled expressions
-// and metadata) stays live.
-func init() {
-	for region := range phonenumbers.GetSupportedRegions() {
-		if ex := phonenumbers.GetExampleNumber(region); ex != nil {
-			_ = formatPhoneGB(phonenumbers.Format(ex, phonenumbers.INTERNATIONAL))
-			_ = formatPhoneGB(phonenumbers.Format(ex, phonenumbers.NATIONAL))
+// phoneWarm warms phonenumbers before the first format-phone-gb: the
+// library compiles each region's regular expressions the first time a
+// number from that region is parsed or checked (milliseconds), which no
+// later render should pay for. Warming every supported region's example
+// number, in the international and national forms a template would pass,
+// takes about 55-70 ms and allocates about 21 MB once per process, of which
+// about 10 MB (the compiled expressions and metadata) stays live. It runs
+// on the first call, not at init, so a binary that links hbs and never
+// formats a phone number pays nothing; that first call waits for it (the
+// steps it charges are fixed, phoneCallCost, so its output and steps are
+// those of any other call).
+var (
+	phoneWarm   sync.Once
+	phoneWarmed atomic.Bool // set by the warm-up, for tests
+)
+
+func warmPhonenumbers() {
+	phoneWarm.Do(func() {
+		for region := range phonenumbers.GetSupportedRegions() {
+			if ex := phonenumbers.GetExampleNumber(region); ex != nil {
+				_ = formatPhoneGBCold(phonenumbers.Format(ex, phonenumbers.INTERNATIONAL))
+				_ = formatPhoneGBCold(phonenumbers.Format(ex, phonenumbers.NATIONAL))
+			}
 		}
-	}
-	for _, n := range []string{"07700900123 ext 12", "0", "abc", "+999 1", "tel:+44-20-7946-0958"} {
-		_ = formatPhoneGB(n)
-	}
+		for _, n := range []string{"07700900123 ext 12", "0", "abc", "+999 1", "tel:+44-20-7946-0958"} {
+			_ = formatPhoneGBCold(n)
+		}
+		phoneWarmed.Store(true)
+	})
 }
 
 func hFormatPhoneGB(c *hcall) any {
@@ -391,8 +405,15 @@ func hFormatPhoneGB(c *hcall) any {
 	return formatPhoneGB(rawNum)
 }
 
-// formatPhoneGB is svc's format-phone-gb on a non-empty input.
+// formatPhoneGB is svc's format-phone-gb on a non-empty input, after the
+// warm-up.
 func formatPhoneGB(rawNum string) string {
+	warmPhonenumbers()
+	return formatPhoneGBCold(rawNum)
+}
+
+// formatPhoneGBCold is formatPhoneGB without the warm-up.
+func formatPhoneGBCold(rawNum string) string {
 	formattedNum, err := phonenumbers.Parse(rawNum, "GB")
 	if err != nil {
 		return rawNum
