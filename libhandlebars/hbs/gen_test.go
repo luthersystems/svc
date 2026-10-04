@@ -7,6 +7,8 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+
+	"github.com/luthersystems/svc/libhandlebars/hbs"
 )
 
 // A grammar-aware generator of templates and contexts for differential
@@ -266,7 +268,41 @@ func FuzzDifferential(f *testing.F) {
 		if d := diff(tpl, ctx); d != "" {
 			t.Fatal(d)
 		}
+		checkRepeatable(t, tpl, ctx)
 	})
+}
+
+// checkRepeatable renders tpl with ctxJSON twice, parsing through a cache
+// that is cold the first time and warm the second: the output, the error
+// text and the steps charged (the parse's included) must be the same.
+func checkRepeatable(t *testing.T, tpl, ctxJSON string) {
+	t.Helper()
+	ctx, err := hbs.FromJSON([]byte(ctxJSON))
+	if err != nil {
+		return
+	}
+	parse := hbs.NewParseCacheForTest()
+	type result struct {
+		out, err string
+		steps    int64
+	}
+	run := func() result {
+		m := &stepMeter{}
+		p, err := parse(tpl, hbs.DefaultLimits(), m)
+		if err != nil {
+			return result{err: "parse: " + err.Error(), steps: m.used}
+		}
+		out, err := p.Render(ctx, hbs.Options{Meter: m})
+		r := result{out: out, steps: m.used}
+		if err != nil {
+			r.err = err.Error()
+		}
+		return r
+	}
+	cold, warm := run(), run()
+	if cold != warm {
+		t.Fatalf("template %q\ncontext  %s\ncold parse: %+v\nwarm parse: %+v", tpl, ctxJSON, cold, warm)
+	}
 }
 
 // FuzzTemplateText fuzzes raw template text against a fixed context.
