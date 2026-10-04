@@ -43,8 +43,8 @@ go test -timeout 10m ./libdates/...
 # Run a single test
 go test -timeout 10m -run TestDiffYMD ./libdates/...
 
-# Lint (matches CI config)
-golangci-lint run
+# Lint (matches CI config; verifies .golangci.yml first)
+make static-checks
 
 # Download substrate plugin (required for oracle tests)
 ./scripts/obtain-plugin.sh
@@ -59,7 +59,7 @@ Single GitHub Actions workflow (`.github/workflows/svc.yml`):
 - **Triggers**: PRs targeting `main` only
 - **Runner**: `ubuntu-22.04`, Go from `go.mod` (`go-version-file`)
 - **Steps**: checkout → setup-go → clean modcache → golangci-lint (v2.13.2, v2 config) → `make citest`
-- **Linter config**: `.golangci.yml` — the luthersystems/elps linter set (gosec included), 5m timeout, no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
+- **Linter config**: `.golangci.yml` — the linter set luthersystems/elps and luthersystems/substrate share (gosec included), staticcheck at substrate's default set (SA1019 on), 5m timeout, no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
 - **No deploy/release automation** — this is a library repo
 
 ## Branch Protection

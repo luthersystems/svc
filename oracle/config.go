@@ -34,9 +34,11 @@ type Config struct {
 	swaggerHandler http.Handler
 	// ListenAddress is an address the oracle HTTP listens on.
 	ListenAddress string `yaml:"listen-address"`
-	// PhylumPath is the the path for the business logic when testing.
+	// PhylumPath is the path for the business logic when testing.
 	PhylumPath string `yaml:"phylum-path"`
-	// TODO: PhylumConfigPath is the the path for the bootstrap yaml for when testing.
+	// PhylumConfigPath is the path to the phylum's bootstrap YAML, read when
+	// the phylum is emulated in memory (testing) and not restored from a
+	// snapshot.
 	PhylumConfigPath string `yaml:"phylum-config-path"`
 	// GatewayEndpoint is an address to the shiroclient gateway.
 	GatewayEndpoint string `yaml:"gateway-endpoint"`
