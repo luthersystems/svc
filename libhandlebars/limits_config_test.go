@@ -76,7 +76,7 @@ func TestLoaderLimitsLargeTemplate(t *testing.T) {
 	}
 
 	def := newEnvWith(t, libhandlebars.LoadPackage)
-	for _, fn := range []string{"render", fixedMode} {
+	for _, fn := range []string{"render", strictMode} {
 		res, _ := renderIn(t, def, fn, tpl, ctx())
 		require.True(t, isParseCondition(res), "%s: %v", fn, res)
 	}
@@ -158,7 +158,7 @@ func TestLoaderDefaultLimitsSteps(t *testing.T) {
 	ctx := func() *lisp.LVal {
 		return sortedMap("name", lisp.String("n"), "items", lisp.QExpr([]*lisp.LVal{lisp.Int(1), lisp.Float(2.5)}))
 	}
-	for _, fn := range []string{"render", fixedMode} {
+	for _, fn := range []string{"render", strictMode} {
 		want, wantSteps := renderIn(t, newEnvWith(t, libhandlebars.LoadPackage), fn, tpl, ctx())
 		for i, opts := range [][]libhandlebars.Option{
 			nil, {libhandlebars.WithConfig(libhandlebars.DefaultConfig())}, {libhandlebars.WithLimits(hbs.DefaultLimits())},
@@ -357,10 +357,10 @@ func TestConfigCyclicGoContext(t *testing.T) {
 // TestRaisedValueDepthNoCrash runs, in a subprocess (a stack overflow is
 // fatal), contexts nested past elps's default value depth in an
 // environment whose limit the embedder raised: a 3,000,000-level vector
-// and map context, and a chain of 3,000,000 quotes for :fixed. Each
+// and map context, and a chain of 3,000,000 quotes for :strict. Each
 // render ends with an error or a result as json:dump-bytes and the decoder
 // decide, not a crash; the walk that charges the encode keeps its
-// containers on a heap stack, and :fixed's int walk unwraps quotes
+// containers on a heap stack, and :strict's int walk unwraps quotes
 // in a loop.
 func TestRaisedValueDepthNoCrash(t *testing.T) {
 	if os.Getenv("HBS_RAISED_DEPTH_CHILD") == "1" {
@@ -384,7 +384,7 @@ func TestRaisedValueDepthNoCrash(t *testing.T) {
 			ctx *lisp.LVal
 		}{
 			{"render", sortedMap("a", v)}, {"render", sortedMap("a", m)},
-			{fixedMode, sortedMap("a", v)}, {fixedMode, sortedMap("a", q)},
+			{strictMode, sortedMap("a", v)}, {strictMode, sortedMap("a", q)},
 		} {
 			env := newEnvWith(t, mustLoader(t, libhandlebars.WithMaxDepth(hbs.MaxDepthCeiling)))
 			if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
@@ -433,7 +433,7 @@ type deepNode struct{ Next *deepNode }
 // whose limit the embedder raised: the encode walk reaches each, so a
 // native nested past the 50,000-level Go value bound fails with that
 // error, before encoding/json would recurse through it, under a list or a
-// chain of quotes, with and without :fixed; a shallow native there
+// chain of quotes, with and without :strict; a shallow native there
 // renders as it does at the top; and one under a million scalar arrays,
 // which add no bytes, renders where its JSON fits Runtime.MaxAlloc.
 func TestRaisedDepthNatives(t *testing.T) {
@@ -459,7 +459,7 @@ func TestRaisedDepthNatives(t *testing.T) {
 		inQuotes := quoted(lisp.Native(g))
 		shallow := quoted(lisp.Native(map[string]int{"x": 1}))
 		const deepErr = "error while serializing: json: Go value nests deeper than 50000"
-		for _, fn := range []string{"render", fixedMode} {
+		for _, fn := range []string{"render", strictMode} {
 			for _, c := range []struct {
 				tpl  string
 				ctx  *lisp.LVal
@@ -489,7 +489,7 @@ func TestRaisedDepthNatives(t *testing.T) {
 		// A native under 1,000,002 scalar arrays, its JSON within
 		// Runtime.MaxAlloc: no brackets, so it renders.
 		big := sortedMap("a", scalarArrays(lisp.Native(strings.Repeat("x", 9_485_790)), lisp.MaxValueDepth+2))
-		for _, fn := range []string{"render", fixedMode} {
+		for _, fn := range []string{"render", strictMode} {
 			env := newEnvWith(t, mustLoader(t))
 			if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
 				t.Fatal(res)
@@ -530,7 +530,7 @@ func scalarArrays(v *lisp.LVal, n int) *lisp.LVal {
 // json:dump-bytes encodes it (counting 2 bytes a level, the walk refused it
 // before any marshal); one past it fails with dump-bytes's error. An array
 // of more dimensions is the encoder's error, not a native's below it, and
-// :fixed keeps an int under scalar arrays an int, as under quotes.
+// :strict keeps an int under scalar arrays an int, as under quotes.
 func TestEncodeScalarArrays(t *testing.T) {
 	const maxAlloc = 64 << 10
 	for _, c := range []struct {
@@ -541,7 +541,7 @@ func TestEncodeScalarArrays(t *testing.T) {
 		{maxAlloc + 1024, "allocation size exceeds maximum"},
 	} {
 		ctx := sortedMap("a", scalarArrays(lisp.Native(strings.Repeat("x", c.n)), 20_000))
-		for _, fn := range []string{"render", fixedMode} {
+		for _, fn := range []string{"render", strictMode} {
 			env := newEnvWith(t, mustLoader(t))
 			env.Runtime.MaxAlloc = maxAlloc
 			dump := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{ctx, lisp.Bool(false)}))
@@ -561,7 +561,7 @@ func TestEncodeScalarArrays(t *testing.T) {
 
 	type bad struct{ C chan int }
 	grid := lisp.Array(lisp.QExpr([]*lisp.LVal{lisp.Int(1), lisp.Int(1)}), []*lisp.LVal{lisp.Native(bad{})})
-	for _, fn := range []string{"render", fixedMode} {
+	for _, fn := range []string{"render", strictMode} {
 		env := newEnvWith(t, mustLoader(t))
 		res, _ := renderIn(t, env, fn, "ok", sortedMap("a", grid))
 		require.Equal(t, lisp.LError, res.Type, "%s: %.300v", fn, res)
@@ -569,7 +569,7 @@ func TestEncodeScalarArrays(t *testing.T) {
 	}
 
 	env := newEnvWith(t, mustLoader(t))
-	res, _ := renderIn(t, env, fixedMode, "{{to-str a}}", sortedMap("a", scalarArrays(lisp.Int(1<<53+1), 3)))
+	res, _ := renderIn(t, env, strictMode, "{{to-str a}}", sortedMap("a", scalarArrays(lisp.Int(1<<53+1), 3)))
 	require.Equal(t, lisp.LString, res.Type, "%.300v", res)
 	require.Equal(t, "9007199254740993", res.Str)
 }

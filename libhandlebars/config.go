@@ -209,7 +209,7 @@ func (p parser) parse(src string, lim hbs.Limits, m hbs.Meter) (*hbs.Program, er
 
 // LoadPackageWith returns a loader for the package configured by opts
 // (applied in order over a zero Config: see Config). Its render (with or
-// without :fixed) and must-parse parse and render under the configured
+// without :strict) and must-parse parse and render under the configured
 // limits, in every environment it loads; LoadPackage is LoadPackageWith
 // with no options. Substrate-style embedders pass WithConfig(cfg); others
 // set only what they need, e.g. WithMaxTemplateBytes(4 << 20).
