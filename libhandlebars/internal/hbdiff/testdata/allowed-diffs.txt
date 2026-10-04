@@ -48,7 +48,7 @@ arch:!amd64 && field:out && candout:-9223372036854775808 | never | #110 | to-int
 
 # Outside the harness (it renders through hbs.FromJSON, as handlebars:render
 # does): libhandlebars.Render, the Go API, reads a Go context lazily with
-# raymond's Go semantics by default, and handlebars:render-fixed keeps
+# raymond's Go semantics by default, and handlebars:render :strict true keeps
 # ELPS ints as ints. See hbs/DETERMINISM.md, "Contexts: JSON, ELPS and Go
 # values"; libhandlebars/gocontext_test.go tests the Go API against raymond.
 # No entry is needed here.
