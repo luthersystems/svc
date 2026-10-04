@@ -26,7 +26,7 @@ import (
 // The int / float64 split is part of the language that raymond rendered, and
 // helpers observe it: {{to-str 3}} renders "3" but {{to-str n}} with n=3 from
 // the context renders "3.000000". A context from FromJSON therefore never
-// holds an int (handlebars:render with :exact-ints true puts ELPS ints back as ints).
+// holds an int (handlebars:render with :fixed true puts ELPS ints back as ints).
 //
 // Render also accepts any Go value as the context, and reads it lazily by
 // reflection with raymond's Go semantics (see goreflect.go): that is how the

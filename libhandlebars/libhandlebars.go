@@ -85,7 +85,7 @@ The version changes whenever a release changes any render output, error
 or step charge, so peers that return the same version render alike.`,
 		},
 		&documentedBuiltin{
-			elpsutil.Function("render", lisp.Formals("tpl", "ctx", lisp.KeyArgSymbol, "exact-ints"), builtInRender),
+			elpsutil.Function("render", lisp.Formals("tpl", "ctx", lisp.KeyArgSymbol, "fixed"), builtInRender),
 			`Renders a Handlebars template string with the given context.
 
 tpl is a Handlebars template string and ctx is a JSON-serializable
@@ -98,15 +98,15 @@ By default, output is byte-compatible with earlier releases, helper
 bugs included: the context goes through JSON, so every number is a
 float, and an ELPS int 3 prints as 3.000000 with to-str.
 
-With :exact-ints true, ELPS ints in ctx stay ints (to-str prints 3, and
-an int above 2^53 prints exactly), and the known helper bugs are fixed:
-to-str prints numbers as {{x}} does; mod returns 0 when either argument
-is not a number; float32 values convert to numbers; round-to-nth parses
-x as a 64-bit float; int parameters (date-add-months) accept an integral
-number from the context; includeZero also accepts a context number 0.
-Its output can differ from the default's for the same template and
-context. :exact-ints false, or nil, is the default; any other value is
-an error.`,
+:fixed true turns on fixed mode: helper bug fixes and exact ELPS
+integers. ELPS ints in ctx stay ints (to-str prints 3, and an int above
+2^53 prints exactly), and the known helper bugs are fixed: to-str prints
+numbers as {{x}} does; mod returns 0 when either argument is not a
+number; float32 values convert to numbers; round-to-nth parses x as a
+64-bit float; int parameters (date-add-months) accept an integral number
+from the context; includeZero also accepts a context number 0. Its
+output can differ from the default's for the same template and context.
+:fixed false, or nil, is the default; any other value is an error.`,
 		},
 		&documentedBuiltin{
 			elpsutil.Function("must-parse", lisp.Formals("tpl"), builtInMustParse),
@@ -156,21 +156,21 @@ func mustParse(env *lisp.LEnv, args *lisp.LVal, lim hbs.Limits, ps parser) *lisp
 	return lisp.Nil()
 }
 
-// renderMode is render's mode for its :exact-ints argument: ModeFixed for
-// true, ModeCompat for false or nil (not given).
-func renderMode(env *lisp.LEnv, exact *lisp.LVal) (hbs.Mode, *lisp.LVal) {
+// renderMode is render's mode for its :fixed argument: ModeFixed for true,
+// ModeCompat for false or nil (not given).
+func renderMode(env *lisp.LEnv, fixed *lisp.LVal) (hbs.Mode, *lisp.LVal) {
 	switch {
-	case exact.IsNil():
+	case fixed.IsNil():
 		return hbs.ModeCompat, nil
-	case exact.Type == lisp.LSymbol && exact.Str == lisp.TrueSymbol:
+	case fixed.Type == lisp.LSymbol && fixed.Str == lisp.TrueSymbol:
 		return hbs.ModeFixed, nil
-	case exact.Type == lisp.LSymbol && exact.Str == lisp.FalseSymbol:
+	case fixed.Type == lisp.LSymbol && fixed.Str == lisp.FalseSymbol:
 		return hbs.ModeCompat, nil
-	case exact.Type == lisp.LSymbol:
-		return hbs.ModeCompat, env.Errorf("exact-ints must be true or false, got: %s", exact.Str)
+	case fixed.Type == lisp.LSymbol:
+		return hbs.ModeCompat, env.Errorf("fixed must be true or false, got: %s", fixed.Str)
 	default:
 		// The type only: the value may be large.
-		return hbs.ModeCompat, env.Errorf("exact-ints must be true or false, got: %v", exact.Type)
+		return hbs.ModeCompat, env.Errorf("fixed must be true or false, got: %v", fixed.Type)
 	}
 }
 
@@ -206,7 +206,7 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits, ps p
 	}
 
 	if mode == hbs.ModeFixed && context.Type != lisp.LBytes {
-		// :exact-ints keeps ELPS ints as ints, which JSON cannot tell
+		// :fixed keeps ELPS ints as ints, which JSON cannot tell
 		// from floats.
 		t := &intTyper{m: m}
 		t.walk(context, ctx)

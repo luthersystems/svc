@@ -49,11 +49,11 @@ func eval(t *testing.T, env *lisp.LEnv, src string) (*lisp.LVal, int64) {
 	return v, after - before
 }
 
-// exactInts is the test name of handlebars:render with :exact-ints true.
-const exactInts = "render :exact-ints true"
+// fixedMode is the test name of handlebars:render with :fixed true.
+const fixedMode = "render :fixed true"
 
 // hbCall is a call of handlebars function fn on args: fn may carry
-// keyword arguments after its name ("render :exact-ints true"), which go
+// keyword arguments after its name ("render :fixed true"), which go
 // after args.
 func hbCall(fn, args string) string {
 	name, kw, _ := strings.Cut(fn, " ")
@@ -86,7 +86,7 @@ func TestConditions(t *testing.T) {
 		{"(handlebars:must-parse " + strconv.Quote(strings.Repeat("{{#if t}}", 300)) + ")", "handlebars-parse", "error parsing template: Parse error on line 1:\ntemplate nesting depth exceeds limit of 256"},
 		{"(handlebars:must-parse (string:repeat \"x\" 1048577))", "handlebars-parse", "error parsing template: template is 1048577 bytes, limit is 1048576"},
 		{renderCall("render", "{{@this}}", "(sorted-map)"), "handlebars-render", "error while rendering template: "},
-		{renderCall(exactInts, "{{@this}}", "(sorted-map)"), "handlebars-render", "error while rendering template: "},
+		{renderCall(fixedMode, "{{@this}}", "(sorted-map)"), "handlebars-render", "error while rendering template: "},
 		{renderCall("render", "{{^x}}{{unless t}}{{/x}}", `(sorted-map "t" true)`), "handlebars-render", "error while rendering template: template evaluation exceeds the maximum depth of 256"},
 	} {
 		v, _ := eval(t, env, tc.src)
@@ -117,7 +117,7 @@ func TestRenderModes(t *testing.T) {
 		{`{{round-to-nth "1.999" "2"}}`, "(sorted-map)", "2.00", "2.00"},
 		{"{{plus a=0.1 b=0.2 c=0.3}}", "(sorted-map)", "0.6000000000000001", "0.6000000000000001"},
 		{"{{to-int (div 1 0)}}", "(sorted-map)", "-9223372036854775808", "-9223372036854775808"},
-		// :exact-ints keeps ELPS ints as ints (JSON makes them float64s):
+		// :fixed keeps ELPS ints as ints (JSON makes them float64s):
 		// exact above 2^53, everywhere in the context.
 		{"{{n}} {{to-str n}}", `(sorted-map "n" 9007199254740993)`, "9007199254740992 9007199254740992.000000", "9007199254740993 9007199254740993"},
 		{"{{#each a}}{{this}},{{/each}}{{m.k}} {{m.[1]}} {{q}} {{v.[0]}}",
@@ -129,38 +129,38 @@ func TestRenderModes(t *testing.T) {
 		v, _ := eval(t, env, renderCall("render", tc.tpl, tc.ctx))
 		require.Equal(t, lisp.LString, v.Type, "%s: %v", tc.tpl, v)
 		require.Equal(t, tc.compat, v.Str, tc.tpl)
-		v, _ = eval(t, env, renderCall(exactInts, tc.tpl, tc.ctx))
+		v, _ = eval(t, env, renderCall(fixedMode, tc.tpl, tc.ctx))
 		require.Equal(t, lisp.LString, v.Type, "%s: %v", tc.tpl, v)
 		require.Equal(t, tc.fixed, v.Str, tc.tpl)
 	}
 }
 
-// TestRenderExactIntsKeyword: render's :exact-ints is off by default and
-// for false or (); true renders as ModeFixed with ELPS ints kept; any other
-// value, an unknown keyword, or a missing value is an error, and
-// render-fixed is gone.
-func TestRenderExactIntsKeyword(t *testing.T) {
+// TestRenderFixedKeyword: render's :fixed is off by default and for false
+// or (); true turns on fixed mode (ModeFixed, ELPS ints kept); any other
+// value, an unknown keyword (the earlier :exact-ints included), or a
+// missing value is an error, and render-fixed is gone.
+func TestRenderFixedKeyword(t *testing.T) {
 	env := newEnv(t)
 	const tpl, ctx = `"{{to-str n}}"`, `(sorted-map "n" 3)`
 	for _, c := range []struct{ args, want string }{
 		{"", "3.000000"},
-		{" :exact-ints false", "3.000000"},
-		{" :exact-ints ()", "3.000000"},
-		{" :exact-ints true", "3"},
-		{" :exact-ints (= 1 1)", "3"},
+		{" :fixed false", "3.000000"},
+		{" :fixed ()", "3.000000"},
+		{" :fixed true", "3"},
+		{" :fixed (= 1 1)", "3"},
 	} {
 		v, _ := eval(t, env, "(handlebars:render "+tpl+" "+ctx+c.args+")")
 		require.Equal(t, lisp.LString, v.Type, "%s: %v", c.args, v)
 		require.Equal(t, c.want, v.Str, c.args)
 	}
 	for _, c := range []struct{ args, msg string }{
-		{" :exact-ints 1", "exact-ints must be true or false, got: int"},
-		{` :exact-ints "true"`, "exact-ints must be true or false, got: string"},
-		{" :exact-ints 'yes", "exact-ints must be true or false, got: yes"},
-		{" :exact-ints (list true)", "exact-ints must be true or false, got: list"},
-		{" :exact true", "unrecognized keyword argument: exact"},
-		{" :exact-ints true :fixed true", "unrecognized keyword argument: fixed"},
-		{" :exact-ints", "odd number of keyword arguments"},
+		{" :fixed 1", "fixed must be true or false, got: int"},
+		{` :fixed "true"`, "fixed must be true or false, got: string"},
+		{" :fixed 'yes", "fixed must be true or false, got: yes"},
+		{" :fixed (list true)", "fixed must be true or false, got: list"},
+		{" :exact-ints true", "unrecognized keyword argument: exact-ints"},
+		{" :fixed true :exact true", "unrecognized keyword argument: exact"},
+		{" :fixed", "odd number of keyword arguments"},
 	} {
 		v, _ := eval(t, env, "(handlebars:render "+tpl+" "+ctx+c.args+")")
 		require.Equal(t, lisp.LError, v.Type, "%s: %v", c.args, v)
@@ -1055,11 +1055,11 @@ func TestNativeInVectorMarshalledOnce(t *testing.T) {
 	require.Equal(t, 1, calls)
 }
 
-// TestExactIntsInvalidUTF8Keys: render with :exact-ints finds a map key
+// TestFixedInvalidUTF8Keys: render with :fixed finds a map key
 // holding invalid UTF-8 under the member name JSON gives it (each invalid
 // byte as U+FFFD), and leaves a name two keys share as JSON decoded it, on
 // every run.
-func TestExactIntsInvalidUTF8Keys(t *testing.T) {
+func TestFixedInvalidUTF8Keys(t *testing.T) {
 	env := newEnv(t)
 	one := lisp.SortedMap()
 	one.MapSetString("\xff\xfe", lisp.Int(9007199254740993))
@@ -1068,12 +1068,12 @@ func TestExactIntsInvalidUTF8Keys(t *testing.T) {
 	two.MapSetString("�", lisp.Int(9007199254740995))
 	env.Put(lisp.Symbol("one"), one)
 	env.Put(lisp.Symbol("two"), two)
-	v, _ := eval(t, env, renderCall(exactInts, "{{[��]}}", "one"))
+	v, _ := eval(t, env, renderCall(fixedMode, "{{[��]}}", "one"))
 	require.Equal(t, lisp.LString, v.Type, "%v", v)
 	require.Equal(t, "9007199254740993", v.Str)
 	first := ""
 	for range 20 {
-		v, _ = eval(t, env, renderCall(exactInts, "{{[�]}}", "two"))
+		v, _ = eval(t, env, renderCall(fixedMode, "{{[�]}}", "two"))
 		require.Equal(t, lisp.LString, v.Type, "%v", v)
 		require.Contains(t, []string{"9007199254740992", "9007199254740996"}, v.Str, "a float64, as JSON decoded it")
 		if first == "" {
