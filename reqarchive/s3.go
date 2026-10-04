@@ -71,8 +71,10 @@ func NewS3Archiver(region, bucket, prefix string, opts ...Option) (midware.Middl
 		ignoredPaths: cfg.ignoredPaths,
 		traceHeader:  cfg.traceHeader,
 	}
+	// The constructor takes no context, and loading the config runs once,
+	// at setup, outside any request.
 	awsCfg, err := awscfg.LoadDefaultConfig(
-		context.TODO(),
+		context.Background(),
 		awscfg.WithRegion(region),
 	)
 	if err != nil {

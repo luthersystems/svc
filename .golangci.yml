@@ -9,7 +9,9 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 linters:
-  # The same set as luthersystems/elps (#108). gosec was already enabled here
+  # The same set as luthersystems/elps (#108) and luthersystems/substrate
+  # (#653): substrate enables elps's set plus forcetypeassert and
+  # nonamedreturns, which elps also enables. gosec was already enabled here
   # and is part of that set.
   enable:
     - bodyclose
@@ -61,9 +63,21 @@ linters:
           # inner declaration.
           strict: false
     staticcheck:
+      # golangci-lint's default set, which luthersystems/substrate runs: every
+      # check except six style checks (package comments, initialisms, receiver
+      # names, and the doc-comment form of exported identifiers). The other ST
+      # checks stay on: error-string style, error-variable names, dot and
+      # duplicate imports, redundant types, yoda conditions. elps turns all ST
+      # checks off and SA1019 (deprecated API) off; svc keeps both on, the
+      # stricter of the two references.
       checks:
         - "all"
-        - "-ST*"    # Preserve pre-existing style check behavior
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1016"
+        - "-ST1020"
+        - "-ST1021"
+        - "-ST1022"
   exclusions:
     paths:
       # A frozen, byte-for-byte copy of the luthersystems/raymond fork, kept

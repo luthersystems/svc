@@ -48,7 +48,7 @@ func (s *lutherError) Error() string {
 func NewUnexpectedError(message string) *UnexpectedError {
 	return &UnexpectedError{
 		lutherError{
-			*UnexpectedException(context.TODO(), message),
+			*UnexpectedException(context.Background(), message),
 		},
 	}
 }
@@ -62,7 +62,7 @@ type UnexpectedError struct {
 func NewBusinessError(message string) *BusinessError {
 	return &BusinessError{
 		lutherError{
-			*BusinessException(context.TODO(), message),
+			*BusinessException(context.Background(), message),
 		},
 	}
 }
@@ -76,7 +76,7 @@ type BusinessError struct {
 func NewSecurityError(message string) *SecurityError {
 	return &SecurityError{
 		lutherError{
-			*SecurityException(context.TODO(), message),
+			*SecurityException(context.Background(), message),
 		},
 	}
 }
@@ -90,7 +90,7 @@ type SecurityError struct {
 func NewInfrastructureError(message string) *InfrastructureError {
 	return &InfrastructureError{
 		lutherError{
-			*InfrastructureException(context.TODO(), message),
+			*InfrastructureException(context.Background(), message),
 		},
 	}
 }
@@ -104,7 +104,7 @@ type InfrastructureError struct {
 func NewServiceError(message string) *ServiceError {
 	return &ServiceError{
 		lutherError{
-			*ServiceException(context.TODO(), message),
+			*ServiceException(context.Background(), message),
 		},
 	}
 }
