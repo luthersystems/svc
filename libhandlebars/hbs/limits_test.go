@@ -60,14 +60,17 @@ func (positiveMeter) Charge(n int64) error {
 // ceiling, so a template or a value nested past it fails with the depth
 // error rather than overflowing the stack.
 func TestMaxDepthCeiling(t *testing.T) {
-	const n = 1_600_000
+	n, deepValue := 1_600_000, 3_000_000
+	if raceEnabled {
+		n, deepValue = 20_000, 20_000 // past the ceiling, within -race's memory
+	}
 	lim := hbs.Limits{MaxDepth: math.MaxInt, MaxTemplateBytes: math.MaxInt}
 	_, err := hbs.Parse("{{a "+strings.Repeat("(a ", n)+"1"+strings.Repeat(")", n)+"}}", lim)
 	require.ErrorContains(t, err, fmt.Sprintf("nesting depth exceeds limit of %d", hbs.MaxDepthCeiling))
 	p, err := hbs.Parse("{{a}}", lim)
 	require.NoError(t, err)
 	var v any = "x"
-	for range 3_000_000 {
+	for range deepValue {
 		v = []any{v}
 	}
 	_, err = p.Render(map[string]any{"a": v}, hbs.Options{Limits: lim})

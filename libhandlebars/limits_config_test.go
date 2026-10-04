@@ -295,7 +295,10 @@ func TestConfigMaxDepthCeiling(t *testing.T) {
 	require.ErrorContains(t, err, msg)
 
 	atCap := []libhandlebars.Option{libhandlebars.WithMaxDepth(hbs.MaxDepthCeiling), libhandlebars.WithMaxTemplateBytes(64 << 20)}
-	const n = 1_600_000
+	n, deepValue := 1_600_000, 3_000_000 // the reviewer's sizes
+	if raceEnabled {
+		n, deepValue = 20_000, 20_000 // past the ceiling, within -race's memory
+	}
 	sexpr := "{{a " + strings.Repeat("(a ", n) + "1" + strings.Repeat(")", n) + "}}"
 	blocks := strings.Repeat("{{#if t}}", n) + "x" + strings.Repeat("{{/if}}", n)
 	env := newEnvWith(t, mustLoader(t, atCap...))
@@ -306,7 +309,7 @@ func TestConfigMaxDepthCeiling(t *testing.T) {
 		require.ErrorContains(t, err, "nesting depth exceeds limit of 10000")
 	}
 	var v any = "x"
-	for range 3_000_000 {
+	for range deepValue {
 		v = []any{v}
 	}
 	_, err = libhandlebars.RenderWith(p, map[string]any{"a": v}, append(atCap, libhandlebars.WithGoContext())...)
@@ -412,8 +415,8 @@ func TestRaisedValueDepthNoCrash(t *testing.T) {
 		fmt.Println("RAISED-DEPTH-OK")
 		return
 	}
-	if testing.Short() {
-		t.Skip("slow: skipped under -short")
+	if testing.Short() || raceEnabled {
+		t.Skip("3M-level contexts: skipped under -short and -race (memory)")
 	}
 	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRaisedValueDepthNoCrash$") //nolint:gosec // this test binary
 	cmd.Env = append(os.Environ(), "HBS_RAISED_DEPTH_CHILD=1")
