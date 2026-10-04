@@ -223,3 +223,23 @@ func TestGoContextBigValueNotWalked(t *testing.T) {
 	require.False(t, ok)
 	require.Equal(t, reflect.Struct, reflect.TypeFor[big.Int]().Kind())
 }
+
+// TestGoContextMethodValuesExactLength: a method value's text counts at
+// its real length, never an estimate: a short one within a small output
+// bound prints, and nil pointers whose methods fmt cannot call print
+// "<nil>", as raymond's fmt did.
+func TestGoContextMethodValuesExactLength(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en v}}`)
+	require.NoError(t, err)
+	lim := hbs.DefaultLimits()
+	lim.MaxOutputBytes = 8
+	_, err = tpl.Render(map[string]any{"v": []time.Duration{0}}, hbs.Options{Limits: lim})
+	require.EqualError(t, err, "value passed in must be a number, got: [0s]")
+	start := time.Now()
+	checkGo(t, `{{prettyp-num-en v}}`, map[string]any{"v": make([]*time.Time, 2_100_000)})
+	t.Logf("2.1M nil *time.Time: %v", time.Since(start))
+	checkGo(t, `{{prettyp-num-en v}}`, map[string]any{"v": []*MethVal{nil}, "w": []*MethPtr{nil}})
+	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethPtr{nil}})
+	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethErr{nil}})
+	checkGo(t, `{{prettyp-num-en w}}`, map[string]any{"w": []*MethFmt{nil}})
+}

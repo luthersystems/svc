@@ -612,6 +612,37 @@ func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t 
 	return dst
 }
 
+// fmtMethod is what fmt's handleMethods finds on a type: whether it calls
+// a method (Format, else Error, else String), and, for a pointer type,
+// whether that method is declared on the value type (called through a
+// nil pointer it panics, and fmt prints "<nil>").
+type fmtMethod struct{ has, onValue bool }
+
+var fmtMethods sync.Map // reflect.Type -> fmtMethod
+
+// fmtMethodOf is t's fmtMethod, found once per type (Implements scans the
+// method set).
+func fmtMethodOf(t reflect.Type) fmtMethod {
+	if m, ok := fmtMethods.Load(t); ok {
+		return m.(fmtMethod) //nolint:forcetypeassert // stored below
+	}
+	var m fmtMethod
+	for _, it := range []reflect.Type{formatterType, errorType, stringerType} {
+		if t.Implements(it) {
+			m = fmtMethod{has: true, onValue: t.Kind() == reflect.Pointer && t.Elem().Implements(it)}
+			break
+		}
+	}
+	fmtMethods.Store(t, m)
+	return m
+}
+
+// nilValueMethod reports whether v is a nil pointer whose method fmt would
+// call is declared on the value type: fmt prints "<nil>".
+func nilValueMethod(v reflect.Value) bool {
+	return v.Kind() == reflect.Pointer && v.IsNil() && fmtMethodOf(v.Type()).onValue
+}
+
 // goPrinter prints fmt's %v of a value holding values with a Format, Error
 // or String method.
 type goPrinter struct {
@@ -632,8 +663,12 @@ func (p *goPrinter) print(dst []byte, v reflect.Value, depth int) []byte {
 		return append(dst, rv.String()...)
 	}
 	if v.IsValid() && v.Kind() != reflect.Interface && v.CanInterface() {
-		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
-			p.scratch = fmt.Appendf(p.scratch[:0], "%v", v.Interface())
+		if fmtMethodOf(v.Type()).has {
+			if nilValueMethod(v) {
+				p.scratch = append(p.scratch[:0], "<nil>"...)
+			} else {
+				p.scratch = fmt.Appendf(p.scratch[:0], "%v", v.Interface())
+			}
 			n := len(p.scratch)
 			p.r.scanBytes(n)
 			p.r.checkProduced(len(dst) + n)
@@ -787,8 +822,11 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 	// than their text, are charged here, before they run. Another
 	// method's own cost is the caller's.
 	if v.IsValid() && v.Kind() != reflect.Interface && v.CanInterface() {
-		if t := v.Type(); t.Implements(formatterType) || t.Implements(errorType) || t.Implements(stringerType) {
+		if fmtMethodOf(v.Type()).has {
 			z.methods = true
+			if nilValueMethod(v) {
+				return len("<nil>") // goPrinter writes it without the call
+			}
 			if c, ok := bigcost.Steps(v.Interface()); ok {
 				z.steps += min(c, z.limit)
 			}
