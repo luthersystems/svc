@@ -271,3 +271,43 @@ func TestConfigGoContext(t *testing.T) {
 		require.Equal(t, c.want, got)
 	}
 }
+
+// TestConfigMaxDepthCeiling: MaxDepth bounds the engine's recursion, so a
+// value above hbs.MaxDepthCeiling is refused; at the ceiling, templates and
+// contexts nested past it fail with the depth error (the reviewer's
+// 1.6M-level template and 3M-deep value overflowed the stack, a fatal
+// crash, under an unbounded MaxDepth).
+func TestConfigMaxDepthCeiling(t *testing.T) {
+	over := libhandlebars.WithMaxDepth(hbs.MaxDepthCeiling + 1)
+	const msg = "Limits.MaxDepth is 10001; must be <= 10000"
+	_, err := libhandlebars.LoadPackageWith(over)
+	require.ErrorContains(t, err, msg)
+	_, err = libhandlebars.ParseWith("x", over)
+	require.ErrorContains(t, err, msg)
+	p, err := libhandlebars.Parse("{{a}}")
+	require.NoError(t, err)
+	_, err = libhandlebars.RenderWith(p, nil, over)
+	require.ErrorContains(t, err, msg)
+
+	atCap := []libhandlebars.Option{libhandlebars.WithMaxDepth(hbs.MaxDepthCeiling), libhandlebars.WithMaxTemplateBytes(64 << 20)}
+	const n = 1_600_000
+	sexpr := "{{a " + strings.Repeat("(a ", n) + "1" + strings.Repeat(")", n) + "}}"
+	blocks := strings.Repeat("{{#if t}}", n) + "x" + strings.Repeat("{{/if}}", n)
+	env := newEnvWith(t, mustLoader(t, atCap...))
+	for _, tpl := range []string{sexpr, blocks} {
+		res, _ := renderIn(t, env, "render", tpl, sortedMap("t", lisp.Bool(true)))
+		require.True(t, isParseCondition(res), "%v", res)
+		_, err = libhandlebars.ParseWith(tpl, atCap...)
+		require.ErrorContains(t, err, "nesting depth exceeds limit of 10000")
+	}
+	var v any = "x"
+	for range 3_000_000 {
+		v = []any{v}
+	}
+	_, err = libhandlebars.RenderWith(p, map[string]any{"a": v}, append(atCap, libhandlebars.WithGoContext())...)
+	require.ErrorContains(t, err, "maximum depth of 10000")
+	// At the ceiling, nesting just within it renders.
+	ok := strings.Repeat("{{#if t}}", hbs.MaxDepthCeiling-1) + "x" + strings.Repeat("{{/if}}", hbs.MaxDepthCeiling-1)
+	res, _ := renderIn(t, env, "render", ok, sortedMap("t", lisp.Bool(true)))
+	require.Equal(t, "x", res.Str, "%v", res)
+}

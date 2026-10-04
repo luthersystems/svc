@@ -34,7 +34,7 @@ func parseLimits(lim Limits) (int, int) {
 	if maxDepth <= 0 {
 		maxDepth = DefaultLimits().MaxDepth
 	}
-	return maxBytes, maxDepth
+	return maxBytes, min(maxDepth, MaxDepthCeiling)
 }
 
 // Parse parses a template.

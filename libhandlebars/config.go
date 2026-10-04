@@ -29,7 +29,9 @@ type Config struct {
 	// Limits are the template, output, depth and step limits, and the
 	// produced-bytes factor (hbs.Limits; each consensus-visible):
 	//   - MaxTemplateBytes: a longer template fails to parse.
-	//   - MaxDepth: deeper nesting fails to parse or render.
+	//   - MaxDepth: deeper nesting fails to parse or render. It bounds the
+	//     engine's recursion, so it is at most hbs.MaxDepthCeiling (10,000):
+	//     a larger value is an error.
 	//   - MaxOutputBytes: longer output fails to render.
 	//   - MaxSteps: a render charging more steps fails.
 	//   - ProducedFactor: a render producing more than ProducedFactor ×
@@ -39,8 +41,10 @@ type Config struct {
 	// ParseCacheMaxBytes and ParseCacheMaxEntryBytes bound the cache of
 	// parse verdicts (performance-only: a hit returns and charges exactly
 	// what a miss does). With both at their defaults, loaders and Go
-	// callers share the process-wide cache; otherwise each loader, and
-	// each Go Parse, uses a cache of its own with these bounds.
+	// callers share the process-wide cache; otherwise each loader uses a
+	// cache of its own with these bounds, and ParseWith does not cache. An
+	// entry bound above the byte bound is allowed: an entry is kept only
+	// if it fits both.
 	ParseCacheMaxBytes      int
 	ParseCacheMaxEntryBytes int
 
@@ -128,9 +132,24 @@ func buildConfig(opts []Option) (Config, error) {
 // field, or an unknown GoContext, is an error.
 func resolveConfig(c Config) (Config, error) {
 	l := c.Limits
-	if l.MaxTemplateBytes < 0 || l.MaxDepth < 0 || l.MaxOutputBytes < 0 || l.MaxSteps < 0 || l.ProducedFactor < 0 ||
-		c.ParseCacheMaxBytes < 0 || c.ParseCacheMaxEntryBytes < 0 {
-		return Config{}, fmt.Errorf("libhandlebars: negative setting in %+v", c)
+	for _, f := range []struct {
+		name string
+		v    int64
+	}{
+		{"Limits.MaxTemplateBytes", int64(l.MaxTemplateBytes)},
+		{"Limits.MaxDepth", int64(l.MaxDepth)},
+		{"Limits.MaxOutputBytes", int64(l.MaxOutputBytes)},
+		{"Limits.MaxSteps", l.MaxSteps},
+		{"Limits.ProducedFactor", int64(l.ProducedFactor)},
+		{"ParseCacheMaxBytes", int64(c.ParseCacheMaxBytes)},
+		{"ParseCacheMaxEntryBytes", int64(c.ParseCacheMaxEntryBytes)},
+	} {
+		if f.v < 0 {
+			return Config{}, fmt.Errorf("libhandlebars: %s is %d; must be >= 0", f.name, f.v)
+		}
+	}
+	if l.MaxDepth > hbs.MaxDepthCeiling {
+		return Config{}, fmt.Errorf("libhandlebars: Limits.MaxDepth is %d; must be <= %d (hbs.MaxDepthCeiling)", l.MaxDepth, hbs.MaxDepthCeiling)
 	}
 	switch c.GoContext {
 	case GoContextDefault, GoContextReflect, GoContextJSON:

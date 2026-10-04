@@ -32,7 +32,7 @@ const (
 // production: every endorser must apply the same values.
 type Limits struct {
 	MaxTemplateBytes int   // template source length
-	MaxDepth         int   // nesting of blocks, subexpressions and paths
+	MaxDepth         int   // nesting of blocks, subexpressions and paths; at most MaxDepthCeiling
 	MaxOutputBytes   int   // rendered output length
 	MaxSteps         int64 // evaluation steps (the Meter's units), with or without a Meter
 	// ProducedFactor bounds the bytes a render may produce in all (its
@@ -40,6 +40,13 @@ type Limits struct {
 	// ProducedFactor times MaxOutputBytes. Zero means DefaultProducedFactor.
 	ProducedFactor int
 }
+
+// MaxDepthCeiling bounds Limits.MaxDepth: a larger value is taken as this
+// one. MaxDepth bounds the parser's and evaluator's recursion, and Go
+// cannot recover from a goroutine overflowing its stack (about 1 GB), so a
+// limit above this would let a template or a context crash the process.
+// At it, the deepest parse and render use a few tens of MB of stack.
+const MaxDepthCeiling = 10_000
 
 // DefaultProducedFactor is Limits.ProducedFactor's default.
 const DefaultProducedFactor = 8

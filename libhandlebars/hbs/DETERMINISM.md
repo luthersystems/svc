@@ -87,7 +87,7 @@ a loader's settings are its own, in every environment it loads.
 | Field | Default | Kind | What it governs |
 |---|---|---|---|
 | `Limits.MaxTemplateBytes` | 1 MiB (1048576) | consensus-visible | a longer template fails to parse (`handlebars-parse`) |
-| `Limits.MaxDepth` | 256 | consensus-visible | deeper nesting of blocks, subexpressions and paths fails to parse or render |
+| `Limits.MaxDepth` | 256 | consensus-visible | deeper nesting of blocks, subexpressions and paths fails to parse or render; at most 10,000 (`hbs.MaxDepthCeiling`) |
 | `Limits.MaxOutputBytes` | 16 MiB (16777216) | consensus-visible | longer output fails to render |
 | `Limits.MaxSteps` | 2^25 (33554432) | consensus-visible | a render charging more steps fails, with or without an ELPS budget |
 | `Limits.ProducedFactor` | 8 | consensus-visible | a render producing more than this × MaxOutputBytes in all (captured sections, helper strings) fails |
@@ -111,10 +111,13 @@ Fixed, by design:
   fails as `json:dump-bytes` does: the encoder's 1024-level nesting and
   depth-64 guard, the load check's 10,000-level nesting, and Go JSON mode's
   1024 levels (as the ELPS path's).
-- Bounds that keep a render from crashing or hanging the process: the
-  Go-value JSON walk's 50,000 levels (its stack), and the embedding
-  searches' 64 levels, 16384 embedded fields and interface cycles, which
-  fail closed.
+- Bounds that keep a render from crashing or hanging the process:
+  `hbs.MaxDepthCeiling` (10,000), the most MaxDepth may be, since MaxDepth
+  bounds the parser's and evaluator's recursion and Go cannot recover from
+  a stack overflow (libhandlebars refuses a larger value; hbs takes one as
+  the ceiling); the Go-value JSON walk's 50,000 levels (its stack); and the
+  embedding searches' 64 levels, 16384 embedded fields and interface
+  cycles, which fail closed.
 - The cost model's units (the table below), which define the steps charged
   and are pinned by `hbs.Version`.
 

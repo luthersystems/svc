@@ -70,7 +70,9 @@ type ParseCache struct{ c *parseCache }
 
 // NewParseCache returns an empty cache retaining at most maxBytes (each
 // program weighed by its AST) that does not keep a template longer than
-// maxEntryBytes. Zero or less disables it.
+// maxEntryBytes. Zero or less for either disables it (unlike
+// libhandlebars.Config, where zero means the default); an entry is kept
+// only if it fits both bounds.
 func NewParseCache(maxBytes, maxEntryBytes int) *ParseCache {
 	c := newParseCache(max(maxBytes, 0))
 	c.maxEntryBytes = max(maxEntryBytes, 0)

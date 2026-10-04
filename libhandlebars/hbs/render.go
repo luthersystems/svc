@@ -44,6 +44,7 @@ func render(prog *ast.Program, ctx Value, o Options) (string, error) {
 	if lim.MaxDepth <= 0 {
 		lim.MaxDepth = DefaultLimits().MaxDepth
 	}
+	lim.MaxDepth = min(lim.MaxDepth, MaxDepthCeiling)
 	if lim.MaxOutputBytes <= 0 {
 		lim.MaxOutputBytes = DefaultLimits().MaxOutputBytes
 	}
