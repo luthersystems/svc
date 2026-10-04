@@ -981,3 +981,51 @@ func TestGoContextKeysByAddress(t *testing.T) {
 func TestGoContextUnexportedZeroValue(t *testing.T) {
 	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": struct{ rv reflect.Value }{}})
 }
+
+type lblKey struct{ s string }
+
+type ptrArrKey [1]*lblKey
+
+func (k ptrArrKey) String() string { return k[0].s }
+
+type chanArrKey [1]chan int
+
+func (chanArrKey) String() string { return "c" }
+
+// TestGoContextArrayKeysByAddress: keys holding pointers or chans inside
+// arrays (behind a String method) are ordered by address too: the map
+// prints as its type, in a struct field and behind an interface as well.
+func TestGoContextArrayKeysByAddress(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	x, y := &lblKey{"a"}, &lblKey{"b"}
+	type withArr struct {
+		N int
+		A ptrArrKey
+	}
+	for _, tc := range []struct {
+		x    any
+		want string
+	}{
+		{map[ptrArrKey]int{{x}: 1, {y}: 2}, "got: (map[libhandlebars_test.ptrArrKey]int)"},
+		{map[withArr]int{{0, ptrArrKey{x}}: 1, {0, ptrArrKey{y}}: 2}, "got: (map[libhandlebars_test.withArr"},
+		{map[any]int{ptrArrKey{x}: 1, ptrArrKey{y}: 2}, "got: (map[interface {}]int)"},
+		{map[chanArrKey]int{{make(chan int)}: 1, {make(chan int)}: 2}, "got: (map[libhandlebars_test.chanArrKey]int)"},
+	} {
+		_, err = libhandlebars.Render(tpl, map[string]any{"x": tc.x})
+		require.ErrorContains(t, err, tc.want, "%T", tc.x)
+	}
+}
+
+// TestGoContextNilRefsSizedExactly: nil pointers and chans print as <nil>
+// (5 bytes) and are sized so: %v of many fits the output bound it fits.
+func TestGoContextNilRefsSizedExactly(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	_, err = libhandlebars.Render(tpl, map[string]any{"x": make([]chan int, 2_100_000)})
+	require.ErrorContains(t, err, "value passed in must be a number, got: [<nil> <nil>")
+	lim := hbs.DefaultLimits()
+	lim.MaxOutputBytes = 53
+	_, err = tpl.Render(map[string]any{"x": []*int{nil}}, hbs.Options{Limits: lim})
+	require.EqualError(t, err, "value passed in must be a number, got: [<nil>]")
+}

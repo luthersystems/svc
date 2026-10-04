@@ -692,14 +692,18 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			default: // fmt prints other pointers as an address
 			}
 		}
-		if !v.IsNil() {
-			z.addr = true // fmt prints its address
+		if v.IsNil() {
+			return len("<nil>")
 		}
+		z.addr = true // fmt prints its address
 		return 20
 	case reflect.Array, reflect.Slice:
-		n := 2
+		n := 2 // the brackets, and a space between elements
 		for i := 0; i < v.Len() && !z.over(); i++ {
-			n += 1 + z.size(v.Index(i), depth+1)
+			if i > 0 {
+				n++
+			}
+			n += z.size(v.Index(i), depth+1)
 		}
 		return n
 	case reflect.Map:
@@ -726,7 +730,10 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 				z.steps = max(z.steps, z.limit)
 				break
 			}
-			n += 2 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
+			if n > 5 {
+				n++ // the space before this entry
+			}
+			n += 1 + z.size(k, depth+1) + z.size(it.Value(), depth+1)
 		}
 		if nans > 1 {
 			z.nanKeys = true
@@ -746,15 +753,19 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 		}
 		return n
 	case reflect.Struct:
-		n := 2
+		n := 2 // the braces, and a space between fields
 		for i := 0; i < v.NumField() && !z.over(); i++ {
-			n += 1 + z.size(v.Field(i), depth+1)
+			if i > 0 {
+				n++
+			}
+			n += z.size(v.Field(i), depth+1)
 		}
 		return n
 	case reflect.Chan, reflect.Func, reflect.UnsafePointer:
-		if !v.IsNil() {
-			z.addr = true // fmt prints its address
+		if v.IsNil() {
+			return len("<nil>")
 		}
+		z.addr = true // fmt prints its address
 		return 64
 	case reflect.Bool:
 		if v.Bool() {
@@ -836,7 +847,8 @@ func (kw *keyWalk) cmp(k reflect.Value, depth int) int64 {
 		return 4 + kw.cmp(k.Elem(), depth+1)
 	case reflect.Array:
 		switch k.Type().Elem().Kind() {
-		case reflect.String, reflect.Interface, reflect.Array, reflect.Struct:
+		case reflect.String, reflect.Interface, reflect.Array, reflect.Struct,
+			reflect.Pointer, reflect.Chan, reflect.UnsafePointer: // each looked at (sawPtr)
 		default: // elements of one fixed cost, about 5 ns each
 			return 1 + int64(k.Len())*kw.cmp(reflect.Zero(k.Type().Elem()), depth+1)/4
 		}

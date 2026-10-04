@@ -3,6 +3,7 @@
 package hbs
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"strconv"
@@ -217,4 +218,29 @@ func TestKeyWalkCmpShared(t *testing.T) {
 	kw.cmp(lv, 0)
 	require.Greater(t, kw.visits, kw.limit, "the key is past the budget")
 	require.Less(t, kw.visits, 2*kw.limit, "and the walk stopped near it")
+}
+
+// TestGoSizerExact: the %v sizer counts exactly the bytes fmt prints for
+// values without methods or addresses (so the produced-bytes check never
+// refuses a text that fits), nil references and separators included.
+func TestGoSizerExact(t *testing.T) {
+	type pair struct {
+		A int
+		B []string
+		C map[string]bool
+	}
+	var nilFn func()
+	for _, x := range []any{
+		[]int{}, []int{1}, []int{1, 22, 333}, []*int{nil}, []*int{nil, nil},
+		[]chan int{nil, nil, nil}, []func(){nilFn}, [2]bool{true, false},
+		map[string]int{}, map[string]int{"a": 1}, map[string]int{"a": 1, "bb": 22},
+		pair{}, pair{1, []string{"x", ""}, map[string]bool{"k": true, "": false}},
+		struct{}{}, []any{nil, 1.5, "s", []any{}}, [][]int{{1}, {}, {2, 3}},
+		[]float32{0.1, 1e-40}, []complex128{complex(1, -2), 0}, []uint8{0, 255},
+	} {
+		z := &goSizer{r: &renderer{maxDepth: 64}, limit: 1 << 40}
+		got := z.size(reflect.ValueOf(x), 0)
+		require.False(t, z.addr, "%#v", x)
+		require.Equal(t, len(fmt.Sprintf("%v", x)), got, "%#v", x)
+	}
 }

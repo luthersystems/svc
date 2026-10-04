@@ -906,6 +906,16 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	// estimate (size) only sets the charge: it over-counts (a float is 24
 	// bytes in it), so stopping on it would leave the rest uncharged.
 	if w.lower > w.limit {
+		// A string here may be a member name, which the encoder writes
+		// (escaping it) before its next cap check: charge that first.
+		if x.Type == lisp.LString || x.Type == lisp.LSymbol {
+			if lerr := w.scan(len(x.Str)); lerr != nil {
+				return true, lerr
+			}
+			if lerr := w.escapes(jsonStringLen(x.Str), len(x.Str)); lerr != nil {
+				return true, lerr
+			}
+		}
 		w.capErr = true
 		return true, nil
 	}
