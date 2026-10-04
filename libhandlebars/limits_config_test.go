@@ -3,12 +3,17 @@
 package libhandlebars_test
 
 import (
+	"fmt"
+	"math"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/luthersystems/elps/elpsutil"
 	"github.com/luthersystems/elps/lisp"
 	"github.com/luthersystems/elps/lisp/lisplib"
+	"github.com/luthersystems/elps/lisp/lisplib/libjson"
 	"github.com/luthersystems/elps/parser"
 	"github.com/luthersystems/svc/libhandlebars"
 	"github.com/luthersystems/svc/libhandlebars/hbs"
@@ -344,4 +349,75 @@ func TestConfigCyclicGoContext(t *testing.T) {
 			require.ErrorContains(t, err, c.err, "%s %T at MaxDepth %d", c.tpl, c.ctx, depth)
 		}
 	}
+}
+
+// TestRaisedValueDepthNoCrash runs, in a subprocess (a stack overflow is
+// fatal), contexts nested past elps's default value depth in an
+// environment whose limit the embedder raised: a 3,000,000-level vector
+// and map context, and a chain of 3,000,000 quotes for render-fixed. Each
+// render ends with an error or a result as json:dump-bytes and the decoder
+// decide, not a crash; the walk that charges the encode stops at elps's
+// default limit, and render-fixed's int walk unwraps quotes in a loop.
+func TestRaisedValueDepthNoCrash(t *testing.T) {
+	if os.Getenv("HBS_RAISED_DEPTH_CHILD") == "1" {
+		const n = 3_000_000
+		v := lisp.Int(7)
+		for range n {
+			v = lisp.QExpr([]*lisp.LVal{v})
+		}
+		m := lisp.Int(7)
+		for range n {
+			mm := lisp.SortedMap()
+			mm.MapSetString("k", m)
+			m = mm
+		}
+		q := lisp.Int(7)
+		for range n {
+			q = lisp.Quote(q)
+		}
+		for _, c := range []struct {
+			fn  string
+			ctx *lisp.LVal
+		}{
+			{"render", sortedMap("a", v)}, {"render", sortedMap("a", m)},
+			{"render-fixed", sortedMap("a", v)}, {"render-fixed", sortedMap("a", q)},
+		} {
+			env := newEnvWith(t, mustLoader(t, libhandlebars.WithMaxDepth(hbs.MaxDepthCeiling)))
+			if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
+				t.Fatal(res)
+			}
+			// json:dump-bytes itself, under the same raised limit.
+			dump := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{c.ctx, lisp.Bool(false)}))
+			env.Put(lisp.Symbol("ctx"), c.ctx)
+			res := env.LoadStringContext(t.Context(), "test", "(handlebars:"+c.fn+` "{{a}}" ctx)`)
+			switch {
+			case dump.Type == lisp.LError:
+				// The encoder's own error.
+				if res.Type != lisp.LError || !strings.Contains(res.String(), dump.Cells[0].Str) {
+					t.Fatalf("%s: dump %.200v, render %.300v", c.fn, dump, res)
+				}
+			case len(dump.Bytes()) < 1<<20:
+				// Shallow JSON (the quote chain): the render succeeds.
+				if res.Type != lisp.LString {
+					t.Fatalf("%s: %.300v", c.fn, res)
+				}
+			default:
+				// Deep JSON: the decoder refuses it.
+				if res.Type != lisp.LError || !strings.Contains(res.String(), "exceeded max depth") {
+					t.Fatalf("%s: %.300v", c.fn, res)
+				}
+			}
+			fmt.Printf("%s: dump %v, render %.120v\n", c.fn, dump.Type, res)
+		}
+		fmt.Println("RAISED-DEPTH-OK")
+		return
+	}
+	if testing.Short() {
+		t.Skip("slow: skipped under -short")
+	}
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRaisedValueDepthNoCrash$") //nolint:gosec // this test binary
+	cmd.Env = append(os.Environ(), "HBS_RAISED_DEPTH_CHILD=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%.2000s", out)
+	require.Contains(t, string(out), "RAISED-DEPTH-OK")
 }

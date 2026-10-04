@@ -238,7 +238,15 @@ func (t *intTyper) flush() error {
 }
 
 // walk retypes the ints of x within v, its decoded form, and returns v.
+//
+// Its recursion follows v's nesting, which encoding/json bounds at 10,000
+// levels; a quote or tagged value adds no JSON level, so a chain of them is
+// unwrapped in a loop, not by recursion.
 func (t *intTyper) walk(x *lisp.LVal, v hbs.Value) hbs.Value {
+	for t.err == nil && !x.IsNil() && (x.Type == lisp.LQuote || x.Type == lisp.LTaggedVal) {
+		t.step()
+		x = x.Cells[0]
+	}
 	if t.err != nil || x.IsNil() {
 		return v
 	}
@@ -248,8 +256,6 @@ func (t *intTyper) walk(x *lisp.LVal, v hbs.Value) hbs.Value {
 		if _, ok := v.(float64); ok {
 			return x.Int
 		}
-	case lisp.LQuote, lisp.LTaggedVal:
-		return t.walk(x.Cells[0], v)
 	case lisp.LSExpr:
 		t.list(x.Cells, v)
 	case lisp.LArray:
@@ -453,6 +459,15 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 	if w.depth < 1024 { // as libjson's encoder reads the limit
 		w.depth = lisp.MaxValueDepth
 	}
+	// The walk recurses, so it stops at elps's default limit even where the
+	// embedder raised the runtime's (lisp.WithMaxValueDepth): a deeper
+	// value would overflow the goroutine's stack, a fatal error. There it
+	// stops as it does at the runtime's limit, and the encoder (which
+	// walks deep values on a heap stack) decides: the context's JSON then
+	// nests past encoding/json's 10,000 levels, so if the encoder succeeds
+	// the decode fails, as it would have. The encoder's work past the
+	// walk is bounded by Runtime.MaxAlloc.
+	w.depth = min(w.depth, lisp.MaxValueDepth)
 	_, lerr := w.walk(v, 0)
 	// libjson encodes a value nested to its guard depth (64, counting the
 	// top value as 1: the walk's 63) twice: a first pass stops there, and
