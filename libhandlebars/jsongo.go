@@ -87,7 +87,14 @@ type jsonWalker struct {
 	quoted    bool                  // the value is a ",string" field's: a scalar is written as a JSON string
 	levels    int                   // the walk's recursion depth
 	peak      int                   // the deepest level the walk has reached (or a memo hit stands for)
+	mayUnload bool                  // a value whose JSON libjson's load check may refuse (see mayFailLoad)
 }
+
+// mayFailLoad reports whether the JSON the walk sized may fail libjson's
+// load check of a native's bytes: only a MarshalJSON's output (a
+// RawMessage's included) or a json.Number can hold a number literal its
+// decoder refuses, and only nesting past 10,000 levels exceeds its depth.
+func (w *jsonWalker) mayFailLoad() bool { return w.mayUnload || w.peak > 10_000 }
 
 // hopCost is the steps a pointer or interface hop costs: the walk keeps
 // path and memo entries for it and deepens the stack (about 0.5-2 us a
@@ -124,6 +131,7 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		if !text {
+			w.mayUnload = true
 			if raw, ok := rawMessage(v); ok {
 				return w.rawLeaf(raw, typ)
 			}
@@ -604,6 +612,7 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 	case reflect.String:
 		s := v.String()
 		if t == jsonNumberType {
+			w.mayUnload = true
 			num := s
 			if num == "" {
 				num = "0"

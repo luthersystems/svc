@@ -875,3 +875,44 @@ func TestGoContextNoAddresses(t *testing.T) {
 		}
 	}
 }
+
+// TestGoContextReflectValue: a reflect.Value in a Go context prints as fmt
+// prints it: unwrapped at the top (and sized, charged and guarded as the
+// value it holds), by its String method below; never an address.
+func TestGoContextReflectValue(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	n := 3
+	for _, tc := range []struct {
+		x    any
+		want string
+	}{
+		{reflect.ValueOf(&n), "got: (*int)"},
+		{[]any{reflect.ValueOf(&n)}, "got: [<*int Value>]"},
+		{[]any{reflect.ValueOf("s")}, "got: [s]"},
+		{reflect.ValueOf(map[float64]int{math.NaN(): 1, math.NaN(): 2}), "more than one NaN key"},
+	} {
+		for range 3 {
+			_, err = libhandlebars.Render(tpl, map[string]any{"x": tc.x})
+			require.ErrorContains(t, err, tc.want, "%v", tc.x)
+		}
+	}
+	m := &countMeter{}
+	big := reflect.ValueOf(make([]int, 1<<20))
+	_, err = tpl.Render(map[string]any{"x": big}, hbs.Options{Meter: m})
+	require.ErrorContains(t, err, "got: [0 0 0")
+	require.Greater(t, m.n, int64(1<<20), "each element charged, as the slice it holds")
+}
+
+// TestGoContextScalarsSizedExactly: %v of a large slice of scalars is
+// sized at its real length, so it does not fail the produced-bytes bound
+// it stays within (64 bytes an element would have).
+func TestGoContextScalarsSizedExactly(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}}`)
+	require.NoError(t, err)
+	for _, x := range []any{make([]int, 2_100_000), make([]bool, 2_100_000), struct{ A []int8 }{make([]int8, 2_100_000)}} {
+		_, err := libhandlebars.Render(tpl, map[string]any{"x": x})
+		require.ErrorContains(t, err, "value passed in must be a number", "%T", x)
+		require.NotContains(t, err.Error(), "produces more than", "%T", x)
+	}
+}

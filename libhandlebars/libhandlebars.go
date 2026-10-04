@@ -385,7 +385,9 @@ func dumpContext(env *lisp.LEnv, v *lisp.LVal) ([]byte, *lisp.LVal) {
 // cap if the bytes before the native pass it.
 func (w *encodeWalk) nativeFailure(env *lisp.LEnv, v *lisp.LVal) *lisp.LVal {
 	native := env.Errorf("error while serializing: %s", w.nativeErr.Error())
-	if w.failed == nil {
+	// The estimate bounds the bytes written from above: within the cap,
+	// the encoder cannot fail on it before the native.
+	if w.failed == nil || w.sizeAtFail <= w.limit {
 		return native
 	}
 	sub, lerr := w.withNatives(v)
@@ -448,6 +450,13 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 		w.depth = lisp.MaxValueDepth
 	}
 	_, lerr := w.walk(v, 0)
+	// libjson encodes a value nested past its guard depth (64) twice: a
+	// first pass stops there, and a second, deep-safe one starts over.
+	if lerr == nil && w.deepest >= 64 {
+		if e := env.ChargeSteps(w.charged); e.Type == lisp.LError {
+			lerr = e
+		}
+	}
 	return w, lerr
 }
 
@@ -457,7 +466,10 @@ type encodeWalk struct {
 	natives     map[*lisp.LVal][]byte // each native's JSON, marshalled once
 	hasNative   map[*lisp.LVal]bool   // the containers on the way to a marshalled native
 	nativeErr   error                 // the error marshalling a native, where the walk stopped
+	mayUnload   bool                  // the native just walked may fail libjson's load check
 	failed      *lisp.LVal            // that native
+	sizeAtFail  int64                 // the estimate (an upper bound of the bytes written) when it failed
+	deepest     int                   // the deepest value the walk reached
 	stack       []*lisp.LVal          // the containers the walk is inside
 	lower       int64                 // a lower bound of the JSON's length so far
 	capErr      bool                  // lower passed the allocation cap
@@ -512,8 +524,12 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 				return nil, true, lerr
 			}
 			// Past the allocation cap even by a lower bound: the encoder
-			// would fail there, so do not marshal it.
-			if w.lower > w.limit {
+			// would fail at its next cap check, so do not marshal it --
+			// unless its bytes may fail libjson's load check, which the
+			// encoder runs first (a MarshalJSON, its skipped ones a
+			// time.Time say, or a json.Number): then marshal it, and let
+			// the encoder decide (below).
+			if w.lower > w.limit && !w.mayUnload {
 				w.capErr, w.capNative = true, true
 				return nil, true, nil
 			}
@@ -536,7 +552,10 @@ func (w *encodeWalk) native(x *lisp.LVal) ([]byte, bool, *lisp.LVal) {
 	}
 	w.lower = before + int64(len(b))
 	if w.lower > w.limit {
-		w.capErr, w.capNative = true, true
+		// The encoder writes the native, runs its load check, then
+		// meets its cap: dumpContext lets it decide which fails first
+		// (the bytes before the native were within the cap).
+		w.capErr = true
 		return nil, true, nil
 	}
 	return b, false, nil
@@ -586,20 +605,7 @@ func (w *encodeWalk) nativeCost(v reflect.Value) (bool, *lisp.LVal) {
 	var fail *jsonFailure
 	switch {
 	case err == nil:
-		// Past the allocation cap by a lower bound, the native is not
-		// marshalled; but json.Marshal would call its skipped marshalers
-		// (a time.Time out of range, say) before the encoder's next cap
-		// check, and fail with the first one's error: report that first.
-		if w.lower > w.limit && len(jw.skipped) > 0 {
-			merr := jw.firstMarshalerError()
-			if errors.As(merr, &fail) {
-				w.nativeErr = fail
-				return true, nil
-			}
-			if merr != nil {
-				return true, c.lerr
-			}
-		}
+		w.mayUnload = jw.mayFailLoad()
 		return false, nil
 	case errors.As(err, &fail):
 		w.nativeErr = fail
@@ -644,6 +650,7 @@ func jsonNesting(b []byte) int {
 // containers on the way to it, so withNatives can put a marker there.
 func (w *encodeWalk) failAt(x *lisp.LVal) {
 	w.failed = x
+	w.sizeAtFail = w.size
 	w.markPath()
 }
 
@@ -816,6 +823,19 @@ func (w *encodeWalk) scan(n int) *lisp.LVal {
 	return nil
 }
 
+// escapes charges writing a string's escapes: the bytes its JSON (n,
+// quotes included) adds to its length, a step per started 16 (an escape
+// writes up to 6 bytes for one, \u003c for <, and the buffer grows with
+// them).
+func (w *encodeWalk) escapes(n int64, length int) *lisp.LVal {
+	if extra := n - int64(length) - 2; extra > 0 {
+		if lerr := w.env.ChargeSteps(units64(extra, 16)); lerr.Type == lisp.LError {
+			return lerr
+		}
+	}
+	return nil
+}
+
 // jsonStringLen is the length of s as libjson writes it, quotes included:
 // encoding/json's escaping (\uXXXX for controls, <, >, &, U+2028, U+2029
 // and each invalid UTF-8 byte; two bytes for \, ", \b, \f, \n, \r, \t).
@@ -899,6 +919,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 	if depth >= w.depth {
 		return true, nil
 	}
+	w.deepest = max(w.deepest, depth)
 	var n int64
 	var children []*lisp.LVal
 	// lower is a bound of the bytes written by the time the encoder
@@ -925,12 +946,18 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 				return true, lerr
 			}
 			n = jsonStringLen(x.Str)
+			if lerr := w.escapes(n, len(x.Str)); lerr != nil {
+				return true, lerr
+			}
 		}
 	case lisp.LString:
 		if lerr := w.scan(len(x.Str)); lerr != nil {
 			return true, lerr
 		}
 		n = jsonStringLen(x.Str)
+		if lerr := w.escapes(n, len(x.Str)); lerr != nil {
+			return true, lerr
+		}
 	case lisp.LNative:
 		b, stop, lerr := w.native(x)
 		if stop || lerr != nil {

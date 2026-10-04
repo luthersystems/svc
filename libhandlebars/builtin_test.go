@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"os"
 	"os/exec"
 	"reflect"
@@ -1398,4 +1399,84 @@ func TestEncodeErrorOrderNearCap(t *testing.T) {
 	ctx = lisp.SortedMap()
 	ctx.MapSetString("n", lisp.Native(native))
 	check(t, newEnv(t), ctx, "error calling MarshalJSON for type time.Time")
+}
+
+// TestEncodeUnloadableNativePastCap: a native whose bytes pass the
+// allocation cap but fail libjson's load check reports the load check's
+// error, as json:dump-bytes does (the encoder checks a native's bytes
+// before its next cap check).
+func TestEncodeUnloadableNativePastCap(t *testing.T) {
+	big400, ok := new(big.Int).SetString("1"+strings.Repeat("0", 400), 10)
+	require.True(t, ok)
+	var deep any = 1
+	for range 10_001 {
+		deep = []any{deep}
+	}
+	for name, c := range map[string]struct {
+		native   any
+		prefix   int // bytes of string before the native
+		maxAlloc int
+	}{
+		"raw 1e1000 in a struct": {struct {
+			S string
+			R json.RawMessage
+		}{strings.Repeat("s", 4<<10), json.RawMessage("1e1000")}, 0, 1024},
+		"400-digit big.Int": {struct {
+			S string
+			N *big.Int
+		}{strings.Repeat("s", 2<<10), big400}, 0, 1024},
+		"nested 10,001 deep": {deep, 0, 4096},
+		"tiny raw crossing":  {json.RawMessage("1e1000"), 1000, 1024},
+	} {
+		env := newEnv(t)
+		env.Runtime.MaxAlloc = c.maxAlloc
+		ctx := lisp.SortedMap()
+		if c.prefix > 0 {
+			ctx.MapSetString("a", lisp.String(strings.Repeat("x", c.prefix)))
+		}
+		ctx.MapSetString("b", lisp.Native(c.native))
+		env.Put(lisp.Symbol("ctx"), ctx)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		require.Equal(t, lisp.LError, dump.Type, name)
+		require.NotContains(t, dump.String(), "allocation size", name)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		require.Equal(t, lisp.LError, res.Type, "%s: %v", name, res)
+		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str, name)
+	}
+}
+
+// TestEncodeFailingAfterEscapesCeiling: an encode that fails after a
+// string escaping to near the allocation cap (each < written as <)
+// stays within the ceiling: the escapes are charged, and a failing native
+// within the cap is reported without running the encoder again.
+func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing test: skipped under -race and -short")
+	}
+	env := newEnv(t)
+	fn, _ := eval(t, env, `(lambda () 1)`)
+	escaped := strings.Repeat("<", (env.Runtime.MaxAllocBytes()-1024)/6)
+	for name, c := range map[string]struct {
+		last  *lisp.LVal
+		depth int // lists around it: past 64, libjson encodes twice
+	}{
+		"native": {lisp.Native(make(chan int)), 0}, "lambda": {fn, 0},
+		"native, 70 deep": {lisp.Native(make(chan int)), 70}, "lambda, 70 deep": {fn, 70},
+	} {
+		best := math.Inf(1)
+		for range 3 {
+			ctx := lisp.QExpr([]*lisp.LVal{lisp.String(escaped), c.last})
+			for range c.depth {
+				ctx = lisp.QExpr([]*lisp.LVal{ctx})
+			}
+			env.Put(lisp.Symbol("ctx"), ctx)
+			start := time.Now()
+			res, steps := eval(t, env, `(handlebars:render "" ctx)`)
+			per := float64(time.Since(start).Nanoseconds()) / float64(steps)
+			require.Equal(t, lisp.LError, res.Type, "%s: %v", name, res)
+			best = min(best, per)
+		}
+		t.Logf("%s after %d escaped bytes: %.0f ns/step", name, 6*len(escaped), best)
+		require.False(t, ceilingFails(t, best), "%s: %.0f ns/step", name, best)
+	}
 }

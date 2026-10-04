@@ -54,11 +54,12 @@ func isGo(v any) bool {
 }
 
 var (
-	errorType     = reflect.TypeFor[error]()
-	stringerType  = reflect.TypeFor[fmt.Stringer]()
-	formatterType = reflect.TypeFor[fmt.Formatter]()
-	anySlice      = reflect.TypeFor[[]any]()
-	stringType    = reflect.TypeFor[string]()
+	reflectValueType = reflect.TypeFor[reflect.Value]()
+	errorType        = reflect.TypeFor[error]()
+	stringerType     = reflect.TypeFor[fmt.Stringer]()
+	formatterType    = reflect.TypeFor[fmt.Formatter]()
+	anySlice         = reflect.TypeFor[[]any]()
+	stringType       = reflect.TypeFor[string]()
 )
 
 // goIndirect is raymond's indirect: it follows pointers and empty
@@ -536,6 +537,26 @@ func (r *renderer) goAppendKind(dst []byte, val reflect.Value) []byte {
 // then does fmt print it. As raymond's did, fmt calls a value's String or
 // Error method.
 func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
+	// fmt prints a top-level reflect.Value as the value it holds (methods
+	// honoured; one it cannot take the value of, by reflection alone: here
+	// as its type), and a nested one by its String method.
+	if rv, ok := v.(reflect.Value); ok {
+		switch {
+		case nested:
+			// Nested, fmt calls its String method: "<T Value>", or a
+			// string Value's string. fmt given it here would unwrap it.
+			str := rv.String()
+			r.steps1(units(len(str), hashUnit))
+			r.checkProduced(len(dst) + len(str))
+			r.produced(len(str))
+			return append(dst, str...)
+		case !rv.IsValid():
+		case !rv.CanInterface():
+			return r.appendTypeName(dst, rv.Type())
+		default:
+			v = rv.Interface()
+		}
+	}
 	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
 	depth := 0
 	if nested {
@@ -556,17 +577,23 @@ func (r *renderer) goAppendV(dst []byte, v any, nested bool) []byte {
 		r.fail("Go map with more than one NaN key has no deterministic text")
 	}
 	if z.addr {
-		ts := reflect.TypeOf(v).String()
-		r.steps1(units(len(ts), scanUnit))
-		r.checkProduced(len(dst) + len(ts) + 2)
-		dst = append(append(append(dst, '('), ts...), ')')
-		r.produced(len(ts) + 2)
-		return dst
+		return r.appendTypeName(dst, reflect.TypeOf(v))
 	}
 	r.checkProduced(len(dst) + size)
 	n := len(dst)
 	dst = fmt.Appendf(dst, "%v", v)
 	r.produced(len(dst) - n)
+	return dst
+}
+
+// appendTypeName appends "(T)", t's name in parentheses: the deterministic
+// text printed for a value whose %v would hold a process address.
+func (r *renderer) appendTypeName(dst []byte, t reflect.Type) []byte {
+	ts := t.String()
+	r.steps1(units(len(ts), scanUnit))
+	r.checkProduced(len(dst) + len(ts) + 2)
+	dst = append(append(append(dst, '('), ts...), ')')
+	r.produced(len(ts) + 2)
 	return dst
 }
 
@@ -590,6 +617,27 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 	if depth > z.r.maxDepth {
 		z.deep = true
 		return 0
+	}
+	// A reflect.Value below the top prints by its String method (fmt
+	// unwraps only a top-level one, which goAppendV does too): "<T Value>",
+	// or a string Value's string. One fmt cannot take prints its fields,
+	// addresses among them.
+	if v.IsValid() && v.Type() == reflectValueType && depth > 0 {
+		if !v.CanInterface() {
+			z.addr = true
+			return 20
+		}
+		rv, _ := v.Interface().(reflect.Value)
+		if rv.Kind() == reflect.String {
+			z.steps += units(rv.Len(), hashUnit)
+			return rv.Len()
+		}
+		if !rv.IsValid() {
+			return len("<invalid Value>")
+		}
+		ts := rv.Type().String()
+		z.steps += units(len(ts), scanUnit)
+		return len(ts) + len("< Value>")
 	}
 	// fmt prints a value with a Format, Error or String method by calling
 	// it (at the top, and below wherever it can take the value), so it does
@@ -677,6 +725,22 @@ func (z *goSizer) size(v reflect.Value, depth int) int {
 			z.addr = true // fmt prints its address
 		}
 		return 64
+	case reflect.Bool:
+		if v.Bool() {
+			return 4
+		}
+		return 5
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var buf [24]byte
+		return len(strconv.AppendInt(buf[:0], v.Int(), 10))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		var buf [24]byte
+		return len(strconv.AppendUint(buf[:0], v.Uint(), 10))
+	case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		// fmt's own %v text, exactly (about 100 ns: a step more).
+		z.steps++
+		var buf [64]byte
+		return len(fmt.Appendf(buf[:0], "%v", v.Interface()))
 	default:
 		return 64
 	}
