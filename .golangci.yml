@@ -1,6 +1,6 @@
 version: "2"
 run:
-  timeout: 5m
+  timeout: 15m
 issues:
   # Report EVERY finding. golangci-lint's defaults (max-issues-per-linter: 50,
   # max-same-issues: 3) silently collapse repeats, so a plain run
