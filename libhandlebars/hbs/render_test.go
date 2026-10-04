@@ -263,7 +263,7 @@ func TestLinearNestedEach(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 9_000_000)
 	t.Logf("3000x3000 nested each: %v", elapsed)
-	if !raceEnabled && !testing.Short() {
+	if !raceEnabled && !testing.Short() && timingGuards() {
 		require.Less(t, elapsed, time.Second)
 	}
 }

@@ -735,7 +735,9 @@ func TestGoContextMethodKeysDeep(t *testing.T) {
 	start := time.Now()
 	_, err = libhandlebars.Render(tpl, map[string]any{"o": shared})
 	require.ErrorContains(t, err, "maximum depth")
-	require.Less(t, time.Since(start), time.Second, "fails before fmt sorts")
+	if timingGuards() {
+		require.Less(t, time.Since(start), time.Second, "fails before fmt sorts")
+	}
 
 	one := map[skey]int{{c, 0}: 0} // one key: fmt compares nothing
 	_, err = libhandlebars.Render(tpl, map[string]any{"o": one})

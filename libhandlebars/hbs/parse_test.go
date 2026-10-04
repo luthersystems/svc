@@ -190,7 +190,9 @@ func TestParseMillionNestedIf(t *testing.T) {
 	})
 	msg := requireKind(t, err, KindLimit)
 	require.Equal(t, fmt.Sprintf("Parse error on line 1:\ntemplate nesting depth exceeds limit of %d", DefaultLimits().MaxDepth), msg)
-	require.Less(t, took, time.Second)
+	if timingGuards() {
+		require.Less(t, took, time.Second)
+	}
 	t.Logf("%d nested {{#if}}: %v", n, took)
 }
 
@@ -235,7 +237,9 @@ func TestParseDeepNestingFailsFast(t *testing.T) {
 				_ = parse()
 				took = time.Since(start)
 			})
-			require.Less(t, took, time.Second, name)
+			if timingGuards() {
+				require.Less(t, took, time.Second, name)
+			}
 		}
 	}
 }

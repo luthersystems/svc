@@ -581,7 +581,11 @@ func (r *renderer) goAppendFmt(dst []byte, rv reflect.Value, t reflect.Type) []b
 // goFormat sizes sv (at depth), then appends fmt's %v of arg, or "(T)"
 // for t where the text would hold an address.
 func (r *renderer) goFormat(dst []byte, sv reflect.Value, arg any, depth int, t reflect.Type) []byte {
-	z := &goSizer{r: r, limit: r.maxSteps - r.steps - r.pending + 1}
+	limit := r.maxSteps - r.steps - r.pending
+	if limit < math.MaxInt64 {
+		limit++ // the step past MaxSteps
+	}
+	z := &goSizer{r: r, limit: limit}
 	size := z.size(sv, depth)
 	// The walk's charge, size and outcome do not depend on Go's map
 	// order: it counts every node up to MaxDepth, or stops once the count

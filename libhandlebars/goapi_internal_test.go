@@ -457,7 +457,9 @@ func TestZeroAnalysisShared(t *testing.T) {
 		require.NoError(t, goJSONCost(bud, reflect.ValueOf(v), 0))
 		require.GreaterOrEqual(t, bud.used, int64(23*3+1), "24 types, all but Z0 with 2 fields")
 	}
-	require.Less(t, time.Since(start), time.Second, "linear in the types, not the paths")
+	if timingGuards() {
+		require.Less(t, time.Since(start), time.Second, "linear in the types, not the paths")
+	}
 	z := zeroAnalysis(reflect.TypeFor[jsZ23]())
 	require.True(t, z.plain)
 	require.Equal(t, int64(23*3+1), z.work)

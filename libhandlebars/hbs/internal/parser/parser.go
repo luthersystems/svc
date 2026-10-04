@@ -453,10 +453,13 @@ func (p *parser) parseBlock() *ast.BlockStatement {
 }
 
 // setBlockInverseStrip records a block's whitespace control around its
-// inverse, for the whitespace pass (whitespace.go), as handlebars.js's
-// prepareBlock does (lib/handlebars/compiler/helper.js), and raymond with
-// it. It is called when parsing `block` (openBlock | openInverse) and
-// `inverseChain`:
+// inverse, for the whitespace pass (whitespace.go), as raymond does: for a
+// `{{#x}}` block as handlebars.js's prepareBlock does
+// (lib/handlebars/compiler/helper.js); for an inverted `{{^x}}` block
+// raymond's way, which handlebars.js 4.x does not share
+// (`[{{^t}} a {{~else~}} b {{/t}}]` with t true is "[ b ]" here and in
+// raymond, "[ b]" in handlebars.js). It is called when parsing `block`
+// (openBlock | openInverse) and `inverseChain`:
 //
 //   - InverseStrip is the strip flags of the `{{else}}` (or `{{^}}`) that
 //     opens the inverse: `{{~else~}}` trims around it.

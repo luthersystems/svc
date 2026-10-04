@@ -185,6 +185,7 @@ var diffCases = []string{
 	"{{#if no}} a {{~else~}} b {{/if}}|{{#if no}} a {{~else if t~}} b {{~/if}} |",
 	"{{#if no}} a {{else if no}} b {{~else~}} c {{~/if}} |{{^t}} a {{~^~}} b {{/t}}|",
 	"x {{~#if t~}} a {{~else if no~}} b {{~/if~}} y",
+	"[{{^t}} a {{~else~}} b {{/t}}]", // raymond's inverted-block strip (not handlebars.js 4.x's)
 	// printing and escaping
 	`{{s}}|{{{s}}}|{{&s}}`, `{{m}}|{{arr}}|{{earr}}|{{eobj}}|{{nul}}|{{missing}}`,
 	`{{n}} {{f}} {{big}} {{huge}} {{neg}} {{zero}} {{t}} {{no}}`,

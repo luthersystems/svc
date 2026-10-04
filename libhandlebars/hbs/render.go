@@ -2,7 +2,11 @@
 
 package hbs
 
-import "github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
+import (
+	"math"
+
+	"github.com/luthersystems/svc/libhandlebars/hbs/internal/ast"
+)
 
 // Render evaluates the program with ctx (see Value) and returns the output.
 //
@@ -55,7 +59,7 @@ func render(prog *ast.Program, ctx Value, o Options) (string, error) {
 		mode:        o.Mode,
 		maxDepth:    lim.MaxDepth,
 		maxOut:      lim.MaxOutputBytes,
-		maxProduced: producedFactor * int64(lim.MaxOutputBytes),
+		maxProduced: int64(min(lim.MaxOutputBytes, math.MaxInt64/producedFactor)) * producedFactor, // saturated
 		maxSteps:    lim.MaxSteps,
 		frame:       &dataFrame{},
 		ctx:         make([]any, 1, 16),

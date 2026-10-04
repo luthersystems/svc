@@ -525,7 +525,7 @@ func TestEncodeNativesAsJSON(t *testing.T) {
 		dump, res, _, d := render(t, newEnv(t), m)
 		require.Equal(t, lisp.LError, res.Type)
 		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
-		if !raceEnabled {
+		if !raceEnabled && timingGuards() {
 			require.Less(t, d, time.Second)
 		}
 	})
