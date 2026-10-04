@@ -89,11 +89,11 @@ a loader's settings are its own, in every environment it loads.
 | `Limits.MaxTemplateBytes` | 1 MiB (1048576) | consensus-visible | a longer template fails to parse (`handlebars-parse`) |
 | `Limits.MaxDepth` | 256 | consensus-visible | deeper nesting of blocks, subexpressions and paths fails to parse or render; at most 10,000 (`hbs.MaxDepthCeiling`) |
 | `Limits.MaxOutputBytes` | 16 MiB (16777216) | consensus-visible | longer output fails to render |
-| `Limits.MaxSteps` | 2^25 (33554432) | consensus-visible | a render charging more steps fails, with or without an ELPS budget |
+| `Limits.MaxSteps` | 2^25 (33554432) | consensus-visible | a render charging more steps fails, with or without an ELPS budget. It meters the render (and a Go caller's JSON-mode conversion); the parse and the ELPS context's encode and decode are charged to the ELPS step budget only, the parse bounded by MaxTemplateBytes and the encode by `Runtime.MaxAlloc` and libjson's nesting limits |
 | `Limits.ProducedFactor` | 8 | consensus-visible | a render producing more than this × MaxOutputBytes in all (captured sections, helper strings) fails |
 | `ParseCacheMaxBytes` | 64 MiB (67108864) | performance-only | the bytes of parse verdicts kept (each program weighed by its AST) |
 | `ParseCacheMaxEntryBytes` | 1 MiB (1048576) | performance-only | a longer template is not cached |
-| `GoContext` | `""` (follows `SVC_HANDLEBARS_JSON_GO_CONTEXT`) | Go API only; output-visible | how `RenderWith` reads a Go context: `reflect` or `json` |
+| `GoContext` | `""` (follows `SVC_HANDLEBARS_JSON_GO_CONTEXT`, read once at the process's first `Render` or `RenderWith`, whatever its options) | Go API only; output-visible | how `RenderWith` reads a Go context: `reflect` or `json` |
 
 Consensus-visible fields change what a render returns (its output, its
 error, or the steps it charges): every peer that endorses a transaction, and

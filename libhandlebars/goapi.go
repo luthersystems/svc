@@ -47,9 +47,11 @@ func Render(tpl Template, ctx interface{}) (string, error) {
 type RenderOption = Option
 
 // JSONGoContextEnv is the environment variable that makes JSON conversion
-// the default for Render and RenderWith. It is read once, at the first
-// render; only the exact value "true" enables it, and any other non-empty
-// value is ignored with a warning.
+// the default for Render and RenderWith (Config.GoContext ""). It is read
+// once, at the process's first Render or RenderWith call, whatever that
+// call's options; later changes to it are not seen. Only the exact value
+// "true" enables it, and any other non-empty value is ignored with a
+// warning.
 const JSONGoContextEnv = "SVC_HANDLEBARS_JSON_GO_CONTEXT"
 
 var jsonGoContextDefault = sync.OnceValue(func() bool {
@@ -101,12 +103,14 @@ func RenderWith(tpl Template, ctx interface{}, opts ...RenderOption) (out string
 }
 
 func renderWith(tpl Template, ctx interface{}, opts ...RenderOption) (string, error) {
+	// The environment is read at the first render, whatever its options.
+	envJSON := jsonGoContextDefault()
 	cfg, err := buildConfig(opts)
 	if err != nil {
 		return "", err
 	}
 	lim := cfg.Limits
-	asJSON := cfg.GoContext == GoContextJSON || cfg.GoContext == GoContextDefault && jsonGoContextDefault()
+	asJSON := cfg.GoContext == GoContextJSON || cfg.GoContext == GoContextDefault && envJSON
 	var v hbs.Value
 	if asJSON {
 		// The conversion counts against the render's MaxSteps: the

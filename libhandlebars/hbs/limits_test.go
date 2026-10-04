@@ -72,4 +72,9 @@ func TestMaxDepthCeiling(t *testing.T) {
 	}
 	_, err = p.Render(map[string]any{"a": v}, hbs.Options{Limits: lim})
 	require.ErrorContains(t, err, fmt.Sprintf("maximum depth of %d", hbs.MaxDepthCeiling))
+	// A cyclic value too.
+	cyc := []any{nil}
+	cyc[0] = cyc
+	_, err = p.Render(map[string]any{"a": cyc}, hbs.Options{Limits: lim})
+	require.ErrorContains(t, err, fmt.Sprintf("maximum depth of %d", hbs.MaxDepthCeiling))
 }

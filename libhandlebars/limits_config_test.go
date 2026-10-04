@@ -311,3 +311,37 @@ func TestConfigMaxDepthCeiling(t *testing.T) {
 	res, _ := renderIn(t, env, "render", ok, sortedMap("t", lisp.Bool(true)))
 	require.Equal(t, "x", res.Str, "%v", res)
 }
+
+type cyclicNode struct {
+	Name string
+	Next *cyclicNode
+}
+
+// TestConfigCyclicGoContext: a Go context that contains itself (a slice,
+// a map, a struct through a pointer) fails with the depth error at the
+// default MaxDepth and at the ceiling, never a stack overflow.
+func TestConfigCyclicGoContext(t *testing.T) {
+	s := []any{nil}
+	s[0] = s
+	m := map[string]any{}
+	m["m"] = m
+	n := &cyclicNode{Name: "n"}
+	n.Next = n
+	for _, depth := range []int{0, hbs.MaxDepthCeiling} {
+		for _, c := range []struct {
+			tpl, err string
+			ctx      any
+		}{
+			{"{{x}}", "maximum depth", s}, {"{{prettyp-num-en x}}", "maximum depth", s},
+			{"{{prettyp-num-en x}}", "maximum depth", m},
+			{"{{#each x}}{{#each this}}{{this}}{{/each}}{{/each}}", "maximum depth", s},
+			// fmt does not follow a nested pointer: it prints as its type.
+			{"{{prettyp-num-en x}}", "got: (libhandlebars_test.cyclicNode)", n},
+		} {
+			p, err := libhandlebars.Parse(c.tpl)
+			require.NoError(t, err)
+			_, err = libhandlebars.RenderWith(p, map[string]any{"x": c.ctx}, libhandlebars.WithMaxDepth(depth), libhandlebars.WithGoContext())
+			require.ErrorContains(t, err, c.err, "%s %T at MaxDepth %d", c.tpl, c.ctx, depth)
+		}
+	}
+}

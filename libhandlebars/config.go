@@ -33,7 +33,12 @@ type Config struct {
 	//     engine's recursion, so it is at most hbs.MaxDepthCeiling (10,000):
 	//     a larger value is an error.
 	//   - MaxOutputBytes: longer output fails to render.
-	//   - MaxSteps: a render charging more steps fails.
+	//   - MaxSteps: a render charging more steps fails. It meters the
+	//     render and, for a Go caller in JSON mode, the context's
+	//     conversion. The parse, and the ELPS package's context encode and
+	//     decode, are charged to the caller's ELPS step budget only (the
+	//     parse is bounded by MaxTemplateBytes, the encode by
+	//     Runtime.MaxAlloc and libjson's nesting limits).
 	//   - ProducedFactor: a render producing more than ProducedFactor ×
 	//     MaxOutputBytes in all (captured sections, helper strings) fails.
 	Limits hbs.Limits
@@ -52,7 +57,9 @@ type Config struct {
 	// output can differ, so callers that must agree must use the same
 	// mode): GoContextDefault follows SVC_HANDLEBARS_JSON_GO_CONTEXT,
 	// GoContextReflect reads the value itself, and GoContextJSON converts
-	// it through JSON. The ELPS package ignores it.
+	// it through JSON. The environment variable is read once, at the
+	// process's first Render or RenderWith call. The ELPS package ignores
+	// it.
 	GoContext GoContextMode
 }
 
