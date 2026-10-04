@@ -359,8 +359,9 @@ func TestConfigCyclicGoContext(t *testing.T) {
 // environment whose limit the embedder raised: a 3,000,000-level vector
 // and map context, and a chain of 3,000,000 quotes for render-fixed. Each
 // render ends with an error or a result as json:dump-bytes and the decoder
-// decide, not a crash; the walk that charges the encode stops at elps's
-// default limit, and render-fixed's int walk unwraps quotes in a loop.
+// decide, not a crash; the walk that charges the encode keeps its
+// containers on a heap stack, and render-fixed's int walk unwraps quotes
+// in a loop.
 func TestRaisedValueDepthNoCrash(t *testing.T) {
 	if os.Getenv("HBS_RAISED_DEPTH_CHILD") == "1" {
 		const n = 3_000_000
@@ -423,4 +424,76 @@ func TestRaisedValueDepthNoCrash(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%.2000s", out)
 	require.Contains(t, string(out), "RAISED-DEPTH-OK")
+}
+
+type deepNode struct{ Next *deepNode }
+
+// TestRaisedDepthNatives runs, in a subprocess (a stack overflow is
+// fatal), natives nested past elps's default value depth in an environment
+// whose limit the embedder raised: the encode walk reaches each, so a
+// native nested past the 50,000-level Go value bound fails with that
+// error, before encoding/json would recurse through it, under a list or a
+// chain of quotes, for render and render-fixed; and a shallow native
+// there renders as it does at the top.
+func TestRaisedDepthNatives(t *testing.T) {
+	if os.Getenv("HBS_RAISED_NATIVES_CHILD") == "1" {
+		var chain *deepNode
+		for range 3_000_000 {
+			chain = &deepNode{Next: chain}
+		}
+		var g any
+		for range 3_000_000 {
+			g = []any{g}
+		}
+		inList := lisp.Native(chain)
+		for range lisp.MaxValueDepth + 5 {
+			inList = lisp.QExpr([]*lisp.LVal{inList})
+		}
+		quoted := func(n *lisp.LVal) *lisp.LVal {
+			for range lisp.MaxValueDepth + 10 {
+				n = lisp.Quote(n)
+			}
+			return n
+		}
+		inQuotes := quoted(lisp.Native(g))
+		shallow := quoted(lisp.Native(map[string]int{"x": 1}))
+		const deepErr = "error while serializing: json: Go value nests deeper than 50000"
+		for _, fn := range []string{"render", "render-fixed"} {
+			for _, c := range []struct {
+				tpl  string
+				ctx  *lisp.LVal
+				want string
+			}{
+				{"{{a}}", sortedMap("a", inList), deepErr},
+				{"{{to-str a}}", sortedMap("a", inQuotes), deepErr},
+				{"{{a.x}}", sortedMap("a", shallow), ""},
+			} {
+				env := newEnvWith(t, mustLoader(t))
+				if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
+					t.Fatal(res)
+				}
+				env.Put(lisp.Symbol("ctx"), c.ctx)
+				res := env.LoadStringContext(t.Context(), "test", "(handlebars:"+fn+` "`+c.tpl+`" ctx)`)
+				switch {
+				case c.want == "":
+					if res.Type != lisp.LString || res.Str != "1" {
+						t.Fatalf("%s %s: %.300v", fn, c.tpl, res)
+					}
+				case res.Type != lisp.LError || !strings.Contains(res.String(), c.want):
+					t.Fatalf("%s %s: %.300v", fn, c.tpl, res)
+				}
+				fmt.Printf("%s %s: %.120v\n", fn, c.tpl, res)
+			}
+		}
+		fmt.Println("RAISED-NATIVES-OK")
+		return
+	}
+	if testing.Short() || raceEnabled {
+		t.Skip("3M-level natives: skipped under -short and -race (memory)")
+	}
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRaisedDepthNatives$") //nolint:gosec // this test binary
+	cmd.Env = append(os.Environ(), "HBS_RAISED_NATIVES_CHILD=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%.2000s", out)
+	require.Contains(t, string(out), "RAISED-NATIVES-OK")
 }

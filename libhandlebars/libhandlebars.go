@@ -459,16 +459,7 @@ func chargeEncode(env *lisp.LEnv, v *lisp.LVal) (*encodeWalk, *lisp.LVal) {
 	if w.depth < 1024 { // as libjson's encoder reads the limit
 		w.depth = lisp.MaxValueDepth
 	}
-	// The walk recurses, so it stops at elps's default limit even where the
-	// embedder raised the runtime's (lisp.WithMaxValueDepth): a deeper
-	// value would overflow the goroutine's stack, a fatal error. There it
-	// stops as it does at the runtime's limit, and the encoder (which
-	// walks deep values on a heap stack) decides: the context's JSON then
-	// nests past encoding/json's 10,000 levels, so if the encoder succeeds
-	// the decode fails, as it would have. The encoder's work past the
-	// walk is bounded by Runtime.MaxAlloc.
-	w.depth = min(w.depth, lisp.MaxValueDepth)
-	_, lerr := w.walk(v, 0)
+	_, lerr := w.walk(v)
 	// libjson encodes a value nested to its guard depth (64, counting the
 	// top value as 1: the walk's 63) twice: a first pass stops there, and
 	// a second, deep-safe one starts over.
@@ -751,7 +742,8 @@ func (w *encodeWalk) markPath() {
 // withNatives returns v with each native the walk marshalled replaced by a
 // native json.RawMessage of its bytes, so the encoder writes the same JSON
 // without marshalling it again. Containers on the way are copied; the rest
-// is shared.
+// is shared. Like the walk, it keeps the containers it is inside on a heap
+// stack.
 func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 	memo := map[*lisp.LVal]*lisp.LVal{}
 	var lerr *lisp.LVal
@@ -765,103 +757,123 @@ func (w *encodeWalk) withNatives(v *lisp.LVal) (*lisp.LVal, *lisp.LVal) {
 		}
 		return lerr == nil
 	}
-	var sub func(x *lisp.LVal) *lisp.LVal
-	sub = func(x *lisp.LVal) *lisp.LVal {
+	// A container being copied: its contents, and their substitutes so far.
+	type frame struct {
+		x, ents    *lisp.LVal // ents: a map's entries
+		kids, subs []*lisp.LVal
+	}
+	var frames []frame
+	// enter returns x's substitute, or pushes a frame to compute it.
+	enter := func(x *lisp.LVal) (*lisp.LVal, bool) {
 		if x == nil {
-			return x
+			return x, true
 		}
 		if r, ok := memo[x]; ok {
-			return r
+			return r, true
 		}
 		// Only the containers the charged walk marked lead to a
 		// replacement; nothing past where it stopped is visited.
 		if x.Type != lisp.LNative && !w.hasNative[x] {
-			return x
+			return x, true
 		}
 		memo[x] = x // a cycle back to x keeps the original
-		var out *lisp.LVal
+		f := frame{x: x}
 		switch x.Type {
 		case lisp.LNative:
 			if x == w.failed {
-				out = lisp.Native(nativeFailMarker{})
-				break
+				out := lisp.Native(nativeFailMarker{})
+				memo[x] = out
+				return out, true
 			}
 			// JSON nesting past encoding/json's decoder limit (10,000)
 			// fails the encoder's load check; a RawMessage would fail its
 			// compaction first, with other text. Leave such a native to
 			// the encoder.
 			if b, ok := w.natives[x]; ok && jsonNesting(b) <= 10_000 {
-				out = lisp.Native(json.RawMessage(b))
+				out := lisp.Native(json.RawMessage(b))
+				memo[x] = out
+				return out, true
 			}
+			return x, true
 		case lisp.LSortMap:
 			if !copying(2 * x.Map().Len()) {
-				break
+				return x, true
 			}
-			ents := x.MapEntries()
-			if ents.Type == lisp.LError {
-				break
+			f.ents = x.MapEntries()
+			if f.ents.Type == lisp.LError {
+				return x, true
 			}
-			changed := false
-			vals := make([]*lisp.LVal, len(ents.Cells))
-			for i, e := range ents.Cells {
-				vals[i] = sub(e.Cells[1])
-				changed = changed || vals[i] != e.Cells[1]
-			}
-			if changed {
-				out = lisp.SortedMapSized(len(vals))
-				for i, e := range ents.Cells {
-					out.MapSetLVal(e.Cells[0], vals[i])
-				}
+			f.kids = make([]*lisp.LVal, len(f.ents.Cells))
+			for i, e := range f.ents.Cells {
+				f.kids[i] = e.Cells[1]
 			}
 		case lisp.LArray:
 			// The elements are the cells of Cells[1], which the walk
 			// visited as the array's own children.
 			if len(x.Cells) != 2 || !copying(len(x.Cells[1].Cells)) {
-				break
+				return x, true
 			}
-			var cells []*lisp.LVal
-			for i, c := range x.Cells[1].Cells {
-				if s := sub(c); s != c {
-					if cells == nil {
-						cells = append([]*lisp.LVal(nil), x.Cells[1].Cells...)
-					}
-					cells[i] = s
-				}
-			}
-			if cells != nil {
-				data := *x.Cells[1]
-				data.Cells = cells
-				cp := *x
-				cp.Cells = []*lisp.LVal{x.Cells[0], &data}
-				out = &cp
-			}
+			f.kids = x.Cells[1].Cells
 		case lisp.LSExpr, lisp.LQuote, lisp.LTaggedVal:
 			if !copying(len(x.Cells)) {
-				break
+				return x, true
 			}
-			var cells []*lisp.LVal
-			for i, c := range x.Cells {
-				if s := sub(c); s != c {
-					if cells == nil {
-						cells = append([]*lisp.LVal(nil), x.Cells...)
-					}
-					cells[i] = s
-				}
-			}
-			if cells != nil {
-				cp := *x
-				cp.Cells = cells
-				out = &cp
-			}
+			f.kids = x.Cells
 		default:
+			return x, true
 		}
-		if out == nil {
-			return x
+		f.subs = make([]*lisp.LVal, 0, len(f.kids))
+		frames = append(frames, f)
+		return nil, false
+	}
+	// leave builds a finished frame's substitute.
+	leave := func(f *frame) *lisp.LVal {
+		changed := false
+		for i, s := range f.subs {
+			changed = changed || s != f.kids[i]
 		}
-		memo[x] = out
+		if !changed {
+			return f.x
+		}
+		var out *lisp.LVal
+		switch f.x.Type {
+		case lisp.LSortMap:
+			out = lisp.SortedMapSized(len(f.subs))
+			for i, e := range f.ents.Cells {
+				out.MapSetLVal(e.Cells[0], f.subs[i])
+			}
+		case lisp.LArray:
+			data := *f.x.Cells[1]
+			data.Cells = f.subs
+			cp := *f.x
+			cp.Cells = []*lisp.LVal{f.x.Cells[0], &data}
+			out = &cp
+		default:
+			cp := *f.x
+			cp.Cells = f.subs
+			out = &cp
+		}
+		memo[f.x] = out
 		return out
 	}
-	out := sub(v)
+	out, done := enter(v)
+	for !done {
+		top := &frames[len(frames)-1]
+		if len(top.subs) < len(top.kids) {
+			if r, ok := enter(top.kids[len(top.subs)]); ok {
+				top.subs = append(top.subs, r)
+			}
+			continue
+		}
+		r := leave(top)
+		frames = frames[:len(frames)-1]
+		if len(frames) == 0 {
+			out, done = r, true
+		} else {
+			parent := &frames[len(frames)-1]
+			parent.subs = append(parent.subs, r)
+		}
+	}
 	return out, lerr
 }
 
@@ -973,9 +985,58 @@ func jsonQuotedStringLen(s string) int64 {
 	return 2 + inner + special
 }
 
-// walk charges x and its contents. It reports true where the encoder
-// fails, and the budget error if the budget runs out.
-func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
+// walk charges x and its contents, in the encoder's order. It reports
+// true where the encoder fails, and the budget error if the budget runs
+// out.
+//
+// It keeps the containers it is inside on a heap stack, as libjson's
+// encoder does, so a value nested to any depth the runtime allows (an
+// embedder may raise it: lisp.WithMaxValueDepth) is walked, natives and
+// all, without growing the goroutine's stack.
+func (w *encodeWalk) walk(root *lisp.LVal) (bool, *lisp.LVal) {
+	type frame struct {
+		children []*lisp.LVal
+		next     int
+		closer   int64
+	}
+	var frames []frame
+	defer func() {
+		clear(w.path)
+		w.stack = w.stack[:0]
+	}()
+	x, depth := root, 0
+	for {
+		stop, lerr, children, closer := w.visit(x, depth)
+		if stop || lerr != nil {
+			return true, lerr
+		}
+		if len(children) > 0 {
+			frames = append(frames, frame{children: children, closer: closer})
+		}
+		// The next value: the next child of the innermost container that
+		// has one, closing each finished container on the way out.
+		for len(frames) > 0 && frames[len(frames)-1].next == len(frames[len(frames)-1].children) {
+			w.lower += frames[len(frames)-1].closer
+			delete(w.path, w.stack[len(w.stack)-1])
+			w.stack = w.stack[:len(w.stack)-1]
+			frames = frames[:len(frames)-1]
+		}
+		if len(frames) == 0 {
+			return false, nil
+		}
+		top := &frames[len(frames)-1]
+		x, depth = top.children[top.next], len(frames)
+		top.next++
+	}
+}
+
+// visit charges x itself. It reports stop where the encoder fails, and
+// the budget error if the budget runs out; otherwise, for a container with
+// contents, it returns them and the bytes written after them, with x
+// entered (on the walk's path and stack) for walk to leave.
+func (w *encodeWalk) visit(x *lisp.LVal, depth int) (bool, *lisp.LVal, []*lisp.LVal, int64) {
+	var children []*lisp.LVal
+	var closer int64 // written after the children
 	// Past the allocation cap by the bytes surely written (lower), the
 	// encoder fails there: report its error rather than let it run. The
 	// estimate (size) only sets the charge: it over-counts (a float is 24
@@ -985,38 +1046,36 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		// (escaping it) before its next cap check: charge that first.
 		if x.Type == lisp.LString || x.Type == lisp.LSymbol {
 			if lerr := w.scan(len(x.Str)); lerr != nil {
-				return true, lerr
+				return true, lerr, nil, 0
 			}
 			if lerr := w.escapes(jsonStringLen(x.Str), len(x.Str)); lerr != nil {
-				return true, lerr
+				return true, lerr, nil, 0
 			}
 		}
 		w.capErr = true
-		return true, nil
+		return true, nil, nil, 0
 	}
 	if x.IsNil() {
 		w.lower += 4
-		return false, w.add(4)
+		return false, w.add(4), nil, 0
 	}
 	if depth >= w.depth {
-		return true, nil
+		return true, nil, nil, 0
 	}
 	w.deepest = max(w.deepest, depth)
 	var n int64
-	var children []*lisp.LVal
 	// lower is a bound of the bytes written by the time the encoder
 	// reaches each value (libjson checks its cap there, against what it
 	// has written so far): a container's opener counts on entry, its
 	// closer (and a map's colons) only after its children.
 	lower := int64(-1) // n unless set: the bytes surely written first
-	var closer int64   // written after the children
 	switch x.Type {
 	case lisp.LInt:
 		var buf [24]byte
 		n = int64(len(strconv.AppendInt(buf[:0], int64(x.Int), 10)))
 	case lisp.LFloat:
 		if math.IsInf(x.Float, 0) || math.IsNaN(x.Float) {
-			return true, nil // the encoder refuses it
+			return true, nil, nil, 0 // the encoder refuses it
 		}
 		n, lower = 24, 1
 	case lisp.LSymbol:
@@ -1025,25 +1084,25 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 			n, lower = 5, 4
 		default:
 			if lerr := w.scan(len(x.Str)); lerr != nil {
-				return true, lerr
+				return true, lerr, nil, 0
 			}
 			n = jsonStringLen(x.Str)
 			if lerr := w.escapes(n, len(x.Str)); lerr != nil {
-				return true, lerr
+				return true, lerr, nil, 0
 			}
 		}
 	case lisp.LString:
 		if lerr := w.scan(len(x.Str)); lerr != nil {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		n = jsonStringLen(x.Str)
 		if lerr := w.escapes(n, len(x.Str)); lerr != nil {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 	case lisp.LNative:
 		b, stop, lerr := w.native(x)
 		if stop || lerr != nil {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		n, lower = int64(len(b)), 0 // native() counted it
 	case lisp.LBytes:
@@ -1051,7 +1110,7 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		// Encoding it is charged as a string's scan, a step per started
 		// 32 bytes written (as a native []byte's).
 		if lerr := w.env.ChargeSteps(units64(enc, 32)); lerr.Type == lisp.LError {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		n, lower = enc+2, enc
 	case lisp.LSExpr:
@@ -1069,27 +1128,27 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 		// (and before its allocation cap can stop it): charge that, and stop
 		// at the cap, before allocating room for them here.
 		if lerr := w.env.ChargeSteps(int64(m.Len()) * int64(1+bits.Len(uint(m.Len())))); lerr.Type == lisp.LError {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		if lerr := w.add(int64(m.Len()) * 4); lerr != nil {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		lower, closer = 1, 1+int64(m.Len()) // the brace first; the colons and closer as written
 		buf := make([]*lisp.LVal, m.Len())  // as many as the map holds
 		if e := m.Entries(buf); e.Type == lisp.LError {
-			return true, nil
+			return true, nil, nil, 0
 		}
 		// Sorting compared the keys by their bytes, here and again in the
 		// encoder: charge that before any value is walked, so a value that
 		// fails the encode does not leave the keys uncharged.
 		if lerr := w.env.ChargeSteps(keySortCost(buf)); lerr.Type == lisp.LError {
-			return true, lerr
+			return true, lerr, nil, 0
 		}
 		// The encoder refuses an int key spelling a string key's name
 		// before it encodes any value: stop here, so its error is the one
 		// reported (not a native's below).
 		if intKeyCollision(buf) {
-			return true, nil
+			return true, nil, nil, 0
 		}
 		for _, entry := range buf {
 			if entry != nil && len(entry.Cells) == 2 {
@@ -1097,35 +1156,25 @@ func (w *encodeWalk) walk(x *lisp.LVal, depth int) (bool, *lisp.LVal) {
 			}
 		}
 	default:
-		return true, nil // the encoder stops here
+		return true, nil, nil, 0 // the encoder stops here
 	}
 	if lower < 0 {
 		lower = n
 	}
 	w.lower += lower
 	if lerr := w.add(n); lerr != nil {
-		return true, lerr
+		return true, lerr, nil, 0
 	}
 	if len(children) == 0 {
 		w.lower += closer
-		return false, nil
+		return false, nil, nil, 0
 	}
 	if _, cyclic := w.path[x]; cyclic {
-		return true, nil
+		return true, nil, nil, 0
 	}
 	w.path[x] = struct{}{}
 	w.stack = append(w.stack, x)
-	defer func() {
-		delete(w.path, x)
-		w.stack = w.stack[:len(w.stack)-1]
-	}()
-	for _, c := range children {
-		if stop, lerr := w.walk(c, depth+1); stop || lerr != nil {
-			return true, lerr
-		}
-	}
-	w.lower += closer
-	return false, nil
+	return false, nil, children, closer
 }
 
 // keySortCost is the steps of sorting a map's entries twice (the walk's

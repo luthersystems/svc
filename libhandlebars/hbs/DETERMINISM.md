@@ -112,10 +112,13 @@ Fixed, by design:
   runtime's value-depth limit allows (`Runtime.ValueDepthLimit`, elps's
   default 1,000,000; libjson's encoder enforces it, with its depth-64
   guard), and its JSON then decodes only within encoding/json's 10,000
-  levels, so a context nested deeper fails to render; the walk that
-  charges the encode stops at elps's default limit even where the embedder
-  raised the runtime's (it recurses; past that the encoder, which does not,
-  decides). The load check of a native's JSON refuses 10,000 levels, as
+  levels, so a context nested deeper fails to render. The walk that
+  charges the encode, like libjson's encoder, keeps the containers it is
+  inside on a heap stack, so where the embedder raised the runtime's limit
+  it still reaches, charges and checks every value and native the encoder
+  would (a native nested past the 50,000-level Go value bound below fails
+  with that error, before encoding/json would recurse through it), and the
+  context's depth does not grow the goroutine's stack. The load check of a native's JSON refuses 10,000 levels, as
   encoding/json does. A Go caller's JSON-mode context may nest 1024
   container levels (`jsonGoMaxDepth`). None of this encode work counts
   against MaxSteps: it is charged to the ELPS step budget, and bounded by
