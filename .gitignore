@@ -2,3 +2,11 @@
 build/
 .tmp/
 tasks/
+
+# Go binaries built in a package directory (go build ./cmd/x)
+/libhandlebars/hbdiff
+/libhandlebars/hbshape
+# Test binaries and profiles (go test -c, -cpuprofile)
+*.test
+*.out
+*.prof

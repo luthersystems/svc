@@ -1,0 +1,82 @@
+#each over arrays, maps (sorted key order), scalars, nested; @index etc.
+-- each-array.hbs --
+{{#each xs}}{{@index}}{{this}},{{/each}}
+-- each-array.jsonl --
+{"xs":[]}
+{"xs":[null]}
+{"xs":[1,"two",3.5,true,null,[1],{"k":1}]}
+{}
+{"xs":null}
+-- each-map-sorted.hbs --
+{{#each m}}{{@key}}={{this}}({{@index}}{{@first}}{{@last}});{{/each}}
+-- each-map-sorted.jsonl --
+{"m":{"b":1,"a":2,"c":3,"B":4,"10":5,"9":6,"é":7,"":8}}
+{"m":{}}
+{"m":{"only":1}}
+-- each-scalar.hbs --
+[{{#each s}}{{this}}{{else}}E{{/each}}]
+-- each-scalar.jsonl --
+{"s":"str"}
+{"s":5}
+{"s":true}
+{"s":false}
+{"s":0}
+{"s":""}
+-- each-else.hbs --
+{{#each xs}}{{this}}{{else}}empty{{/each}}
+-- each-else.jsonl --
+{"xs":[]}
+{"xs":{}}
+{}
+{"xs":[0]}
+-- nested-each.hbs --
+{{#each rows}}<tr>{{#each cells}}<td>{{this}}{{@index}}{{@../index}}</td>{{/each}}</tr>{{/each}}
+-- nested-each.jsonl --
+{"rows":[{"cells":[1,2]},{"cells":[]},{"cells":["a"]}]}
+-- nested-each-maps.hbs --
+{{#each a}}{{@key}}:{{#each this}}{{@key}}={{this}},{{/each}};{{/each}}
+-- nested-each-maps.jsonl --
+{"a":{"y":{"q":1,"p":2},"x":{"z":3}}}
+-- each-first-last-if.hbs --
+{{#each xs}}{{#if @first}}[{{/if}}{{this}}{{#unless @last}}, {{/unless}}{{#if @last}}]{{/if}}{{/each}}
+-- each-first-last-if.jsonl --
+{"xs":[1,2,3]}
+{"xs":[1]}
+-- each-this-path.hbs --
+{{#each xs}}{{this.n}}{{n}}{{./n}}{{/each}}
+-- each-this-path.jsonl --
+{"n":"P","xs":[{"n":1},{}]}
+-- each-with-helper.hbs --
+{{#each xs}}{{plus a=this b=1}}|{{times this 2}}|{{to-str this}};{{/each}}
+-- each-with-helper.jsonl --
+{"xs":[1,2.5,"3",null]}
+-- each-subexpr-source.hbs --
+{{#each (select-missing)}}x{{/each}}|{{#each (len xs)}}x{{/each}}
+-- each-subexpr-source.jsonl --
+{"xs":[1,2]}
+-- each-index-arith.hbs --
+{{#each xs}}{{plus i=@index one=1}} {{/each}}
+-- each-index-arith.jsonl --
+{"xs":["a","b","c"]}
+-- each-index-eq.hbs --
+{{#each xs}}{{#if (eq @index 1)}}one{{/if}}{{#if (gt @index 0)}}+{{/if}}{{/each}}
+-- each-index-eq.jsonl --
+{"xs":["a","b","c"]}
+-- each-key-numeric-strings.hbs --
+{{#each m}}{{@key}}{{/each}}
+-- each-key-numeric-strings.jsonl --
+{"m":{"2":1,"10":1,"1":1,"01":1,"a":1,"A":1,"_":1}}
+-- each-global-in-loop.hbs --
+{{#each xs}}{{global "ns" key=this val=this}}{{/each}}{{global "ns" key="b"}}
+-- each-global-in-loop.jsonl --
+{"xs":["a","b"]}
+-- each-hash-args.hbs --
+{{#each xs foo="bar"}}{{this}}{{/each}}
+-- each-hash-args.jsonl --
+{"xs":[1]}
+-- each-two-params.hbs --
+{{#each xs ys}}{{this}}{{/each}}
+-- each-two-params.jsonl --
+{"xs":[1],"ys":[2]}
+-- each-no-params.hbs --
+{{#each}}x{{/each}}

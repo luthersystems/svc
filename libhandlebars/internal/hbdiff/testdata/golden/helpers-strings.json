@@ -1,0 +1,1669 @@
+{
+  "helpers-strings/t01#1": {
+    "out": ""
+  },
+  "helpers-strings/t01#10": {
+    "out": "3.50&apos;s"
+  },
+  "helpers-strings/t01#11": {
+    "out": "x&apos;s"
+  },
+  "helpers-strings/t01#12": {
+    "out": "true&apos;s"
+  },
+  "helpers-strings/t01#13": {
+    "out": "12&apos;s"
+  },
+  "helpers-strings/t01#14": {
+    "out": "9007199254740992&apos;s"
+  },
+  "helpers-strings/t01#15": {
+    "out": "1000000000000000000000&apos;s"
+  },
+  "helpers-strings/t01#16": {
+    "out": "2020-01-31&apos;s"
+  },
+  "helpers-strings/t01#17": {
+    "out": "2020-02-29&apos;s"
+  },
+  "helpers-strings/t01#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;&apos;s"
+  },
+  "helpers-strings/t01#19": {
+    "out": "12345.675&apos;s"
+  },
+  "helpers-strings/t01#2": {
+    "out": ""
+  },
+  "helpers-strings/t01#3": {
+    "out": ""
+  },
+  "helpers-strings/t01#4": {
+    "out": "0&apos;s"
+  },
+  "helpers-strings/t01#5": {
+    "out": "0&apos;s"
+  },
+  "helpers-strings/t01#6": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t01#7": {
+    "out": "3.5&apos;s"
+  },
+  "helpers-strings/t01#8": {
+    "out": "-1.25&apos;s"
+  },
+  "helpers-strings/t01#9": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t02#1": {
+    "out": ""
+  },
+  "helpers-strings/t02#10": {
+    "out": "3.50's"
+  },
+  "helpers-strings/t02#11": {
+    "out": "x's"
+  },
+  "helpers-strings/t02#12": {
+    "out": "true's"
+  },
+  "helpers-strings/t02#13": {
+    "out": "12's"
+  },
+  "helpers-strings/t02#14": {
+    "out": "9007199254740992's"
+  },
+  "helpers-strings/t02#15": {
+    "out": "1000000000000000000000's"
+  },
+  "helpers-strings/t02#16": {
+    "out": "2020-01-31's"
+  },
+  "helpers-strings/t02#17": {
+    "out": "2020-02-29's"
+  },
+  "helpers-strings/t02#18": {
+    "out": "<&>\"''s"
+  },
+  "helpers-strings/t02#19": {
+    "out": "12345.675's"
+  },
+  "helpers-strings/t02#2": {
+    "out": ""
+  },
+  "helpers-strings/t02#3": {
+    "out": ""
+  },
+  "helpers-strings/t02#4": {
+    "out": "0's"
+  },
+  "helpers-strings/t02#5": {
+    "out": "0's"
+  },
+  "helpers-strings/t02#6": {
+    "out": "3's"
+  },
+  "helpers-strings/t02#7": {
+    "out": "3.5's"
+  },
+  "helpers-strings/t02#8": {
+    "out": "-1.25's"
+  },
+  "helpers-strings/t02#9": {
+    "out": "3's"
+  },
+  "helpers-strings/t03#1": {
+    "out": ""
+  },
+  "helpers-strings/t03#10": {
+    "out": " 2&apos;s"
+  },
+  "helpers-strings/t03#11": {
+    "out": "y&apos;s"
+  },
+  "helpers-strings/t03#12": {
+    "out": "false&apos;s"
+  },
+  "helpers-strings/t03#13": {
+    "out": "UNPRINTABLE&apos;s"
+  },
+  "helpers-strings/t03#14": {
+    "out": "-9007199254740992&apos;s"
+  },
+  "helpers-strings/t03#15": {
+    "out": "0.0000001&apos;s"
+  },
+  "helpers-strings/t03#16": {
+    "out": "2019-12-31&apos;s"
+  },
+  "helpers-strings/t03#17": {
+    "out": "2021-02-28&apos;s"
+  },
+  "helpers-strings/t03#18": {
+    "out": "é😀&apos;s"
+  },
+  "helpers-strings/t03#19": {
+    "out": "1234567.885&apos;s"
+  },
+  "helpers-strings/t03#2": {
+    "out": ""
+  },
+  "helpers-strings/t03#3": {
+    "out": ""
+  },
+  "helpers-strings/t03#4": {
+    "out": "0&apos;s"
+  },
+  "helpers-strings/t03#5": {
+    "out": "0&apos;s"
+  },
+  "helpers-strings/t03#6": {
+    "out": "2&apos;s"
+  },
+  "helpers-strings/t03#7": {
+    "out": "2.25&apos;s"
+  },
+  "helpers-strings/t03#8": {
+    "out": "0.1&apos;s"
+  },
+  "helpers-strings/t03#9": {
+    "out": "2&apos;s"
+  },
+  "helpers-strings/t04#1": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#10": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#11": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#12": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#13": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#14": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#15": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#16": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#17": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#18": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#19": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#2": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#3": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#4": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#5": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#6": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#7": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#8": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t04#9": {
+    "out": "Jones&apos;"
+  },
+  "helpers-strings/t05#1": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#10": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#11": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#12": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#13": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#14": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#15": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#16": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#17": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#18": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#19": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#2": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#3": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#4": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#5": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#6": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#7": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#8": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t05#9": {
+    "out": "James&apos;"
+  },
+  "helpers-strings/t06#1": {
+    "out": ""
+  },
+  "helpers-strings/t06#10": {
+    "out": ""
+  },
+  "helpers-strings/t06#11": {
+    "out": ""
+  },
+  "helpers-strings/t06#12": {
+    "out": ""
+  },
+  "helpers-strings/t06#13": {
+    "out": ""
+  },
+  "helpers-strings/t06#14": {
+    "out": ""
+  },
+  "helpers-strings/t06#15": {
+    "out": ""
+  },
+  "helpers-strings/t06#16": {
+    "out": ""
+  },
+  "helpers-strings/t06#17": {
+    "out": ""
+  },
+  "helpers-strings/t06#18": {
+    "out": ""
+  },
+  "helpers-strings/t06#19": {
+    "out": ""
+  },
+  "helpers-strings/t06#2": {
+    "out": ""
+  },
+  "helpers-strings/t06#3": {
+    "out": ""
+  },
+  "helpers-strings/t06#4": {
+    "out": ""
+  },
+  "helpers-strings/t06#5": {
+    "out": ""
+  },
+  "helpers-strings/t06#6": {
+    "out": ""
+  },
+  "helpers-strings/t06#7": {
+    "out": ""
+  },
+  "helpers-strings/t06#8": {
+    "out": ""
+  },
+  "helpers-strings/t06#9": {
+    "out": ""
+  },
+  "helpers-strings/t07#1": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#10": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#11": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#12": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#13": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#14": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#15": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#16": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#17": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#18": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#19": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#2": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#3": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#4": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#5": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#6": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#7": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#8": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t07#9": {
+    "out": "3&apos;s"
+  },
+  "helpers-strings/t08#1": {
+    "out": ""
+  },
+  "helpers-strings/t08#10": {
+    "out": "3.50"
+  },
+  "helpers-strings/t08#11": {
+    "out": "x"
+  },
+  "helpers-strings/t08#12": {
+    "out": "true"
+  },
+  "helpers-strings/t08#13": {
+    "out": "12"
+  },
+  "helpers-strings/t08#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-strings/t08#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-strings/t08#16": {
+    "out": "2020-01-31"
+  },
+  "helpers-strings/t08#17": {
+    "out": "2020-02-29"
+  },
+  "helpers-strings/t08#18": {
+    "out": "&lt;&amp;&gt;&quot;&apos;"
+  },
+  "helpers-strings/t08#19": {
+    "out": "12345.675"
+  },
+  "helpers-strings/t08#2": {
+    "out": ""
+  },
+  "helpers-strings/t08#3": {
+    "out": ""
+  },
+  "helpers-strings/t08#4": {
+    "out": "0"
+  },
+  "helpers-strings/t08#5": {
+    "out": "0"
+  },
+  "helpers-strings/t08#6": {
+    "out": "3"
+  },
+  "helpers-strings/t08#7": {
+    "out": "3.5"
+  },
+  "helpers-strings/t08#8": {
+    "out": "-1.25"
+  },
+  "helpers-strings/t08#9": {
+    "out": "3"
+  },
+  "helpers-strings/t09#1": {
+    "out": ""
+  },
+  "helpers-strings/t09#10": {
+    "out": " 2"
+  },
+  "helpers-strings/t09#11": {
+    "out": "y"
+  },
+  "helpers-strings/t09#12": {
+    "out": "false"
+  },
+  "helpers-strings/t09#13": {
+    "out": "UNPRINTABLE"
+  },
+  "helpers-strings/t09#14": {
+    "out": "-9007199254740992"
+  },
+  "helpers-strings/t09#15": {
+    "out": "0.0000001"
+  },
+  "helpers-strings/t09#16": {
+    "out": "2019-12-31"
+  },
+  "helpers-strings/t09#17": {
+    "out": "2021-02-28"
+  },
+  "helpers-strings/t09#18": {
+    "out": "é😀"
+  },
+  "helpers-strings/t09#19": {
+    "out": "01234 567885"
+  },
+  "helpers-strings/t09#2": {
+    "out": ""
+  },
+  "helpers-strings/t09#3": {
+    "out": ""
+  },
+  "helpers-strings/t09#4": {
+    "out": "0"
+  },
+  "helpers-strings/t09#5": {
+    "out": "0"
+  },
+  "helpers-strings/t09#6": {
+    "out": "2"
+  },
+  "helpers-strings/t09#7": {
+    "out": "2.25"
+  },
+  "helpers-strings/t09#8": {
+    "out": "0.1"
+  },
+  "helpers-strings/t09#9": {
+    "out": "2"
+  },
+  "helpers-strings/t10#1": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#10": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#11": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#12": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#13": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#14": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#15": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#16": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#17": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#18": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#19": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#2": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#3": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#4": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#5": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#6": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#7": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#8": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t10#9": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#1": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#10": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#11": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#12": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#13": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#14": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#15": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#16": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#17": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#18": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#19": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#2": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#3": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#4": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#5": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#6": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#7": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#8": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t11#9": {
+    "out": "020 7946 0958"
+  },
+  "helpers-strings/t12#1": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#10": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#11": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#12": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#13": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#14": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#15": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#16": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#17": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#18": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#19": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#2": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#3": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#4": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#5": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#6": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#7": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#8": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t12#9": {
+    "out": "+33 1 23 45 67 89"
+  },
+  "helpers-strings/t13#1": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#10": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#11": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#12": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#13": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#14": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#15": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#16": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#17": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#18": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#19": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#2": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#3": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#4": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#5": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#6": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#7": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#8": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t13#9": {
+    "out": "+447700900123"
+  },
+  "helpers-strings/t14#1": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#10": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#11": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#12": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#13": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#14": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#15": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#16": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#17": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#18": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#19": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#2": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#3": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#4": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#5": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#6": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#7": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#8": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t14#9": {
+    "out": "07700 900123"
+  },
+  "helpers-strings/t15#1": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#10": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#11": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#12": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#13": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#14": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#15": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#16": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#17": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#18": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#19": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#2": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#3": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#4": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#5": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#6": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#7": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#8": {
+    "out": "+44"
+  },
+  "helpers-strings/t15#9": {
+    "out": "+44"
+  },
+  "helpers-strings/t16#1": {
+    "out": "0"
+  },
+  "helpers-strings/t16#10": {
+    "out": "0"
+  },
+  "helpers-strings/t16#11": {
+    "out": "0"
+  },
+  "helpers-strings/t16#12": {
+    "out": "0"
+  },
+  "helpers-strings/t16#13": {
+    "out": "0"
+  },
+  "helpers-strings/t16#14": {
+    "out": "0"
+  },
+  "helpers-strings/t16#15": {
+    "out": "0"
+  },
+  "helpers-strings/t16#16": {
+    "out": "0"
+  },
+  "helpers-strings/t16#17": {
+    "out": "0"
+  },
+  "helpers-strings/t16#18": {
+    "out": "0"
+  },
+  "helpers-strings/t16#19": {
+    "out": "0"
+  },
+  "helpers-strings/t16#2": {
+    "out": "0"
+  },
+  "helpers-strings/t16#3": {
+    "out": "0"
+  },
+  "helpers-strings/t16#4": {
+    "out": "0"
+  },
+  "helpers-strings/t16#5": {
+    "out": "0"
+  },
+  "helpers-strings/t16#6": {
+    "out": "0"
+  },
+  "helpers-strings/t16#7": {
+    "out": "0"
+  },
+  "helpers-strings/t16#8": {
+    "out": "0"
+  },
+  "helpers-strings/t16#9": {
+    "out": "0"
+  },
+  "helpers-strings/t17#1": {
+    "out": ""
+  },
+  "helpers-strings/t17#10": {
+    "out": "3.50"
+  },
+  "helpers-strings/t17#11": {
+    "out": "x"
+  },
+  "helpers-strings/t17#12": {
+    "out": "true"
+  },
+  "helpers-strings/t17#13": {
+    "out": "12"
+  },
+  "helpers-strings/t17#14": {
+    "out": "9007199254740992"
+  },
+  "helpers-strings/t17#15": {
+    "out": "1000000000000000000000"
+  },
+  "helpers-strings/t17#16": {
+    "out": "2020-01-31"
+  },
+  "helpers-strings/t17#17": {
+    "out": "2020-02-29"
+  },
+  "helpers-strings/t17#18": {
+    "out": "%3C%26%3E%22%27"
+  },
+  "helpers-strings/t17#19": {
+    "out": "12345.675"
+  },
+  "helpers-strings/t17#2": {
+    "out": ""
+  },
+  "helpers-strings/t17#3": {
+    "out": ""
+  },
+  "helpers-strings/t17#4": {
+    "out": "0"
+  },
+  "helpers-strings/t17#5": {
+    "out": "0"
+  },
+  "helpers-strings/t17#6": {
+    "out": "3"
+  },
+  "helpers-strings/t17#7": {
+    "out": "3.5"
+  },
+  "helpers-strings/t17#8": {
+    "out": "-1.25"
+  },
+  "helpers-strings/t17#9": {
+    "out": "3"
+  },
+  "helpers-strings/t18#1": {
+    "out": ""
+  },
+  "helpers-strings/t18#10": {
+    "out": "+2"
+  },
+  "helpers-strings/t18#11": {
+    "out": "y"
+  },
+  "helpers-strings/t18#12": {
+    "out": "false"
+  },
+  "helpers-strings/t18#13": {
+    "out": "UNPRINTABLE"
+  },
+  "helpers-strings/t18#14": {
+    "out": "-9007199254740992"
+  },
+  "helpers-strings/t18#15": {
+    "out": "0.0000001"
+  },
+  "helpers-strings/t18#16": {
+    "out": "2019-12-31"
+  },
+  "helpers-strings/t18#17": {
+    "out": "2021-02-28"
+  },
+  "helpers-strings/t18#18": {
+    "out": "%C3%A9%F0%9F%98%80"
+  },
+  "helpers-strings/t18#19": {
+    "out": "1234567.885"
+  },
+  "helpers-strings/t18#2": {
+    "out": ""
+  },
+  "helpers-strings/t18#3": {
+    "out": ""
+  },
+  "helpers-strings/t18#4": {
+    "out": "0"
+  },
+  "helpers-strings/t18#5": {
+    "out": "0"
+  },
+  "helpers-strings/t18#6": {
+    "out": "2"
+  },
+  "helpers-strings/t18#7": {
+    "out": "2.25"
+  },
+  "helpers-strings/t18#8": {
+    "out": "0.1"
+  },
+  "helpers-strings/t18#9": {
+    "out": "2"
+  },
+  "helpers-strings/t19#1": {
+    "out": ""
+  },
+  "helpers-strings/t19#10": {
+    "out": "+2"
+  },
+  "helpers-strings/t19#11": {
+    "out": "y"
+  },
+  "helpers-strings/t19#12": {
+    "out": "false"
+  },
+  "helpers-strings/t19#13": {
+    "out": "UNPRINTABLE"
+  },
+  "helpers-strings/t19#14": {
+    "out": "-9007199254740992"
+  },
+  "helpers-strings/t19#15": {
+    "out": "0.0000001"
+  },
+  "helpers-strings/t19#16": {
+    "out": "2019-12-31"
+  },
+  "helpers-strings/t19#17": {
+    "out": "2021-02-28"
+  },
+  "helpers-strings/t19#18": {
+    "out": "%C3%A9%F0%9F%98%80"
+  },
+  "helpers-strings/t19#19": {
+    "out": "1234567.885"
+  },
+  "helpers-strings/t19#2": {
+    "out": ""
+  },
+  "helpers-strings/t19#3": {
+    "out": ""
+  },
+  "helpers-strings/t19#4": {
+    "out": "0"
+  },
+  "helpers-strings/t19#5": {
+    "out": "0"
+  },
+  "helpers-strings/t19#6": {
+    "out": "2"
+  },
+  "helpers-strings/t19#7": {
+    "out": "2.25"
+  },
+  "helpers-strings/t19#8": {
+    "out": "0.1"
+  },
+  "helpers-strings/t19#9": {
+    "out": "2"
+  },
+  "helpers-strings/t20#1": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#10": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#11": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#12": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#13": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#14": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#15": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#16": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#17": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#18": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#19": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#2": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#3": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#4": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#5": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#6": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#7": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#8": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t20#9": {
+    "out": "a+b%26c%3Dd%2F%C3%A9%3F%23"
+  },
+  "helpers-strings/t21#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#13": {
+    "out": "false"
+  },
+  "helpers-strings/t21#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t21#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#13": {
+    "out": "true"
+  },
+  "helpers-strings/t22#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t22#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#13": {
+    "out": "true"
+  },
+  "helpers-strings/t23#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t23#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#13": {
+    "out": "false"
+  },
+  "helpers-strings/t24#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t24#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#13": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t25#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#13": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t26#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#1": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#10": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#11": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#12": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#13": {
+    "out": "Y"
+  },
+  "helpers-strings/t27#14": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#15": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#16": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#17": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#18": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#19": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#2": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#3": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#4": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#5": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#6": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#7": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#8": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  },
+  "helpers-strings/t27#9": {
+    "kind": "render",
+    "msg": "error while rendering template: in-string-array: 'haystack' must be a string array, got: []interface {}"
+  }
+}

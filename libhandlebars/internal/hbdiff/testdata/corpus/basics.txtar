@@ -1,0 +1,358 @@
+Cases from libhandlebars_test.lisp and the libhandlebars README.
+Contexts are the JSON the ELPS values serialize to: sorted-map -> object,
+list/vector -> array, () -> null.
+-- basic.hbs --
+
+<div class="entry">
+  <h1>{{title}}</h1>
+  <div class="body">
+    {{body}}
+  </div>
+</div>
+
+-- basic.json --
+{"body":"This is my first post!","title":"My New Post"}
+-- missing.hbs --
+
+<div class="entry">
+  <h1>{{title}}</h1>
+  <div class="body">
+    {{body}}
+  </div>
+  <div>{{mystery}}</div>
+</div>
+
+-- missing.json --
+{"body":"This is my first post!","title":"My New Post"}
+-- books.hbs --
+
+{{users.marcel.books.book1}}
+{{users.marcel.books.book2}}
+{{users.didier.[0].book}}
+{{users.didier.[1].book}}
+
+-- books.json --
+{"users":{"didier":[{"book":"Good book"},{"book":"Bad book"}],"marcel":{"books":{"book1":"My first book","book2":"My second book"}}}}
+-- in-string-array-exist.hbs --
+{{ in-string-array haystack=array needle="pear"}}
+-- in-string-array-exist.json --
+{"array":["apple","orange","pear"]}
+-- in-string-array-non-exist.hbs --
+{{ in-string-array haystack=array needle="kiwi"}}
+-- in-string-array-non-exist.json --
+{"array":["apple","orange","pear"]}
+-- array-length.hbs --
+{{ len array }}
+-- array-length.json --
+{"array":[1,2,3]}
+-- equality-numeric.hbs --
+{{eq foo 1.2}}
+-- equality-numeric.json --
+{"foo":1.2}
+-- equality-string.hbs --
+{{eq foo "bar"}}
+-- equality-string.json --
+{"foo":"bar"}
+-- greater-than.hbs --
+{{#if (gt foo 2.2)}}yes{{/if}}
+-- greater-than.json --
+{"foo":13.1}
+-- greater-than-equal.hbs --
+{{#if (gte foo 2.2)}}yes{{/if}}
+-- greater-than-equal.json --
+{"foo":2.2}
+-- not.hbs --
+{{ not foo }}
+-- not.json --
+{"foo":true}
+-- and.hbs --
+{{ and test1=true
+                                test2=true
+                                test3=false }}
+-- and.json --
+{"foo":true}
+-- and-true.hbs --
+{{ and test1=true
+                                test2=true
+                                test3=true }}
+-- and-true.json --
+{"foo":true}
+-- or.hbs --
+{{ or test1=foo
+                               test2=false
+                               test3=false }}
+-- or.json --
+{"foo":true}
+-- or-false.hbs --
+{{ or test1=false
+                                test2=false
+                                test3=false }}
+-- or-false.json --
+null
+-- less-than.hbs --
+{{#if (lt foo 13.1)}}yes{{/if}}
+-- less-than.json --
+{"foo":2}
+-- less-than-equal.hbs --
+{{#if (lte foo 2)}}yes{{/if}}
+-- less-than-equal.json --
+{"foo":2}
+-- embedded-if.hbs --
+{{#if (and
+                                    gt_cond=(gt (len array) 2)
+                                    lt_cond=(lt (len array) 4)
+                               )}}yes{{else}}no{{/if}}
+-- embedded-if.json --
+{"array":[1,2,3]}
+-- times.hbs --
+{{times foo foo}}
+-- times.json --
+{"foo":2}
+-- divide.hbs --
+{{div foo 2}}
+-- divide.json --
+{"foo":5}
+-- plus.hbs --
+{{plus var=foo const1=2 const2=3}}
+-- plus.json --
+{"foo":2}
+-- minus.hbs --
+{{minus foo const1=2 const2=1}}
+-- minus.json --
+{"foo":4}
+-- mod.hbs --
+{{mod foo 2}}
+-- mod.json --
+{"foo":3}
+-- books-each.hbs --
+
+{{#each users as |user userId|}}
+  {{#each user.books as |book bookId|}}
+    User: {{userId}} Book: {{bookId}}
+  {{/each}}
+{{/each}}
+
+-- books-each.json --
+{"users":{"didier":{"books":{"bookA":"Good book","bookB":"Bad book"}},"marcel":{"books":{"book1":"My first book","book2":"My second book"}}}}
+-- no-log.hbs --
+
+{{log "Look at me!" }}
+
+-- no-log.json --
+null
+-- no-lookup.hbs --
+
+{{#each goodbyes}}{{lookup ../data @index}}{{/each}}
+
+-- no-lookup.json --
+{"data":["foo","bar"],"goodbyes":[0,1]}
+-- select-from-where-ok.hbs --
+{{#select from=metadata where="name=JWKS_URI"}}{{string_val}}{{/select}}
+-- select-from-where-ok.json --
+{"metadata":[{"name":"AUTH_NAME","string_val":"Luther"},{"name":"JWKS_URI","string_val":"www.luthersystems.com"},{"bool_val":true,"name":"ENABLED"}]}
+-- select-from-where-empty.hbs --
+{{#select from=metadata where="name=JWKS_URI"}}{{string_val}}{{/select}}
+-- select-from-where-empty.json --
+{"metadata":[]}
+-- select-from-where-2ok.hbs --
+{{#select from=metadata where="name=JWKS_URI"}}{{string_val}}{{/select}}
+-- select-from-where-2ok.json --
+{"metadata":[{"name":"AUTH_NAME","string_val":"Luther"},{"name":"JWKS_URI","string_val":"www.luthersystems.com"},{"bool_val":true,"name":"ENABLED"},{"name":"JWKS_URI","string_val":"/"}]}
+-- global-vars.hbs --
+{{global "testns1" key="INVALID" val="Invalid"}}{{global"testns1" key=tKey}}{{global "testns2" key=tKey}}
+-- global-vars.json --
+{"tKey":"INVALID"}
+-- global-vars-loop.hbs --
+{{global "testns1" key="INVALID" val="Invalid"}}{{#each metadata}}{{global "testns1" key=tKey}}{{/each}}
+-- global-vars-loop.json --
+{"metadata":[{"name":"AUTH_NAME","string_val":"Luther"},{"name":"JWKS_URI","string_val":"www.luthersystems.com"},{"bool_val":true,"name":"ENABLED"},{"name":"JWKS_URI","string_val":"/"}],"tKey":"INVALID"}
+-- must-parse-error.hbs --
+{{#if (lt foo 13.1)}}yes{/if}}
+-- after-same.hbs --
+{{is-after date ref-date}}
+-- after-same.json --
+{"date":"2019-10-26","ref-date":"2019-10-26"}
+-- after-before.hbs --
+{{is-after date ref-date}}
+-- after-before.json --
+{"date":"2019-09-26","ref-date":"2019-10-26"}
+-- after-after.hbs --
+{{is-after date ref-date}}
+-- after-after.json --
+{"date":"2020-03-20","ref-date":"2019-10-26"}
+-- date-diff-month-same.hbs --
+{{date-diff-month date1 date2}}
+-- date-diff-month-same.json --
+{"date1":"2019-10-26","date2":"2019-10-26"}
+-- date-diff-month-before.hbs --
+{{date-diff-month date1 date2}}
+-- date-diff-month-before.json --
+{"date1":"2020-03-20","date2":"2019-10-26"}
+-- date-diff-month-after.hbs --
+{{date-diff-month date1 date2}}
+-- date-diff-month-after.json --
+{"date1":"2019-10-26","date2":"2020-03-20"}
+-- date-add-next-year.hbs --
+{{date-add-months date 1}}
+-- date-add-next-year.json --
+{"date":"2019-12-26"}
+-- date-add-two-months.hbs --
+{{date-add-months date 2}}
+-- date-add-two-months.json --
+{"date":"2019-10-26"}
+-- date-add-one-month-shorter.hbs --
+{{date-add-months date 1}}
+-- date-add-one-month-shorter.json --
+{"date":"2019-01-31"}
+-- date-add-one-month-negative.hbs --
+{{date-add-months date -1}}
+-- date-add-one-month-negative.json --
+{"date":"2019-01-31"}
+-- round-to-nth-1.hbs --
+{{round-to-nth x n}}
+-- round-to-nth-1.json --
+{"n":2,"x":1.999}
+-- round-to-nth-2.hbs --
+{{round-to-nth x n}}
+-- round-to-nth-2.json --
+{"n":2,"x":"1.0001"}
+-- prettyp-num-en-integer.hbs --
+{{prettyp-num-en 200000}}
+-- prettyp-num-en-decimal.hbs --
+{{prettyp-num-en 200000.2}}
+-- prettyp-num-en-decimal-large-number.hbs --
+{{prettyp-num-en 21543000.2}}
+-- prettyp-num-en-2dp.hbs --
+{{prettyp-num-en 0.2}}
+-- prettyp-num-en-2dp-rounding.hbs --
+{{prettyp-num-en 0.205}}
+-- prettyp-num-en-zeros.hbs --
+{{prettyp-num-en 0000}}
+-- prettyp-num-en-negative.hbs --
+{{prettyp-num-en -76543.201}}
+-- prettyp-num-en-string-number.hbs --
+{{prettyp-num-en "1212.12"}}
+-- possessive-ending-with-s.hbs --
+{{{possessive name}}}
+-- possessive-ending-with-s.json --
+{"name":"friends"}
+-- possessive-apostrophe-s.hbs --
+{{{possessive name}}}
+-- possessive-apostrophe-s.json --
+{"name":"David"}
+-- possessive-spaces-right.hbs --
+{{{possessive name}}}
+-- possessive-spaces-right.json --
+{"name":"David   "}
+-- possessive-full-name.hbs --
+{{{possessive name}}}
+-- possessive-full-name.json --
+{"name":"David Fincher"}
+-- possessive-empty.hbs --
+{{{possessive name}}}
+-- possessive-empty.json --
+{"name":""}
+-- date-beautify-standard.hbs --
+{{{date-beautify "2020-01-30"}}}
+-- date-beautify-DMY-not-MDY.hbs --
+{{{date-beautify "2020-03-11"}}}
+-- date-beautify-null.hbs --
+{{{date-beautify ""}}}
+-- date-DDMMYY-slash.hbs --
+{{{date-DDMMYY-slash "2020-01-30"}}}
+-- date-DDMMYYYY-slash.hbs --
+{{{date-DDMMYYYY-slash "2020-01-30"}}}
+-- date-DDMMYYYY.hbs --
+{{{date-DDMMYYYY "2020-01-30"}}}
+-- format-phone-gb-valid.hbs --
+{{{format-phone-gb "+447709789111"}}}
+-- format-phone-gb-invalid.hbs --
+{{{format-phone-gb "numberzz"}}}
+-- format-phone-gb-null.hbs --
+{{{format-phone-gb ""}}}
+-- format-phone-gb-US.hbs --
+{{{format-phone-gb "+18882378289"}}}
+-- format-phone-pre-formatted.hbs --
+{{{format-phone-gb "07709-789-111"}}}
+-- format-phone-isle-of-man.hbs --
+{{{format-phone-gb "1624861484"}}}
+-- format-phone-jersey.hbs --
+{{{format-phone-gb "1534726278"}}}
+-- escape-uri-email.hbs --
+{{{escape-uri-component "hello@example.com"}}}
+-- escape-uri-other.hbs --
+{{{escape-uri-component  "& one % two / three "}}}
+-- to-str-valid-string.hbs --
+{{{to-str "123"}}}
+-- to-str-valid-uint.hbs --
+{{{to-str 123}}}
+-- to-str-valid-int.hbs --
+{{{to-str -123}}}
+-- to-str-valid-float.hbs --
+{{{to-str 123.123}}}
+-- to-str-invalid-input.hbs --
+{{{to-str true}}}
+-- to-str-with-global-vars-and-plus.hbs --
+{{global "custom" key="sum" val="0"}}{{global "custom" key="sum" val=(to-str (plus a=(global"custom" key="sum") b=100))}}{{prettyp-num-en (global"custom" key="sum")}}
+-- to-int-valid-float.hbs --
+{{{to-int 123.123}}}
+-- to-int-valid-int.hbs --
+{{{to-int 123}}}
+-- to-int-valid-string.hbs --
+{{{to-int "123"}}}
+-- to-int-date-add-month-float.hbs --
+{{date-add-months date (to-int 1.0)}}
+-- to-int-date-add-month-float.json --
+{"date":"2019-12-26"}
+-- to-int-date-add-month-string.hbs --
+{{date-add-months date (to-int "1")}}
+-- to-int-date-add-month-string.json --
+{"date":"2019-12-26"}
+-- readme-and.hbs --
+{{and test1=true test2=true test3=foo }}
+-- readme-and.json --
+{"foo":false}
+-- readme-or.hbs --
+{{and test1=foo test2=false test3=false }}
+-- readme-or.json --
+{"foo":true}
+-- readme-len-top-level-array.hbs --
+{{len array}}
+-- readme-len-top-level-array.json --
+[1,2,3]
+-- readme-lte.hbs --
+{{#if (lte foo 2.2)}}yes{{/if}}
+-- readme-lte.json --
+{"foo":2.2}
+-- readme-is-after.hbs --
+{{is-after "2020-01-01" "2019-10-01"}}
+-- readme-date-diff-month.hbs --
+{{date-diff-month "2020-01-01" "2019-01-02"}}
+-- readme-date-add-months.hbs --
+{{date-add-months "2020-01-01" -1}}
+-- readme-round-to-nth.hbs --
+{{round-to-nth 1.999 2}}
+-- readme-in-string-array.hbs --
+{{in-string-array haystack=array needle="foo"}}
+-- readme-in-string-array.json --
+{"array":["foo","bar"]}
+-- readme-prettyp-20000.hbs --
+{{prettyp-num-en 20000}}
+-- readme-prettyp-10.1.hbs --
+{{prettyp-num-en 10.1}}
+-- readme-prettyp-0001.hbs --
+{{prettyp-num-en 0001}}
+-- readme-possessive-chris.hbs --
+{{{possessive name}}}
+-- readme-possessive-chris.json --
+{"name":"Chris"}
+-- readme-possessive-long-trailing.hbs --
+{{{possessive name}}}
+-- readme-possessive-long-trailing.json --
+{"name":"David Fincher             "}
+-- readme-possessive-escaped.hbs --
+{{possessive name}}
+-- readme-possessive-escaped.json --
+{"name":"David"}
+-- readme-date-beautify-unclosed-string.hbs --
+{{{date-beautify "2020-01-13}}}

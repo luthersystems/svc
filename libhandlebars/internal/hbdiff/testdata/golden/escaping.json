@@ -1,0 +1,38 @@
+{
+  "escaping/backslash-content": {
+    "out": "a\\b\\\\c\\{d}\\}"
+  },
+  "escaping/escape-all#1": {
+    "out": "&amp;&lt;&gt;&quot;&apos;`=/|&<>\"'`=/|&<>\"'`=/"
+  },
+  "escaping/escape-all#2": {
+    "out": "&amp;amp;|&amp;|&amp;"
+  },
+  "escaping/escape-all#3": {
+    "out": "plain|plain|plain"
+  },
+  "escaping/escape-all#4": {
+    "out": "&lt;script&gt;|<script>|<script>"
+  },
+  "escaping/escape-all#5": {
+    "out": "&lt;&gt;&amp;|<>&|<>&"
+  },
+  "escaping/escaped-mustache#1": {
+    "out": "{{v}}|\\x|\\\\x|x"
+  },
+  "escaping/escaped-mustache-triple#1": {
+    "out": "{{{v}}}|a{{#if}}b"
+  },
+  "escaping/helper-result-escaped#1": {
+    "out": "O&apos;Neil&apos;s|O'Neil's|O%27Neil|O&apos;Neil|01 January 2020"
+  },
+  "escaping/helper-result-escaped#2": {
+    "out": "A&amp;B&apos;s|A&B's|A%26B|A&amp;B|"
+  },
+  "escaping/helper-result-escaped#3": {
+    "out": "&lt;x&gt;&apos;s|<x>'s|%3Cx%3E|&lt;x&gt;|"
+  },
+  "escaping/in-attr#1": {
+    "out": "<a href=\"https://x.test/?a=1&amp;b=2\" title='it&apos;s &quot;q&quot;'>it&apos;s &quot;q&quot;</a>"
+  }
+}

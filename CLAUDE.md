@@ -16,7 +16,7 @@ A modular Go 1.23 service framework for the [Luther Platform](https://luthersyst
 | `grpclogging/` | gRPC unary interceptors, structured logging (logrus), request ID propagation |
 | `midware/` | HTTP middleware framework (`Middleware` interface, `Chain`, trace headers) |
 | `svcerr/` | Centralized error handling, gRPC status code mapping, exception factories |
-| `libhandlebars/` | Handlebars templating engine (Go port via `luthersystems/raymond`) with ELPS integration |
+| `libhandlebars/` | Handlebars templating with ELPS integration: native engine `hbs/`, frozen raymond reference and differential harness under `internal/` |
 | `libdates/` | Civil date difference calculator — O(1) YMD algorithm |
 | `mailer/` | AWS SES email sender with attachment support |
 | `opttrace/` | OpenTelemetry tracer wrapper with OTLP exporter support |
@@ -59,7 +59,7 @@ Single GitHub Actions workflow (`.github/workflows/svc.yml`):
 - **Triggers**: PRs targeting `main` only
 - **Runner**: `ubuntu-22.04`, Go from `go.mod` (`go-version-file`)
 - **Steps**: checkout → setup-go → clean modcache → golangci-lint (v2.13.2, v2 config) → `make citest`
-- **Linter config**: `.golangci.yml` — the linter set luthersystems/elps and luthersystems/substrate share (gosec included), staticcheck at substrate's default set (SA1019 on), 5m timeout, no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
+- **Linter config**: `.golangci.yml` — the linter set luthersystems/elps and luthersystems/substrate share (gosec included), staticcheck at substrate's default set (SA1019 on), 15m timeout (a cold run of the Handlebars engine passes 5m), no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
 - **No deploy/release automation** — this is a library repo
 
 ## Branch Protection

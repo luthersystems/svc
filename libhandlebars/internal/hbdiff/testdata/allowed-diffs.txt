@@ -1,0 +1,54 @@
+# Intended differences between the native engine (ModeCompat) and the
+# frozen reference (internal/hbref). Format, one entry per line:
+#
+#   pattern | expires | issue | reason
+#
+# pattern conditions (joined by &&): case:<glob>  kinds:<ref>-><cand>
+# tpl:<substring>  field:<kind|msg|out>  candout:<substring>
+# candmsg:<substring>  arch:<goarch> or arch:!<goarch>. expires is YYYY-MM-DD or never.
+# Every entry needs an issue and a reason. Keep this list short: anything
+# not here must render byte for byte as the reference does.
+
+# D1: plus and minus summed hash values in Go map order, so the reference
+# is not deterministic when float rounding depends on order. The engine
+# sums in sorted key order. Nondeterministic reference cases are reported
+# separately and never fail; this covers the corpus cases that pin the
+# order fix where the reference happened to be stable across runs.
+case:plusminus/order-* && field:out | never | #106 | D1: plus/minus sum hash values in sorted key order, not Go map order
+
+# raymond panics with a runtime error (index out of range in
+# ast.IsDataRoot) on {{@this}} and {{@.}} after must-parse accepted them;
+# ELPS reported internal-panic. The engine returns a render error instead.
+kinds:panic->render | never | #106 | a Go runtime panic in the reference becomes a handlebars-render error
+
+# The engine bounds template size, nesting depth and output size
+# (DefaultLimits, design section 7.6); raymond had no limits and overflowed
+# the Go stack on deep nesting (D4), which kills the process. Each entry
+# waives one cap, by its message. The engine's other limits (MaxSteps and
+# the produced-bytes bound) have no entry: a case where the reference
+# rendered and the candidate hit one of them is reported as a difference.
+kinds:*->limit && candmsg:template nesting depth exceeds limit of 256 | never | #106 | D4: templates nest at most 256 levels (parse cap)
+kinds:*->limit && candmsg:template evaluation exceeds the maximum depth of 256 | never | #106 | D4: evaluation recursion is capped at 256 levels (raymond overflowed its stack)
+kinds:*->limit && candmsg:bytes, limit is 1048576 | never | #106 | templates are at most 1 MiB (parse cap)
+kinds:*->limit && candmsg:rendered output exceeds the maximum of 16777216 bytes | never | #106 | output is at most 16 MiB (render cap)
+
+# to-int on NaN, +-Inf or a float outside [-2^63, 2^63) is CPU-dependent in
+# the reference (Go leaves the conversion undefined: amd64 gives MinInt64,
+# arm64 gives 0 for NaN and saturates otherwise). The engine pins the amd64
+# result on every CPU (hbs/DETERMINISM.md), so these differ only when the
+# harness runs on another architecture. Examples: {{to-int (div 1 0)}},
+# {{to-int (div -1 0)}}, {{to-int (times -1 (div 1 0))}} (+-Inf);
+# {{to-int (div 0 0)}}, {{to-int (mod 1 0)}} (NaN); {{to-int x}} for a
+# context x of 1e19, -1e19, 2^63 or any |x| >= 2^63 except exactly -2^63;
+# any to-int argument computed by times, div, mod, plus or minus that is
+# non-finite or out of int64 range. Integer literals within about 512 of
+# 2^63 ({{to-str 9223372036854775807}}) parse to the float64 2^63 and
+# convert by the same pinned rule. On amd64 nothing here matches.
+arch:!amd64 && field:out && candout:-9223372036854775808 | never | #110 | to-int, or an int literal near 2^63, on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64
+
+# Outside the harness (it renders through hbs.FromJSON, as handlebars:render
+# does): libhandlebars.Render, the Go API, reads a Go context lazily with
+# raymond's Go semantics by default, and handlebars:render-fixed keeps
+# ELPS ints as ints. See hbs/DETERMINISM.md, "Contexts: JSON, ELPS and Go
+# values"; libhandlebars/gocontext_test.go tests the Go API against raymond.
+# No entry is needed here.

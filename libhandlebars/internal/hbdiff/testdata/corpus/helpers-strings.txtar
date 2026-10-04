@@ -1,0 +1,75 @@
+possessive, format-phone-gb, escape-uri-component, in-string-array.
+-- t01.hbs --
+{{possessive a}}
+-- t02.hbs --
+{{{possessive a}}}
+-- t03.hbs --
+{{possessive b}}
+-- t04.hbs --
+{{possessive "Jones"}}
+-- t05.hbs --
+{{possessive "James   "}}
+-- t06.hbs --
+{{possessive "  "}}
+-- t07.hbs --
+{{possessive 3}}
+-- t08.hbs --
+{{format-phone-gb a}}
+-- t09.hbs --
+{{format-phone-gb b}}
+-- t10.hbs --
+{{format-phone-gb "+44 20 7946 0958"}}
+-- t11.hbs --
+{{format-phone-gb "020 7946 0958"}}
+-- t12.hbs --
+{{format-phone-gb "+33 1 23 45 67 89"}}
+-- t13.hbs --
+{{format-phone-gb "+447700900123"}}
+-- t14.hbs --
+{{format-phone-gb "07700 900123"}}
+-- t15.hbs --
+{{format-phone-gb "+44"}}
+-- t16.hbs --
+{{format-phone-gb "0"}}
+-- t17.hbs --
+{{escape-uri-component a}}
+-- t18.hbs --
+{{escape-uri-component b}}
+-- t19.hbs --
+{{{escape-uri-component b}}}
+-- t20.hbs --
+{{escape-uri-component "a b&c=d/é?#"}}
+-- t21.hbs --
+{{in-string-array haystack=a needle=b}}
+-- t22.hbs --
+{{in-string-array haystack=a needle="2"}}
+-- t23.hbs --
+{{in-string-array haystack=a needle=2}}
+-- t24.hbs --
+{{in-string-array haystack=a}}
+-- t25.hbs --
+{{in-string-array needle=b}}
+-- t26.hbs --
+{{in-string-array haystack=list needle=b}}
+-- t27.hbs --
+{{#if (in-string-array haystack=a needle="2")}}Y{{else}}N{{/if}}
+-- _.jsonl --
+{}
+{"a":null,"b":null}
+{"a":"","b":""}
+{"a":0,"b":0}
+{"a":"0","b":"0"}
+{"a":3,"b":2}
+{"a":3.5,"b":2.25}
+{"a":-1.25,"b":0.1}
+{"a":"3","b":"2"}
+{"a":"3.50","b":" 2"}
+{"a":"x","b":"y"}
+{"a":true,"b":false}
+{"a":[1,"2"],"b":{"k":1}}
+{"a":9007199254740993,"b":-9007199254740993}
+{"a":1e21,"b":1e-7}
+{"a":"2020-01-31","b":"2019-12-31"}
+{"a":"2020-02-29","b":"2021-02-28"}
+{"a":"<&>\"'","b":"é😀"}
+{"a":12345.675,"b":"1234567.885"}

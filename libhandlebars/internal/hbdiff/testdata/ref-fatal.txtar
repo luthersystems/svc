@@ -1,0 +1,51 @@
+Templates that kill the reference process with a Go stack overflow (fatal
+error, not recoverable) or never finish. They never run through hbref;
+TestRefFatal requires an error from the candidate (render or limit), not a
+crash. Contexts are {} unless a .json section gives one.
+
+unless-in-with, equal-in-each, select-sexpr-in-if, if-in-if and
+with-in-each are the same loop through Fn instead of Inverse: the helper
+evaluates the enclosing block's program, which holds the call. unless-in-with, equal-in-each and if-in-if
+overflow the Go stack within seconds; select-sexpr-in-if had not finished
+after 5 minutes, and with-in-each after 1 minute.
+
+unless-in-inverse needs a truthy t: with {} the reference renders "" (unless
+calls Fn, and the {{^x}} block has no program), which the engine matches.
+With t true, unless calls Inverse, which re-enters the enclosing {{^x}}
+inverse forever: the reference overflows the Go stack, and the engine stops
+at MaxDepth with a limit error (design section 0, R1: an input that aborts
+the reference must fail the call instead).
+-- with-in-else.hbs --
+{{#if x}}{{else}}{{with a}}{{/if}}
+-- if-in-inverse-section.hbs --
+{{^x}}{{if a}}{{/x}}
+-- unless-in-inverse.hbs --
+{{^x}}{{unless t}}{{/x}}
+-- unless-in-inverse.json --
+{"t": true}
+-- each-in-each-else.hbs --
+{{#each xs}}{{else}}{{each a}}{{/each}}
+-- if-subexpr-in-else.hbs --
+{{#if x}}{{else}}{{eq (if a) ""}}{{/if}}
+-- with-in-caret.hbs --
+{{#if x}}{{^}}{{&with (a)}}{{/if}}
+-- unless-in-with.hbs --
+{{#with o}}{{unless f}}{{/with}}
+-- unless-in-with.json --
+{"o": {"a": 1}, "f": false}
+-- equal-in-each.hbs --
+{{#each a}}{{equal 1 1}}{{/each}}
+-- equal-in-each.json --
+{"a": [1]}
+-- select-sexpr-in-if.hbs --
+{{#if t}}{{to-str (select a)}}{{/if}}
+-- select-sexpr-in-if.json --
+{"t": true, "a": [1]}
+-- if-in-if.hbs --
+{{#if t}}{{if t}}{{/if}}
+-- if-in-if.json --
+{"t": true}
+-- with-in-each.hbs --
+{{#each a}}{{with t}}{{/each}}
+-- with-in-each.json --
+{"a": [1], "t": true}

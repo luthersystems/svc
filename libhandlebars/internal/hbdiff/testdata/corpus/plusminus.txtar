@@ -1,0 +1,30 @@
+plus and minus range over the hash in Go map order. With float rounding
+the reference is nondeterministic (its golden records only that); the
+engine sums in sorted key order (D1).
+-- order-plus-floats.hbs --
+{{plus a=x b=y c=z}}
+-- order-plus-floats.jsonl --
+{"x":0.1,"y":0.2,"z":0.3}
+{"x":1e16,"y":1,"z":-1e16}
+-- order-minus-floats.hbs --
+{{minus v a=x b=y c=z}}
+-- order-minus-floats.jsonl --
+{"v":1,"x":0.1,"y":0.2,"z":0.3}
+-- order-plus-ints.hbs --
+{{plus a=1 b=2 c=3 d=4 e=5 f=6 g=7 h=8 i=9}}
+-- order-plus-mixed-skip.hbs --
+{{plus a=x b="2" c="x" d=true e=missing}}
+-- order-plus-mixed-skip.jsonl --
+{"x":1}
+-- order-minus-skip.hbs --
+{{minus v a="x" b=missing c=1}}
+-- order-minus-skip.jsonl --
+{"v":"5"}
+{"v":"x"}
+{}
+-- hash-nil-dropped.hbs --
+{{plus a=missing b=1}}|{{and a=missing}}|{{or a=missing}}
+-- order-and-or.hbs --
+{{and a=x b=y c=z}}|{{or a=x b=y c=z}}
+-- order-and-or.jsonl --
+{"x":1,"y":0,"z":"s"}

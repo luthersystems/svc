@@ -49,6 +49,17 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestRenderGoValue(t *testing.T) {
+	tpl, err := libhandlebars.Parse(`{{#each xs}}{{this}},{{/each}}{{n}}`)
+	require.NoError(t, err)
+	res, err := libhandlebars.Render(tpl, struct {
+		Xs []int `json:"xs"`
+		N  int   `json:"n"`
+	}{Xs: []int{1, 2}, N: 3})
+	require.NoError(t, err)
+	require.Equal(t, "1,2,3", res)
+}
+
 func TestRender(t *testing.T) {
 	tplStr := `{{value}}`
 	tpl, err := libhandlebars.Parse(tplStr)

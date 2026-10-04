@@ -1,0 +1,106 @@
+eq, gt, gte, lt, lte, not, len, and, or over edge-class contexts.
+Literal template numbers are Go ints or float64; context numbers are float64.
+-- t01.hbs --
+{{eq a b}}
+-- t02.hbs --
+{{eq a 1}}
+-- t03.hbs --
+{{eq a 3}}
+-- t04.hbs --
+{{eq a "3"}}
+-- t05.hbs --
+{{eq a 3.5}}
+-- t06.hbs --
+{{eq a ""}}
+-- t07.hbs --
+{{eq missing ""}}
+-- t08.hbs --
+{{eq 1 1.0}}
+-- t09.hbs --
+{{eq a}}
+-- t10.hbs --
+{{eq a b c}}
+-- t11.hbs --
+{{#if (eq a b)}}Y{{else}}N{{/if}}
+-- t12.hbs --
+{{gt a b}}
+-- t13.hbs --
+{{gt a 2}}
+-- t14.hbs --
+{{gt 3 b}}
+-- t15.hbs --
+{{gte a b}}
+-- t16.hbs --
+{{gte a 3}}
+-- t17.hbs --
+{{lt a b}}
+-- t18.hbs --
+{{lt a "2.5"}}
+-- t19.hbs --
+{{lte a b}}
+-- t20.hbs --
+{{lte a 3.5}}
+-- t21.hbs --
+{{#if (gt a b)}}Y{{else}}N{{/if}}
+-- t22.hbs --
+{{gt "1e3" a}}
+-- t23.hbs --
+{{not a}}
+-- t24.hbs --
+{{not b}}
+-- t25.hbs --
+{{not true}}
+-- t26.hbs --
+{{not 0}}
+-- t27.hbs --
+{{not ""}}
+-- t28.hbs --
+{{#if (not a)}}Y{{else}}N{{/if}}
+-- t29.hbs --
+{{not (not a)}}
+-- t30.hbs --
+{{len a}}
+-- t31.hbs --
+{{len b}}
+-- t32.hbs --
+{{len 1}}
+-- t33.hbs --
+{{len "abc"}}
+-- t34.hbs --
+{{#if (len a)}}Y{{else}}N{{/if}}
+-- t35.hbs --
+{{and x=a y=b}}
+-- t36.hbs --
+{{or x=a y=b}}
+-- t37.hbs --
+{{and}}
+-- t38.hbs --
+{{or}}
+-- t39.hbs --
+{{and a}}
+-- t40.hbs --
+{{and x=a y=true}}
+-- t41.hbs --
+{{or x=a y=0}}
+-- t42.hbs --
+{{#if (or x=a y=b)}}Y{{else}}N{{/if}}
+-- _.jsonl --
+{}
+{"a":null,"b":null}
+{"a":"","b":""}
+{"a":0,"b":0}
+{"a":"0","b":"0"}
+{"a":3,"b":2}
+{"a":3.5,"b":2.25}
+{"a":-1.25,"b":0.1}
+{"a":"3","b":"2"}
+{"a":"3.50","b":" 2"}
+{"a":"x","b":"y"}
+{"a":true,"b":false}
+{"a":[1,"2"],"b":{"k":1}}
+{"a":9007199254740993,"b":-9007199254740993}
+{"a":1e21,"b":1e-7}
+{"a":"2020-01-31","b":"2019-12-31"}
+{"a":"2020-02-29","b":"2021-02-28"}
+{"a":"<&>\"'","b":"é😀"}
+{"a":12345.675,"b":"1234567.885"}
