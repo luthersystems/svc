@@ -214,17 +214,16 @@ func TestRenderSteps(t *testing.T) {
 	require.Equal(t, empty, call(""), "same input, same steps")
 	// The context's JSON, {"s":"..."}, is len(s)+8 bytes.
 	//
-	// Measured against the empty string, as the sum of: the encode walk's
-	// estimate (a step per started KiB) and its escape scan (per started 64
-	// bytes of the string), json:dump-bytes (per whole KiB), the decode's
+	// Measured against the empty string, as the sum of json:dump-bytes
+	// (per whole KiB), the decode's
 	// byte scan (per started 16 bytes of the JSON) and token pass (1 + a
 	// step per started 8 bytes of the string), the output (per started
 	// KiB), the escape scan (per started 16 bytes) and the copy (per whole
 	// 16 bytes).
-	require.Equal(t, empty+4, call("x"))
-	require.Equal(t, empty+336, call(strings.Repeat("x", 1016)))
-	require.Equal(t, empty+340, call(strings.Repeat("x", 1024)))
-	require.Equal(t, empty+1364, call(strings.Repeat("x", 4097)))
+	require.Equal(t, empty+3, call("x"))
+	require.Equal(t, empty+319, call(strings.Repeat("x", 1016)))
+	require.Equal(t, empty+323, call(strings.Repeat("x", 1024)))
+	require.Equal(t, empty+1295, call(strings.Repeat("x", 4097)))
 
 	// Iterations cost steps.
 	each := func(n int) int64 {
@@ -332,9 +331,8 @@ func TestFailedEncodeCharged(t *testing.T) {
 	require.Equal(t, lisp.CondStepBudgetExceeded, res.Str)
 }
 
-// TestEncodeWalkStopsWhereEncoderDoes: the charging walk stops at a value
-// that contains itself, as the encoder does, so the encoder's own error is
-// returned, not a budget error from walking the cycle.
+// TestEncodeWalkStopsWhereEncoderDoes: delegating to ELPS reports its
+// cycle error without an extra svc walk exhausting the budget first.
 func TestEncodeWalkStopsWhereEncoderDoes(t *testing.T) {
 	env := newEnv(t)
 	self := lisp.QExpr([]*lisp.LVal{lisp.Int(1)})
@@ -361,6 +359,28 @@ func allocDuring(f func()) uint64 {
 	return after.TotalAlloc - before.TotalAlloc
 }
 
+// checkEncodeFailureParity checks the error, work charge and allocation
+// of a failing render encode against ELPS itself. This protects delegation
+// without pinning svc's removed walk's per-value cost or native estimates.
+// The caller has bound ctx in env; template is irrelevant when encoding fails.
+func checkEncodeFailureParity(t *testing.T, env *lisp.LEnv, template string) (*lisp.LVal, int64, uint64) {
+	t.Helper()
+	var dump, res *lisp.LVal
+	var dumpSteps, steps int64
+	// Two collections before each sample clear encoding/json's buffer pool,
+	// so a warm buffer inherited from another test cannot skew one side.
+	runtime.GC()
+	dumpAlloc := allocDuring(func() { dump, dumpSteps = eval(t, env, `(json:dump-bytes ctx)`) })
+	require.Equal(t, lisp.LError, dump.Type, "%.300v", dump)
+	runtime.GC()
+	alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render `+strconv.Quote(template)+` ctx)`) })
+	require.Equal(t, lisp.LError, res.Type, "%.300v", res)
+	require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
+	require.InDelta(t, dumpSteps, steps, 4, "only builtin evaluation adds steps before serialization fails")
+	require.LessOrEqual(t, alloc, 2*dumpAlloc+1<<20, "render delegates the same bounded encode")
+	return res, steps, alloc
+}
+
 // encodeAllocBound is the most a context encode may allocate for the steps
 // it was charged: 8 bytes for each byte of charged work (a step stands for
 // at most about a KiB) and of its input, plus 1 MiB.
@@ -368,10 +388,9 @@ func encodeAllocBound(steps int64, input int) uint64 {
 	return 8*(uint64(steps)*1024+uint64(input)) + 1<<20 //nolint:gosec // non-negative
 }
 
-// TestEncodeWalkReview covers the context-encode gaps found in review: a
-// string charged at its escaped length, a native's JSON charged by its
-// tokens, a large map's collection charged before the allocation cap
-// stops it, and an invalid number ending the walk where the encoder fails.
+// TestEncodeWalkReview checks delegation on escaped strings, native JSON,
+// large maps and invalid numbers. Failed encodes inherit ELPS's charges
+// and allocation bounds rather than svc's former per-value estimates.
 func TestEncodeWalkReview(t *testing.T) {
 	fn := lisp.FunInPackage("user", "f", lisp.Formals(), func(*lisp.LEnv, *lisp.LVal) *lisp.LVal { return lisp.Nil() })
 
@@ -381,9 +400,7 @@ func TestEncodeWalkReview(t *testing.T) {
 		ctx.MapSetString("a", lisp.String(strings.Repeat("\x01", 1<<20)))
 		ctx.MapSetString("b", fn)
 		env.Put(lisp.Symbol("ctx"), ctx)
-		var res *lisp.LVal
-		var steps int64
-		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		res, steps, alloc := checkEncodeFailureParity(t, env, "")
 		require.Equal(t, lisp.LError, res.Type)
 		require.GreaterOrEqual(t, steps, int64(6<<10), "6 MiB of escapes")
 		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 1<<20), "%d bytes for %d steps", alloc, steps)
@@ -396,13 +413,9 @@ func TestEncodeWalkReview(t *testing.T) {
 		ctx.MapSetString("a", lisp.Native(raw))
 		ctx.MapSetString("b", lisp.Float(math.NaN()))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		var res *lisp.LVal
-		var steps int64
-		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		res, _, _ := checkEncodeFailureParity(t, env, "")
 		require.Equal(t, lisp.LError, res.Type)
 		require.Contains(t, res.Cells[0].Str, "NaN")
-		require.GreaterOrEqual(t, steps, int64(300_000), "the native's 100k objects")
-		require.LessOrEqual(t, alloc, encodeAllocBound(steps, len(raw)), "%d bytes for %d steps", alloc, steps)
 	})
 
 	t.Run("large map over the allocation cap", func(t *testing.T) {
@@ -415,12 +428,8 @@ func TestEncodeWalkReview(t *testing.T) {
 		ctx.MapSetString("m", m)
 		env.Put(lisp.Symbol("ctx"), ctx)
 		env.Runtime.MaxAlloc = 1024
-		var res *lisp.LVal
-		var steps int64
-		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		res, _, _ := checkEncodeFailureParity(t, env, "")
 		require.Equal(t, lisp.LError, res.Type)
-		require.GreaterOrEqual(t, steps, int64(10_000*14), "collecting and sorting 10k entries")
-		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 0), "%d bytes for %d steps", alloc, steps)
 	})
 
 	t.Run("invalid number before a large list", func(t *testing.T) {
@@ -461,9 +470,8 @@ type failingMarshaler struct{}
 
 func (failingMarshaler) MarshalJSON() ([]byte, error) { return nil, errors.New("boom") }
 
-// TestEncodeNatives: a native is marshalled once and charged before the
-// encode, whether encoding/json reflects through it or calls its
-// MarshalJSON, and a failing native reports the encoder's text.
+// TestEncodeNatives: ELPS marshals a native once, charges its encode and
+// reports its errors, whether it uses reflection or MarshalJSON.
 func TestEncodeNatives(t *testing.T) {
 	t.Run("reflective native then NaN", func(t *testing.T) {
 		env := newEnv(t)
@@ -476,13 +484,9 @@ func TestEncodeNatives(t *testing.T) {
 		ctx.MapSetString("a", lisp.Native(items))
 		ctx.MapSetString("b", lisp.Float(math.NaN()))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		var res *lisp.LVal
-		var steps int64
-		alloc := allocDuring(func() { res, steps = eval(t, env, `(handlebars:render "" ctx)`) })
+		res, _, _ := checkEncodeFailureParity(t, env, "")
 		require.Equal(t, lisp.LError, res.Type)
 		require.Contains(t, res.Cells[0].Str, "unable to encode number NaN")
-		require.GreaterOrEqual(t, steps, int64(500_000), "100k structs walked")
-		require.LessOrEqual(t, alloc, encodeAllocBound(steps, 0), "%d bytes for %d steps", alloc, steps)
 	})
 
 	t.Run("marshaler called once", func(t *testing.T) {
@@ -537,10 +541,8 @@ type nativeDAG struct {
 	V    int
 }
 
-// TestEncodeNativesAsJSON: the walk charges a native as encoding/json
-// encodes it, and fails where and as it fails, without running it on a
-// cycle: a pointer cycle, a map holding itself, unexported fields skipped,
-// no depth bound encoding/json lacks, and the same steps on every run.
+// TestEncodeNativesAsJSON checks ELPS's cycle errors, omitted unexported
+// fields, native nesting and repeatable charges on successful encodes.
 func TestEncodeNativesAsJSON(t *testing.T) {
 	render := func(t *testing.T, env *lisp.LEnv, native any) (*lisp.LVal, *lisp.LVal, int64, time.Duration) {
 		t.Helper()
@@ -565,8 +567,8 @@ func TestEncodeNativesAsJSON(t *testing.T) {
 		dump, res, steps, d := render(t, newEnv(t), x)
 		require.Equal(t, lisp.LError, res.Type)
 		require.Equal(t, "error while serializing: "+dump.Cells[0].Str, res.Cells[0].Str)
-		if !raceEnabled { // a timing check, as the ceiling tests are
-			require.Less(t, d.Nanoseconds()/max(steps, 1), int64(1000), "%v for %d steps", d, steps)
+		if !raceEnabled && timingGuards() {
+			require.Less(t, d, time.Second, "%v for %d steps", d, steps)
 		}
 	})
 	t.Run("map holding itself", func(t *testing.T) {
@@ -662,10 +664,9 @@ func TestNativeCostCeiling(t *testing.T) {
 	}
 }
 
-// TestEncodeNativesBounded covers the native-encode review cases: nothing
-// past where the charged walk stopped is visited uncharged, a native past
-// the allocation cap fails as json:dump-bytes does without being
-// marshalled, and a type-name error text is charged by its length.
+// TestEncodeNativesBounded checks that serialization stops at the first
+// error, oversized natives inherit ELPS's cap, and type-name errors have
+// the same work charge as json:dump-bytes.
 func TestEncodeNativesBounded(t *testing.T) {
 	t.Run("native then NaN then a large list", func(t *testing.T) {
 		env := newEnv(t)
@@ -720,16 +721,14 @@ func TestEncodeNativesBounded(t *testing.T) {
 		ctx := lisp.SortedMap()
 		ctx.MapSetString("a", lisp.Native(reflect.MakeChan(reflect.ChanOf(reflect.BothDir, elem), 0).Interface()))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
-		require.Equal(t, lisp.LError, res.Type)
+		res, _, _ := checkEncodeFailureParity(t, env, "")
 		require.Contains(t, res.Cells[0].Str, "json: unsupported type: chan struct")
-		require.GreaterOrEqual(t, steps, int64(1<<16), "the 1 MiB name is charged")
 	})
 }
 
 // TestEncodeNativesStringOption: a ",string" field, written escaped twice,
-// is sized as such, so a native over the allocation cap fails before it is
-// marshalled; a nil Marshaler interface is null, not a panic.
+// inherits ELPS's error and allocation behavior; a nil Marshaler
+// interface is null, not a panic.
 func TestEncodeNativesStringOption(t *testing.T) {
 	env := newEnv(t)
 	ctx := lisp.SortedMap()
@@ -739,11 +738,8 @@ func TestEncodeNativesStringOption(t *testing.T) {
 	env.Put(lisp.Symbol("ctx"), ctx)
 	dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
 	require.Equal(t, lisp.LError, dump.Type)
-	var res *lisp.LVal
-	alloc := allocDuring(func() { res, _ = eval(t, env, `(handlebars:render "" ctx)`) })
-	require.Equal(t, lisp.LError, res.Type)
+	res, _, _ := checkEncodeFailureParity(t, env, "")
 	require.Equal(t, dump.Cells[0].Str, res.Cells[0].Str)
-	require.Less(t, alloc, uint64(8<<20), "not marshalled")
 
 	ctx = lisp.SortedMap()
 	ctx.MapSetString("a", lisp.Native(struct {
@@ -942,18 +938,23 @@ func deepRender(t *testing.T, v any) (*lisp.LVal, error) {
 	return res, gerr
 }
 
-// TestNativeDepthBound: a value nested past the walk's bound fails with a
-// limit error on a fresh goroutine, never a stack overflow; one just under
-// it renders.
+// TestNativeDepthBound checks ELPS's errors for deep natives on a fresh
+// goroutine, and the Go API's separate bounds. A loadable native renders.
 func TestNativeDepthBound(t *testing.T) {
 	res, gerr := deepRender(t, nestedSlices(60_000))
 	require.Equal(t, lisp.LError, res.Type)
-	require.Contains(t, res.Cells[0].Str, "nests deeper than 50000")
+	env := newEnv(t)
+	env.Runtime.MaxAlloc = 1 << 30
+	dump := libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{lisp.Native(nestedSlices(60_000)), lisp.Bool(false)}))
+	require.Equal(t, lisp.LError, dump.Type)
+	require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
 	require.ErrorContains(t, gerr, "nests deeper than 1024", "the Go API's container bound comes first")
 
 	res, gerr = deepRender(t, pointerChain(30_000))
 	require.Equal(t, lisp.LError, res.Type)
-	require.Contains(t, res.Cells[0].Str, "nests deeper than 50000")
+	dump = libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{lisp.Native(pointerChain(30_000)), lisp.Bool(false)}))
+	require.Equal(t, lisp.LError, dump.Type)
+	require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
 	require.ErrorContains(t, gerr, "nests deeper than 50000")
 
 	// A []any level is two walk levels (the slice, its interface element).
@@ -999,18 +1000,16 @@ func TestNativeDepthNoCrash(t *testing.T) {
 	require.Contains(t, string(out), "DEEP-OK")
 }
 
-// TestNativeDAGDepth: a native whose shared subtrees nest it past the
-// walk's level bound fails that bound, though the walk charges a shared
-// subtree from its memo: json.Marshal would walk it all.
+// TestNativeDAGDepth: shared native subtrees that exceed ELPS's nesting
+// bounds report the same error as json:dump-bytes.
 func TestNativeDAGDepth(t *testing.T) {
 	for _, ptrs := range []bool{false, true} {
 		env := newEnv(t)
 		ctx := lisp.SortedMap()
 		ctx.MapSetString("n", lisp.Native(segmentDAG(3, 24_000, ptrs)))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
+		res, _, _ := checkEncodeFailureParity(t, env, "x")
 		require.Equal(t, lisp.LError, res.Type, "pointers %v: %v", ptrs, res)
-		require.Contains(t, res.String(), "nests deeper than 50000", "pointers %v", ptrs)
 	}
 }
 
@@ -1084,9 +1083,8 @@ func TestStrictInvalidUTF8Keys(t *testing.T) {
 	}
 }
 
-// TestNativeEscapedNameUnderCap: a native whose field name escapes to six
-// times its length (each & as &) fails the allocation cap from the
-// walk's estimate, before the encoder builds and writes it.
+// TestNativeEscapedNameUnderCap: a native's heavily escaped field name
+// inherits json:dump-bytes's allocation error and resource behavior.
 func TestNativeEscapedNameUnderCap(t *testing.T) {
 	name := strings.Repeat("&", 1<<20)
 	typ := reflect.StructOf([]reflect.StructField{{Name: "A", Type: reflect.TypeFor[int](), Tag: reflect.StructTag(`json:"` + name + `" cold:"` + t.Name() + `"`)}})
@@ -1095,11 +1093,8 @@ func TestNativeEscapedNameUnderCap(t *testing.T) {
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("n", lisp.Native(reflect.New(typ).Elem().Interface()))
 	env.Put(lisp.Symbol("ctx"), ctx)
-	var res *lisp.LVal
-	alloc := allocDuring(func() { res, _ = eval(t, env, `(handlebars:render "x" ctx)`) })
-	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	res, _, _ := checkEncodeFailureParity(t, env, "x")
 	require.Contains(t, res.String(), "allocation size exceeds maximum")
-	require.Less(t, alloc, uint64(16<<20), "rejected before the encoder runs")
 }
 
 // TestNativeAddressableMarshalerText: an addressable RawMessage (a slice
@@ -1119,8 +1114,8 @@ func TestNativeAddressableMarshalerText(t *testing.T) {
 }
 
 // TestNativeRawMessageCharged: a RawMessage as a native, behind a pointer
-// or in a json.Marshaler field is charged for encoding/json's check of its
-// bytes, and fails with json.Marshal's text.
+// or in a json.Marshaler field inherits ELPS's work charge and reports
+// encoding/json's error text.
 func TestNativeRawMessageCharged(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
 	for name, native := range map[string]any{
@@ -1139,23 +1134,18 @@ func TestNativeRawMessageCharged(t *testing.T) {
 		ctx := lisp.SortedMap()
 		ctx.MapSetString("r", lisp.Native(native))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		res, steps := eval(t, env, `(handlebars:render "" ctx)`)
-		require.Equal(t, lisp.LError, res.Type, name)
+		res, _, _ := checkEncodeFailureParity(t, env, "")
 		require.Contains(t, res.String(), "error while serializing: "+merr.Error(), name)
-		require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), name)
 	}
 }
 
 // selfMarshaler embeds an interface that can hold itself.
 type selfMarshaler struct{ json.Marshaler }
 
-// TestNativeEmbedSearchCharged: the search for an embedded RawMessage in
-// a Marshaler native is charged whether or not it finds one (a struct
-// declaring its own MarshalJSON, by embedding time.Time, with many plain
-// fields), and a native embedding itself through an interface fails with
-// a limit error instead of reaching encoding/json, which would overflow
-// the stack.
-func TestNativeEmbedSearchCharged(t *testing.T) {
+// TestNativeMarshalerDelegation: a native's custom MarshalJSON runs under
+// ELPS's rules without svc searching its embedded fields. The Go API's
+// own JSON conversion still bounds cyclic promoted methods before a call.
+func TestNativeMarshalerDelegation(t *testing.T) {
 	steps := func(n int) int64 {
 		fields := []reflect.StructField{{Name: "Time", Type: reflect.TypeFor[time.Time](), Anonymous: true}}
 		for i := range n {
@@ -1164,30 +1154,24 @@ func TestNativeEmbedSearchCharged(t *testing.T) {
 		native := reflect.New(reflect.StructOf(fields)).Elem().Interface()
 		require.Implements(t, (*json.Marshaler)(nil), native)
 		env := newEnv(t)
-		ctx := lisp.SortedMap()
-		ctx.MapSetString("n", lisp.Native(native))
-		env.Put(lisp.Symbol("ctx"), ctx)
-		res, steps := eval(t, env, `(handlebars:render "x" ctx)`)
+		ctx := sortedMap("n", lisp.Native(native))
+		res, steps := renderIn(t, env, "render", "x", ctx)
 		require.Equal(t, lisp.LString, res.Type, "%v", res)
 		return steps
 	}
-	require.GreaterOrEqual(t, steps(4000)-steps(1), int64(3999/16), "the field list is charged")
+	require.Equal(t, steps(1), steps(4000), "ELPS calls the marshaler without svc's field search")
 
 	self := &selfMarshaler{}
 	self.Marshaler = self
-	env := newEnv(t)
-	ctx := lisp.SortedMap()
-	ctx.MapSetString("n", lisp.Native(self))
-	env.Put(lisp.Symbol("ctx"), ctx)
-	res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
-	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.Contains(t, res.String(), "error while serializing: json: Marshaler embedding nests deeper than 64")
+	tpl, err := libhandlebars.Parse(`x`)
+	require.NoError(t, err)
+	_, err = libhandlebars.RenderWith(tpl, map[string]any{"n": self}, libhandlebars.WithJSONContext())
+	require.ErrorContains(t, err, "json: Marshaler embedding nests deeper than 64")
 }
 
-// TestNativeMarshalerChainFailsClosed: a RawMessage wrapped in
-// struct{json.Marshaler} past the search's 64 interface hops fails with
-// the limit error before encoding/json runs (it went uncharged); within
-// the bound it is charged.
+// TestNativeMarshalerChainFailsClosed: ELPS natives inherit dump-bytes's
+// error through any finite chain of promoted MarshalJSON methods. The
+// Go API's own JSON conversion still enforces its 64-hop search bound.
 func TestNativeMarshalerChainFailsClosed(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 1<<20))
 	chain := func(n int) json.Marshaler {
@@ -1202,18 +1186,18 @@ func TestNativeMarshalerChainFailsClosed(t *testing.T) {
 		ctx := lisp.SortedMap()
 		ctx.MapSetString("n", lisp.Native(chain(n)))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		return eval(t, env, `(handlebars:render "x" ctx)`)
+		res, steps, _ := checkEncodeFailureParity(t, env, "x")
+		return res, steps
 	}
-	res, steps := render(60)
+	res, _ := render(60)
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.GreaterOrEqual(t, steps, int64(2*len(raw)/16), "within the bound: charged")
 	res, _ = render(64)
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
 	require.NotContains(t, res.String(), "nests deeper than 64", "64 wrappers: within the bound")
 	for _, n := range []int{65, 128} {
 		res, _ = render(n)
 		require.Equal(t, lisp.LError, res.Type, "%v", res)
-		require.Contains(t, res.String(), "json: Marshaler embedding nests deeper than 64", "%d wrappers", n)
+		require.NotContains(t, res.String(), "json: Marshaler embedding nests deeper than 64", "ELPS has no svc embedding bound")
 		tpl, err := libhandlebars.Parse(`x`)
 		require.NoError(t, err)
 		_, err = libhandlebars.RenderWith(tpl, map[string]any{"n": chain(n)}, libhandlebars.WithJSONContext())
@@ -1280,9 +1264,8 @@ func TestNativeColdMarshalerChain(t *testing.T) {
 	require.False(t, ceilingFails(t, per), "%.0f ns/step", per)
 }
 
-// TestEncodeMapKeysChargedBeforeValues: sorting a map's long keys is
-// charged before its values are walked, so a value that fails the encode
-// (a native chan, first) does not leave the keys uncharged.
+// TestEncodeMapKeysChargedBeforeValues checks parity with ELPS's error,
+// charge and allocation behavior when long map keys precede a bad value.
 func TestEncodeMapKeysChargedBeforeValues(t *testing.T) {
 	prefix := strings.Repeat("p", 256<<10)
 	env := newEnv(t)
@@ -1292,10 +1275,8 @@ func TestEncodeMapKeysChargedBeforeValues(t *testing.T) {
 		ctx.MapSetString(prefix+fmt.Sprintf("%04d", i), lisp.Int(i))
 	}
 	env.Put(lisp.Symbol("ctx"), ctx)
-	res, steps := eval(t, env, `(handlebars:render "" ctx)`)
-	require.Equal(t, lisp.LError, res.Type, "%v", res)
+	res, _, _ := checkEncodeFailureParity(t, env, "")
 	require.Contains(t, res.String(), "unsupported type: chan int")
-	require.GreaterOrEqual(t, steps, int64(256*(256<<10)/256*9), "every key's bytes, log2(256) times")
 }
 
 // TestEncodeKeyCollisionBeforeNatives: libjson refuses an int key spelling
@@ -1331,11 +1312,9 @@ func TestParseBudgetFailureNotCached(t *testing.T) {
 	require.Equal(t, "1 "+t.Name(), res.Str)
 }
 
-// TestEncodeEstimateDoesNotStopWalk: the walk's size estimate over-counts
-// (a float is 24 bytes in it), so passing the allocation cap by it alone
-// must not stop the walk: the encode below it would run uncharged. Here
-// the floats' estimate passes the cap, their JSON does not, and the
-// native after them is charged for every field encoding/json visits.
+// TestEncodeEstimateDoesNotStopWalk keeps the old overestimate input:
+// the floats and native fit ELPS's cap, and both are charged when decoded.
+// Omitted native fields no longer incur svc's reflection-walk charge.
 func TestEncodeEstimateDoesNotStopWalk(t *testing.T) {
 	floats := make([]*lisp.LVal, 200_000)
 	for i := range floats {
@@ -1363,7 +1342,7 @@ func TestEncodeEstimateDoesNotStopWalk(t *testing.T) {
 	}
 	nativeOnly, floatsOnly, both := render(false, true), render(true, false), render(true, true)
 	t.Logf("native %d, floats %d, both %d steps", nativeOnly, floatsOnly, both)
-	require.GreaterOrEqual(t, nativeOnly, int64(10_000*100), "each of the native's fields")
+	require.GreaterOrEqual(t, nativeOnly, int64(10_000), "each native object is decoded and charged")
 	require.GreaterOrEqual(t, both, (nativeOnly+floatsOnly)*9/10, "both charged in full together")
 }
 
@@ -1403,23 +1382,19 @@ func TestEncodeErrorOrder(t *testing.T) {
 	check(t, floatsThenChan(), 1<<20, "unsupported type: chan int")
 }
 
-// TestEncodeErrorOrderNearCap: just under the default allocation cap, an
-// error the encoder meets before it has written past the cap is the one
-// reported: a map's key collision, a function value in nested lists, and a
-// native's stdlib Marshaler failing (time.Time past year 9999), not the
-// cap the whole output would pass.
+// TestEncodeErrorOrderNearCap keeps render's error precedence identical to
+// json:dump-bytes for contexts that can fail in two ways near the cap.
 func TestEncodeErrorOrderNearCap(t *testing.T) {
 	env := newEnv(t)
 	limit := env.Runtime.MaxAllocBytes()
-	check := func(t *testing.T, env *lisp.LEnv, ctx *lisp.LVal, want string) {
+	check := func(t *testing.T, env *lisp.LEnv, ctx *lisp.LVal) {
 		t.Helper()
 		env.Put(lisp.Symbol("ctx"), ctx)
 		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
 		require.Equal(t, lisp.LError, dump.Type)
-		require.Contains(t, dump.String(), want)
 		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
 		require.Equal(t, lisp.LError, res.Type, "%v", res)
-		require.Contains(t, res.String(), want)
+		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str)
 	}
 
 	m := lisp.SortedMap()
@@ -1430,7 +1405,7 @@ func TestEncodeErrorOrderNearCap(t *testing.T) {
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("a", lisp.String(strings.Repeat("x", limit-150)))
 	ctx.MapSetString("b", m)
-	check(t, newEnv(t), ctx, `map int key 1 collides with string key "1"`)
+	check(t, newEnv(t), ctx)
 
 	env = newEnv(t)
 	fn, _ := eval(t, env, `(lambda () 1)`)
@@ -1442,7 +1417,7 @@ func TestEncodeErrorOrderNearCap(t *testing.T) {
 	ctx = lisp.SortedMap()
 	ctx.MapSetString("a", lisp.String(strings.Repeat("x", limit-150)))
 	ctx.MapSetString("b", nested)
-	check(t, env, ctx, "invalid type encountered")
+	check(t, env, ctx)
 
 	native := struct {
 		S string
@@ -1450,13 +1425,11 @@ func TestEncodeErrorOrderNearCap(t *testing.T) {
 	}{strings.Repeat("s", limit), time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}
 	ctx = lisp.SortedMap()
 	ctx.MapSetString("n", lisp.Native(native))
-	check(t, newEnv(t), ctx, "error calling MarshalJSON for type time.Time")
+	check(t, newEnv(t), ctx)
 }
 
-// TestEncodeUnloadableNativePastCap: a native whose bytes pass the
-// allocation cap but fail libjson's load check reports the load check's
-// error, as json:dump-bytes does (the encoder checks a native's bytes
-// before its next cap check).
+// TestEncodeUnloadableNativePastCap follows json:dump-bytes when a native
+// would exceed the cap and fail its load check. ELPS decides which wins.
 func TestEncodeUnloadableNativePastCap(t *testing.T) {
 	big400, ok := new(big.Int).SetString("1"+strings.Repeat("0", 400), 10)
 	require.True(t, ok)
@@ -1490,17 +1463,14 @@ func TestEncodeUnloadableNativePastCap(t *testing.T) {
 		env.Put(lisp.Symbol("ctx"), ctx)
 		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
 		require.Equal(t, lisp.LError, dump.Type, name)
-		require.NotContains(t, dump.String(), "allocation size", name)
 		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
 		require.Equal(t, lisp.LError, res.Type, "%s: %v", name, res)
 		require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str, name)
 	}
 }
 
-// TestEncodeFailingAfterEscapesCeiling: an encode that fails after a
-// string escaping to near the allocation cap (each < written as <)
-// stays within the ceiling: the escapes are charged, and a failing native
-// within the cap is reported without running the encoder again.
+// TestEncodeFailingAfterEscapesCeiling measures ELPS's work charge for
+// errors after a heavily escaped string near the allocation cap.
 func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 	if raceEnabled || testing.Short() {
 		t.Skip("timing test: skipped under -race and -short")
@@ -1532,8 +1502,8 @@ func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 		t.Logf("%s after %d escaped bytes: %.0f ns/step", name, 6*len(escaped), best)
 		require.False(t, ceilingFails(t, best), "%s: %.0f ns/step", name, best)
 	}
-	// Past the cap by its escapes, then another value: the walk stops at
-	// the cap and the encoder replays up to it.
+	// Past the cap by its escapes, then another value: ELPS stops encoding
+	// and retains the charge for the output it wrote.
 	past := strings.Repeat("<", (env.Runtime.MaxAllocBytes()+4096)/6)
 	best := math.Inf(1)
 	for range 3 {
@@ -1548,9 +1518,9 @@ func TestEncodeFailingAfterEscapesCeiling(t *testing.T) {
 	require.False(t, ceilingFails(t, best), "cap replay: %.0f ns/step", best)
 }
 
-// TestEncodeNativeFailureAfterUndercounted: values the walk's estimate
-// undercounts (empty maps, one-byte bytes) before a failing native, past
-// the cap: the encoder decides, as json:dump-bytes does (the cap).
+// TestEncodeNativeFailureAfterUndercounted keeps the old underestimated
+// inputs (empty maps and one-byte bytes). ELPS alone chooses between the
+// cap and the failing native.
 func TestEncodeNativeFailureAfterUndercounted(t *testing.T) {
 	for name, fill := range map[string]func() *lisp.LVal{
 		"empty maps": func() *lisp.LVal { return lisp.SortedMap() },

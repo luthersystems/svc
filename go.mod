@@ -19,7 +19,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
-	github.com/luthersystems/elps v1.74.0
+	github.com/luthersystems/elps v1.75.1
 	github.com/luthersystems/lutherauth-sdk-go v0.0.9
 	github.com/luthersystems/shiroclient-sdk-go v0.17.1
 	github.com/nyaruka/phonenumbers v1.8.1
