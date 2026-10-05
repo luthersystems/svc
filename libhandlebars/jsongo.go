@@ -88,25 +88,6 @@ type jsonWalker struct {
 	quoted    bool                  // the value is a ",string" field's: a scalar is written as a JSON string
 	levels    int                   // the walk's recursion depth
 	peak      int                   // the deepest level the walk has reached (or a memo hit stands for)
-	mayUnload bool                  // a value whose JSON libjson's load check may refuse (see mayFailLoad)
-	unloadNum string                // the first json.Number out of float64 range, in the encoder's order
-}
-
-// mayFailLoad reports whether the JSON the walk sized may fail libjson's
-// load check of a native's bytes: only a MarshalJSON's output (a
-// RawMessage's included) or a json.Number can hold a number literal its
-// decoder refuses, and only nesting past 10,000 levels exceeds its depth.
-func (w *jsonWalker) mayFailLoad() bool { return w.mayUnload || w.unloadNum != "" || w.peak > 10_000 }
-
-// loadFailure is the error libjson's load check reports where the only
-// bytes it could refuse are json.Numbers out of float64 range: the first,
-// in the encoder's (document) order, as encoding/json reports it. The
-// native need not be marshalled to know it.
-func (w *jsonWalker) loadFailure() error {
-	if w.unloadNum == "" || w.mayUnload || w.peak > 10_000 {
-		return nil
-	}
-	return errors.New("unable to encode native value: json: cannot unmarshal number " + w.unloadNum + " into Go value of type float64")
 }
 
 // hopCost is the steps a pointer or interface hop costs: the walk keeps
@@ -144,7 +125,6 @@ func (w *jsonWalker) marshalerLeaf(v reflect.Value, typ reflect.Type, text bool)
 	// without calling.
 	if k := v.Kind(); (k != reflect.Pointer && k != reflect.Interface) || !v.IsNil() {
 		if !text {
-			w.mayUnload = true
 			if raw, ok := rawMessage(v); ok {
 				return w.rawLeaf(raw, typ)
 			}
@@ -670,14 +650,6 @@ func (w *jsonWalker) encode(v reflect.Value, t reflect.Type, allowAddr bool, dep
 				msg := make([]byte, 0, len(prefix)+quotedLen(num)) // built once, at its size
 				msg = strconv.AppendQuote(append(msg, prefix...), num)
 				return jsonTotals{}, &jsonFailure{string(msg)}
-			}
-			// libjson's load check reads it back as a float64: a literal
-			// out of its range (1e400) fails there. Only such a number
-			// makes the native's bytes worth marshalling past the cap.
-			if !w.quoted && w.unloadNum == "" {
-				if _, err := strconv.ParseFloat(num, 64); err != nil {
-					w.unloadNum = num
-				}
 			}
 			return w.leaf(int64(len(num)) + w.q()) // written unquoted, unless ",string"
 		}

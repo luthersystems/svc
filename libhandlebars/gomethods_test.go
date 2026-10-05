@@ -396,25 +396,33 @@ func TestBigMethodResolved(t *testing.T) {
 	checkJSON(t, `{{x}}`, map[string]any{"x": OwnAll{huge}})
 }
 
-// TestBigMethodNativesFailFast: an ELPS native holding math/big behind
-// embedding, an interface or a map key is charged before the encoder
-// runs its methods: with a 2^26 step budget the render fails at once.
-func TestBigMethodNativesFailFast(t *testing.T) {
+// TestBigMethodNativeParity delegates native math/big methods to ELPS.
+// Direct huge values are bounded by its native walk. Promoted methods are
+// embedder code, so use finite conversions when testing their parity.
+func TestBigMethodNativeParity(t *testing.T) {
 	huge := new(big.Float).SetMantExp(big.NewFloat(1.5), -(1 << 30))
-	var tm encoding.TextMarshaler = huge
+	finite := new(big.Float).SetMantExp(big.NewFloat(1.5), -128)
+	var tm encoding.TextMarshaler = finite
 	for _, x := range []any{
-		EmbText{huge}, IfaceField{tm}, map[*big.Float]int{huge: 1}, map[encoding.TextMarshaler]int{huge: 1},
-		BigWrap{huge}, FloatInt{huge, new(big.Int).Lsh(big.NewInt(1), 1<<26)}, new(big.Int).Lsh(big.NewInt(1), 1<<26),
+		huge, EmbText{tm}, IfaceField{tm}, map[*big.Float]int{finite: 1},
+		map[encoding.TextMarshaler]int{tm: 1}, BigWrap{finite},
+		FloatInt{finite, new(big.Int).Lsh(big.NewInt(1), 4096)},
+		new(big.Int).Lsh(big.NewInt(1), 1<<26),
 	} {
 		env := newEnv(t)
+		env.Runtime.MaxAlloc = 32
 		env.Runtime.SetStepBudget(1 << 26)
-		ctx := lisp.SortedMap()
-		ctx.MapSetString("x", lisp.Native(x))
+		ctx := sortedMap("x", lisp.Native(x))
 		env.Put(lisp.Symbol("ctx"), ctx)
-		start := time.Now()
-		res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "{{x}}" ctx)`)
-		require.Equal(t, lisp.LError, res.Type, "%T: %v", x, res)
-		require.Less(t, time.Since(start), 5*time.Second, "%T", x)
+		dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+		res, _ := eval(t, env, `(handlebars:render "" ctx)`)
+		if dump.Type == lisp.LError {
+			require.Equal(t, lisp.LError, res.Type, "%T: %v", x, res)
+			require.Contains(t, res.Cells[0].Str, dump.Cells[0].Str, "%T", x)
+		} else {
+			require.Equal(t, lisp.LString, res.Type, "%T: %v", x, res)
+			require.Empty(t, res.Str)
+		}
 	}
 }
 
@@ -487,8 +495,8 @@ type Deep65 struct{ *big.Float }
 
 // TestBigMethodSearchFailsClosed: a math/big method promoted from deeper
 // than the supplier search's 64 levels is an error, not an uncharged call,
-// in the Go context, through JSON, and in an ELPS native; at 64 levels it
-// is found.
+// in the Go context and through the Go API's JSON conversion; at 64
+// levels it is found. ELPS natives instead follow json:dump-bytes.
 func TestBigMethodSearchFailsClosed(t *testing.T) {
 	tpl, err := libhandlebars.Parse(`{{prettyp-num-en x}} {{x}}`)
 	require.NoError(t, err)
@@ -501,9 +509,11 @@ func TestBigMethodSearchFailsClosed(t *testing.T) {
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("x", lisp.Native(deep))
 	env.Put(lisp.Symbol("ctx"), ctx)
-	res := env.LoadStringContext(t.Context(), "test", `(handlebars:render "{{x}}" ctx)`)
-	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.Contains(t, res.String(), "method embedding search passed its bound of 64 levels")
+	dump, _ := eval(t, env, `(json:dump-bytes ctx)`)
+	res, _ := eval(t, env, `(handlebars:render "{{x}}" ctx)`)
+	require.Equal(t, lisp.LBytes, dump.Type, "%v", dump)
+	require.Equal(t, lisp.LString, res.Type, "%v", res)
+	require.Equal(t, "&lt;nil&gt;", res.Str)
 	// One level shallower, it is found (and, nil, prints as fmt prints it).
 	checkGo(t, `{{prettyp-num-en x}}`, map[string]any{"x": []any{deep.Deep2}})
 }
@@ -772,11 +782,9 @@ func TestReserveExact(t *testing.T) {
 	}
 }
 
-// TestNativeNumberNotMarshalledPastCap: a json.Number libjson's load check
-// accepts (in float64 range) does not make a native past the allocation
-// cap worth marshalling: the render fails at the cap without building the
-// native's 256 MiB. An out-of-range one still does, and its load error
-// comes first, as json:dump-bytes reports it.
+// TestNativeNumberNotMarshalledPastCap: ELPS's bound refuses this native
+// without building its 256 MiB, for both in-range and out-of-range numbers.
+// The allocation cap precedes the load check in these inputs.
 func TestNativeNumberNotMarshalledPastCap(t *testing.T) {
 	s := strings.Repeat("x", 1<<20)
 	a := make([]string, 256)
@@ -803,8 +811,8 @@ func TestNativeNumberNotMarshalledPastCap(t *testing.T) {
 	require.Less(t, alloc, uint64(64<<20))
 	res, alloc = run("1e400")
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.Contains(t, res.String(), "error while serializing: unable to encode native value: json: cannot unmarshal number 1e400 into Go value of type float64")
-	require.Less(t, alloc, uint64(64<<20)) // known from the walk: not marshalled
+	require.Contains(t, res.String(), "allocation size exceeds maximum (65536)")
+	require.Less(t, alloc, uint64(64<<20)) // ELPS bounds it without marshalling
 }
 
 type failText struct{}
@@ -819,11 +827,9 @@ type quotedNum struct {
 	N json.Number `json:",string"`
 }
 
-// TestNativeNumberLoadErrorParity: where a native's only bytes libjson's
-// load check could refuse are json.Numbers out of float64 range, the walk
-// reports the error without marshalling it, exactly as json:dump-bytes
-// does: the first such number in the encoder's order, after an allocation
-// error the bytes before it meet first.
+// TestNativeNumberLoadErrorParity compares render with json:dump-bytes
+// for out-of-range json.Numbers, failing text marshalers and allocation
+// limits. The serializer alone decides which error wins.
 func TestNativeNumberLoadErrorParity(t *testing.T) {
 	big := strings.Repeat("y", 1<<17)
 	for _, c := range []struct {

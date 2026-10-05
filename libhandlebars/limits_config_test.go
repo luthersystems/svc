@@ -458,29 +458,35 @@ func TestRaisedDepthNatives(t *testing.T) {
 		}
 		inQuotes := quoted(lisp.Native(g))
 		shallow := quoted(lisp.Native(map[string]int{"x": 1}))
-		const deepErr = "error while serializing: json: Go value nests deeper than 50000"
 		for _, fn := range []string{"render", strictMode} {
 			for _, c := range []struct {
-				tpl  string
-				ctx  *lisp.LVal
-				want string
+				tpl     string
+				ctx     *lisp.LVal
+				wantErr bool
 			}{
-				{"{{a}}", sortedMap("a", inList), deepErr},
-				{"{{to-str a}}", sortedMap("a", inQuotes), deepErr},
-				{"{{a.x}}", sortedMap("a", shallow), ""},
+				{"{{a}}", sortedMap("a", inList), true},
+				{"{{to-str a}}", sortedMap("a", inQuotes), true},
+				{"{{a.x}}", sortedMap("a", shallow), false},
 			} {
 				env := newEnvWith(t, mustLoader(t))
 				if res := lisp.WithMaxValueDepth(math.MaxInt)(env); res.Type == lisp.LError {
 					t.Fatal(res)
 				}
 				env.Put(lisp.Symbol("ctx"), c.ctx)
+				var dump *lisp.LVal
+				if c.wantErr {
+					dump = libjson.DefaultSerializer().DumpBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{c.ctx, lisp.Bool(false)}))
+					if dump.Type != lisp.LError {
+						t.Fatalf("expected native encode error: %.300v", dump)
+					}
+				}
 				res := env.LoadStringContext(t.Context(), "test", hbCall(fn, `"`+c.tpl+`" ctx`))
 				switch {
-				case c.want == "":
+				case !c.wantErr:
 					if res.Type != lisp.LString || res.Str != "1" {
 						t.Fatalf("%s %s: %.300v", fn, c.tpl, res)
 					}
-				case res.Type != lisp.LError || !strings.Contains(res.String(), c.want):
+				case res.Type != lisp.LError || !strings.Contains(res.String(), dump.Cells[0].Str):
 					t.Fatalf("%s %s: %.300v", fn, c.tpl, res)
 				}
 				fmt.Printf("%s %s: %.120v\n", fn, c.tpl, res)
