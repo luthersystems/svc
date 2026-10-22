@@ -49,7 +49,9 @@ func NewFromCertificate(prefix, accountName, containerName, path, password, clie
 	}
 
 	path = filepath.Clean(path)
-	certData, err := os.ReadFile(path) // #nosec G304
+	// The path is the caller's own certificate file (service config), not
+	// request input, so reading it is not path traversal.
+	certData, err := os.ReadFile(path) // #nosec G304 G703
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the certificate file (%s): %w", path, err)
 	}
