@@ -1,5 +1,10 @@
 name: CI Tests
 on:
+  # The push run on main is what release-tag.yml checks before it tags a
+  # commit: a squash merge makes a new commit that no pull request run tested.
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
