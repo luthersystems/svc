@@ -33,16 +33,5 @@ jobs:
           version: v2.13.2
       - name: Run CI tests
         run: script -q -e -c "make citest"
-  # Known-vulnerability gate: call-graph-aware, fails only on vulns whose
-  # vulnerable code this module actually reaches.
-  govulncheck:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version: "stable"
-      - name: Run govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+  # govulncheck runs in security.yml, which calls the shared Security
+  # workflow from luthersystems/.github.
