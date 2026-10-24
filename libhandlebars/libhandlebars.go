@@ -187,8 +187,8 @@ func render(env *lisp.LEnv, args *lisp.LVal, mode hbs.Mode, lim hbs.Limits, ps p
 		}
 	}
 	// Decoding the context costs one step per started KiB of its JSON.
-	if lerr := lisp.ChargeStartedKiB(env, len(contextBytes)); lerr.Type == lisp.LError {
-		return lerr
+	if err := lisp.ChargeStartedKiB(env, len(contextBytes)); err != nil {
+		return lisp.Error(err)
 	}
 	// Numbers are charged as they are parsed (some take 20 us each).
 	m := &envMeter{env: env}
@@ -465,8 +465,8 @@ type envMeter struct {
 }
 
 func (m *envMeter) Charge(steps int64) error {
-	if lerr := m.env.ChargeSteps(steps); lerr.Type == lisp.LError {
-		m.lerr = lerr
+	if err := m.env.ChargeSteps(steps); err != nil {
+		m.lerr = lisp.Error(err)
 		return errBudget
 	}
 	return nil
