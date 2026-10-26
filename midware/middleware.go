@@ -123,7 +123,7 @@ func (h *pathOverridesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 // component be the result of ServerFixed called with a const, non-empty name
 // argument.
 //
-// BUG:  Neither ServerResponseHeader nor its returned middleware check
+// BUG(#133): Neither ServerResponseHeader nor its returned middleware check
 // components for invalid control characters.  Because of this it is important
 // that application end users and unchecked code not be permitted to inject
 // content into server response header components.
