@@ -40,7 +40,7 @@ GO_TEST_TIMEOUT_10=${GO_TEST_BASE} -timeout 10m
 go-test:
 	${GO_TEST_TIMEOUT_10} ./...
 
-# Lint as CI does (golangci-lint v2.13.2, see .github/workflows/svc.yml).
+# Lint as CI does (golangci-lint v2.15.0, the pin of the shared Quality workflow in .github/workflows/quality.yml).
 # `config verify` checks .golangci.yml against golangci-lint's schema first:
 # `run` accepts a misspelled key and silently ignores it.
 .PHONY: static-checks

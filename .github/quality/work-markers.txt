@@ -1,0 +1,6 @@
+# Allowlist for the shared work marker gate (luthersystems/.github,
+# actions/work-markers). Only for words that are not work: copied source,
+# data, quoted text. Deferred work names its issue on the marker instead.
+#
+# path | text | expires | issue | reason
+libhandlebars/internal/raymondref/parser/parser.go | TODO: This was totally cargo culted ! CHECK THAT ! | never | - | Upstream raymond's own note, in the frozen reference copy of its parser.

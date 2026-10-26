@@ -57,10 +57,10 @@ make plugin
 
 ## CI Pipeline
 
-Single GitHub Actions workflow (`.github/workflows/svc.yml`):
+CI Tests (`.github/workflows/svc.yml`), plus the org's shared Quality and Security workflows from luthersystems/.github (`.github/workflows/quality.yml`: work marker gate, golangci-lint v2.15.0 with `.golangci.yml`, the API break gate; `.github/workflows/security.yml`). Exceptions live in `.github/quality/`; a work marker must name an issue as `MARKER(#N)`. CI Tests:
 - **Triggers**: PRs targeting `main` only
 - **Runner**: `ubuntu-22.04`, Go from `go.mod` (`go-version-file`)
-- **Steps**: checkout → setup-go → clean modcache → golangci-lint (v2.13.2, v2 config) → `make citest`
+- **Steps**: checkout → setup-go → clean modcache → `golangci-lint config verify` (v2.15.0) → `make citest`
 - **Linter config**: `.golangci.yml` — the linter set luthersystems/elps and luthersystems/substrate share (gosec included), staticcheck at substrate's default set (SA1019 on), 15m timeout (a cold run of the Handlebars engine passes 5m), no issue cap; `govet fieldalignment` only in `libhandlebars/hbs/` and `libhandlebars/internal/raymondref/` not linted (both arrive with the Handlebars engine, #106)
 - **Release**: `.github/workflows/release-tag.yml`, dispatched by hand (see Releases below); no other deploy automation, since this is a library repo
 

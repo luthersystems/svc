@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           # Pin to the module's Go version rather than floating "stable":
-          # the golangci-lint v2.13 binary (built with Go 1.26) cannot read
+          # a golangci-lint binary built with an older Go cannot read
           # export data produced by newer toolchains (Go 1.27 broke it with
           # "export data version 4 is greater than maximum supported version 2").
           # setup-go installs go.mod's `toolchain` line exactly; without that
@@ -25,12 +25,18 @@ jobs:
           go-version-file: go.mod
       - name: Clean Go Module Cache (needed for cilint in some cases)
         run: go clean -modcache
-      - name: golangci-lint
+      # golangci-lint itself runs in the shared Quality workflow
+      # (.github/workflows/quality.yml). `golangci-lint run` accepts a
+      # misspelled key in .golangci.yml and ignores it; only the schema check
+      # catches it, and the shared workflow does not run it yet, so it runs
+      # here. Keep the version equal to the shared workflow's pin.
+      - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          # Fleet-wide pin (matches luthersystems/ui-core): an exact patch so
-          # lint results don't shift under a floating minor.
-          version: v2.13.2
+          version: v2.15.0
+          install-only: true
+      - name: golangci-lint config schema
+        run: golangci-lint config verify
       - name: Run CI tests
         run: script -q -e -c "make citest"
   # govulncheck runs in security.yml, which calls the shared Security
