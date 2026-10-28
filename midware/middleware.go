@@ -118,11 +118,13 @@ func (h *pathOverridesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 // leading and trailing whitespace trimmed.  ServerResponseHeader overwrites
 // any Server header that was set earlier (by another middleware).
 //
-// ServerResponseHeader will panic immediately if the primary component is not
-// a valid Server field value (RFC 7230 field-value, US-ASCII only) that starts
-// with a product: a token, optionally followed by "/" and a version token.  It
-// is recommended that the primary component be the result of ServerFixed
-// called with a const, non-empty name argument.
+// ServerResponseHeader will panic immediately if the primary component is
+// empty or is not a valid field value (RFC 7230 section 3.2, US-ASCII only):
+// a control character such as CR or LF, or non-ASCII text, panics.  The
+// product grammar (name/version) is not enforced, so a version string such
+// as "(devel)" that worked before still works.  It is recommended that the
+// primary component be the result of ServerFixed called with a const,
+// non-empty name argument.
 //
 // Each secondary component is called once per request.  A value that is not
 // a valid field value (for example one holding CR, LF, NUL or another control
@@ -132,7 +134,11 @@ func ServerResponseHeader(primary string, secondary ...func() string) Middleware
 	primary = strings.TrimSpace(primary)
 	// The primary is fixed at construction, so a bad one is a programming
 	// error and panicking surfaces it at startup rather than on a request.
-	if !validServerPrimary(primary) {
+	// Only the characters that could inject header content are refused, not
+	// the product grammar: callers pass config values (service name, build
+	// version) that their own config checks only require to be non-empty,
+	// and a stricter rule would turn a cosmetic mismatch into a crash.
+	if !validFieldValue(primary) {
 		panic("http server header primary component is invalid")
 	}
 	return Func(func(next http.Handler) http.Handler {
@@ -140,48 +146,15 @@ func ServerResponseHeader(primary string, secondary ...func() string) Middleware
 	})
 }
 
-// validServerPrimary reports whether s is a field value whose first word is
-// a product (RFC 7231 section 7.4.2: Server = product *( RWS ( product /
-// comment ) )).  Only the first word is held to the product grammar: the
-// rest may be products or comments, and a field-value check is what keeps
-// it from breaking the header.
-func validServerPrimary(s string) bool {
-	if !validFieldValue(s) {
-		return false
-	}
-	first, _, _ := strings.Cut(strings.ReplaceAll(s, "\t", " "), " ")
-	name, version, hasVersion := strings.Cut(first, "/")
-	if !validToken(name) {
-		return false
-	}
-	return !hasVersion || validToken(version)
-}
-
-// validToken reports whether s is a non-empty RFC 7230 token (section
-// 3.2.6): visible US-ASCII other than the delimiters.
-func validToken(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := range len(s) {
-		c := s[i]
-		if c <= ' ' || c >= 0x7f || strings.IndexByte(`"(),/:;<=>?@[\]{}`, c) >= 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // validFieldValue reports whether s is a non-empty RFC 7230 field-value
-// (section 3.2) with no leading or trailing whitespace: visible US-ASCII,
-// with SP and HTAB allowed between them.  Every other control character is
+// (section 3.2): visible US-ASCII, with SP and HTAB allowed between them.  Every other control character is
 // refused, CR and LF most of all, since they would end the header.  RFC 7230
 // still admits obs-text (bytes 0x80-0xFF), but it says new fields should
 // stay within US-ASCII and clients read obs-text inconsistently, so it is
-// refused too.  The caller trims, which is why edge whitespace is not
-// allowed here.
+// refused too.  Callers trim with strings.TrimSpace first, so s has no edge
+// whitespace here.
 func validFieldValue(s string) bool {
-	if s == "" || isFieldSpace(s[0]) || isFieldSpace(s[len(s)-1]) {
+	if s == "" {
 		return false
 	}
 	for i := range len(s) {
@@ -249,7 +222,8 @@ func (h *serverListHandler) header() string {
 //
 // The name argument of ServerFixed should be non-empty but that is not
 // enforced.  If passed two empty strings ServerFixed will return an empty
-// string.
+// string, which ServerResponseHeader refuses as a primary component, as it
+// refuses any control character or non-ASCII text in name or version.
 func ServerFixed(name string, version string) string {
 	if version == "" {
 		return strings.TrimSpace(name)
