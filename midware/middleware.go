@@ -118,24 +118,82 @@ func (h *pathOverridesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 // leading and trailing whitespace trimmed.  ServerResponseHeader overwrites
 // any Server header that was set earlier (by another middleware).
 //
-// ServerResponseHeader will panic immediately if the primary component does
-// not contain a valid token (RFC2616).  It is recommended that the primary
-// component be the result of ServerFixed called with a const, non-empty name
-// argument.
+// ServerResponseHeader will panic immediately if the primary component is not
+// a valid Server field value (RFC 7230 field-value, US-ASCII only) that starts
+// with a product: a token, optionally followed by "/" and a version token.  It
+// is recommended that the primary component be the result of ServerFixed
+// called with a const, non-empty name argument.
 //
-// BUG(#133): Neither ServerResponseHeader nor its returned middleware check
-// components for invalid control characters.  Because of this it is important
-// that application end users and unchecked code not be permitted to inject
-// content into server response header components.
+// Each secondary component is called once per request.  A value that is not
+// a valid field value (for example one holding CR, LF, NUL or another control
+// character, or non-ASCII text) is dropped from the header, so a component an
+// end user can influence cannot inject header content.
 func ServerResponseHeader(primary string, secondary ...func() string) Middleware {
 	primary = strings.TrimSpace(primary)
-	if primary == "" {
+	// The primary is fixed at construction, so a bad one is a programming
+	// error and panicking surfaces it at startup rather than on a request.
+	if !validServerPrimary(primary) {
 		panic("http server header primary component is invalid")
 	}
 	return Func(func(next http.Handler) http.Handler {
 		return &serverListHandler{p: primary, s: secondary, next: next}
 	})
 }
+
+// validServerPrimary reports whether s is a field value whose first word is
+// a product (RFC 7231 section 7.4.2: Server = product *( RWS ( product /
+// comment ) )).  Only the first word is held to the product grammar: the
+// rest may be products or comments, and a field-value check is what keeps
+// it from breaking the header.
+func validServerPrimary(s string) bool {
+	if !validFieldValue(s) {
+		return false
+	}
+	first, _, _ := strings.Cut(strings.ReplaceAll(s, "\t", " "), " ")
+	name, version, hasVersion := strings.Cut(first, "/")
+	if !validToken(name) {
+		return false
+	}
+	return !hasVersion || validToken(version)
+}
+
+// validToken reports whether s is a non-empty RFC 7230 token (section
+// 3.2.6): visible US-ASCII other than the delimiters.
+func validToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		if c <= ' ' || c >= 0x7f || strings.IndexByte(`"(),/:;<=>?@[\]{}`, c) >= 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// validFieldValue reports whether s is a non-empty RFC 7230 field-value
+// (section 3.2) with no leading or trailing whitespace: visible US-ASCII,
+// with SP and HTAB allowed between them.  Every other control character is
+// refused, CR and LF most of all, since they would end the header.  RFC 7230
+// still admits obs-text (bytes 0x80-0xFF), but it says new fields should
+// stay within US-ASCII and clients read obs-text inconsistently, so it is
+// refused too.  The caller trims, which is why edge whitespace is not
+// allowed here.
+func validFieldValue(s string) bool {
+	if s == "" || isFieldSpace(s[0]) || isFieldSpace(s[len(s)-1]) {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		if !isFieldSpace(c) && (c < 0x21 || c > 0x7e) {
+			return false
+		}
+	}
+	return true
+}
+
+func isFieldSpace(c byte) bool { return c == ' ' || c == '\t' }
 
 type serverListHandler struct {
 	p    string
@@ -167,11 +225,17 @@ func (h *serverListHandler) header() string {
 	var b bytes.Buffer
 	b.WriteString(h.p) // space has already been trimmed
 	for i := range h.s {
+		// Call each component once and write the value that was checked.
+		// A second call could return something different from the value
+		// that passed the check.
 		s := strings.TrimSpace(h.s[i]())
-		if s != "" {
-			b.WriteByte(' ')
-			b.WriteString(h.s[i]())
+		if !validFieldValue(s) {
+			continue
 		}
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(s)
 	}
 	return b.String()
 }
