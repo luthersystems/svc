@@ -96,6 +96,99 @@ func TestServerResponseHeader(t *testing.T) {
 	})
 }
 
+// serverHeader runs h once and returns the Server header it set. It reads
+// the recorder rather than a real response because net/http rewrites some
+// control characters on the wire, which would hide what the middleware set.
+func serverHeader(t *testing.T, h http.Handler) []string {
+	t.Helper()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	return w.Header().Values("Server")
+}
+
+func TestServerResponseHeaderPrimaryValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		primary string
+		want    string // empty means ServerResponseHeader must panic
+	}{
+		{name: "token", primary: "svc", want: "svc"},
+		{name: "token and version", primary: "svc/1.0", want: "svc/1.0"},
+		{name: "trimmed", primary: " svc/1.0\t", want: "svc/1.0"},
+		{name: "product then comment", primary: "svc/1.0 (linux)", want: "svc/1.0 (linux)"},
+		{name: "two products", primary: "svc/1.0 lib/2", want: "svc/1.0 lib/2"},
+		{name: "empty", primary: ""},
+		{name: "whitespace", primary: " \t "},
+		{name: "CRLF injection", primary: "svc\r\nSet-Cookie: a=b"},
+		{name: "bare LF", primary: "svc\nX: y"},
+		{name: "NUL", primary: "svc\x00"},
+		{name: "DEL", primary: "svc\x7f"},
+		{name: "other control", primary: "svc\x1b[31m"},
+		{name: "non-ASCII", primary: "caf\u00e9"},
+		// The product grammar is not enforced: these come from config
+		// values that oracle.Config only requires to be non-empty, and they
+		// were accepted before control characters were checked.
+		{name: "go build devel version", primary: "svc/(devel)", want: "svc/(devel)"},
+		{name: "separator in version", primary: "svc/1.0@rc", want: "svc/1.0@rc"},
+		{name: "empty version", primary: "svc/", want: "svc/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.want == "" {
+				assert.Panics(t, func() { ServerResponseHeader(tt.primary) })
+				return
+			}
+			h := ServerResponseHeader(tt.primary).Wrap(basicHandler)
+			assert.Equal(t, []string{tt.want}, serverHeader(t, h))
+		})
+	}
+}
+
+func TestServerResponseHeaderSecondaryValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		secondary string
+		want      string
+	}{
+		{name: "product", secondary: "lib/2", want: "svc a lib/2 b"},
+		{name: "comment", secondary: "(build 7)", want: "svc a (build 7) b"},
+		{name: "trimmed", secondary: "  lib/2 ", want: "svc a lib/2 b"},
+		{name: "inner tab kept", secondary: "lib/2\t(x)", want: "svc a lib/2\t(x) b"},
+		{name: "empty dropped", secondary: "", want: "svc a b"},
+		{name: "CRLF injection dropped", secondary: "lib\r\nSet-Cookie: a=b", want: "svc a b"},
+		{name: "bare CR dropped", secondary: "lib\rx", want: "svc a b"},
+		{name: "NUL dropped", secondary: "lib\x00", want: "svc a b"},
+		{name: "DEL dropped", secondary: "lib\x7f", want: "svc a b"},
+		{name: "non-ASCII dropped", secondary: "caf\u00e9", want: "svc a b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := ServerResponseHeader("svc",
+				ServerFixedFunc("a", ""),
+				func() string { return tt.secondary },
+				ServerFixedFunc("b", ""),
+			).Wrap(basicHandler)
+			assert.Equal(t, []string{tt.want}, serverHeader(t, h))
+		})
+	}
+}
+
+// TestServerResponseHeaderSecondaryCalledOnce pins that a secondary component
+// is read once per request. Reading it twice let a component pass the check
+// on the first call and write something else on the second.
+func TestServerResponseHeaderSecondaryCalledOnce(t *testing.T) {
+	calls := 0
+	h := ServerResponseHeader("svc", func() string {
+		calls++
+		if calls%2 == 1 {
+			return "lib/2"
+		}
+		return "lib\r\nSet-Cookie: a=b"
+	}).Wrap(basicHandler)
+	assert.Equal(t, []string{"svc lib/2"}, serverHeader(t, h))
+	assert.Equal(t, 1, calls)
+}
+
 func TestTraceHeaders(t *testing.T) {
 	h := TraceHeaders("", false).Wrap(basicHandler)
 	testServer(t, h, func(t *testing.T, server *httptest.Server) {
