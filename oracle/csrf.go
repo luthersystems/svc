@@ -3,13 +3,13 @@
 package oracle
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"strings"
+
+	jwtgo "github.com/golang-jwt/jwt/v4"
+	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 )
 
 // CSRFTokenHeader is the HTTP request header that carries the CSRF token in
@@ -46,10 +46,7 @@ func csrfDoubleSubmitOK(r *http.Request, cookieName string) bool {
 	if !ok {
 		return true
 	}
-	nonce, ok := unverifiedNonce(token)
-	if !ok {
-		return false
-	}
+	nonce := unverifiedNonce(token)
 	if nonce == "" {
 		return true
 	}
@@ -76,36 +73,15 @@ func authCookieValue(r *http.Request, name string) (string, bool) {
 	return "", false
 }
 
-// unverifiedNonce reads the nonce claim of a JWT without verifying it. A
-// token whose payload does not decode has no claims the verifier could
-// accept, so it reports an empty nonce and leaves the refusal to the
-// verifier. It reports false only for a nonce claim that is not a string,
-// which fails closed.
-func unverifiedNonce(token string) (string, bool) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return "", true
+// unverifiedNonce reads the nonce claim of a JWT without verifying it. It
+// decodes the token as the SDK's verifier does (golang-jwt, into the SDK's
+// claims struct), so that it reads the nonce the verifier reads. A token
+// that does not decode reads as having no nonce: the verifier decodes it
+// the same way first, so it refuses that token.
+func unverifiedNonce(token string) string {
+	var claims jwt.Claims
+	if _, _, err := jwtgo.NewParser().ParseUnverified(token, &claims); err != nil {
+		return ""
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", true
-	}
-	// Decode as golang-jwt does into the SDK's claims struct (a json.Decoder,
-	// which ignores data after the first value, into a struct field, which
-	// matches the key ignoring case), so that this reads the nonce the
-	// verifier reads.
-	var fields struct {
-		Nonce json.RawMessage `json:"nonce"`
-	}
-	if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&fields); err != nil {
-		return "", true
-	}
-	if fields.Nonce == nil {
-		return "", true
-	}
-	var nonce string
-	if err := json.Unmarshal(fields.Nonce, &nonce); err != nil {
-		return "", false
-	}
-	return nonce, true
+	return claims.Nonce
 }

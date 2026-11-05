@@ -88,7 +88,8 @@ func TestCSRFDoubleSubmitOK(t *testing.T) {
 		// GetValue reads only the first Cookie header.
 		{"POST, auth cookie in a second Cookie header", http.MethodPost, []string{"other=1", cookie(withNonce)}, nil, true},
 		{"POST, junk token", http.MethodPost, []string{cookie("junk")}, nil, true},
-		{"POST, nonce not a string", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":1}`))}, nil, false},
+		{"POST, nonce not a string", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":1}`))}, nil, true},
+		{"POST, later null in another case", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":"n","Nonce":null}`))}, nil, false},
 		{"POST, nonce key in another case", http.MethodPost, []string{cookie(unsignedToken(`{"NONCE":"n"}`))}, nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,22 +110,24 @@ func TestUnverifiedNonce(t *testing.T) {
 		name  string
 		token string
 		nonce string
-		ok    bool
 	}{
-		{"nonce", unsignedToken(`{"nonce":"n"}`), "n", true},
-		{"no nonce", unsignedToken(`{"sub":"s"}`), "", true},
-		{"null nonce", unsignedToken(`{"nonce":null}`), "", true},
-		{"nonce key in another case", unsignedToken(`{"Nonce":"n"}`), "n", true},
-		{"data after the claims", unsignedToken(`{"nonce":"n"} x`), "n", true},
-		{"nonce not a string", unsignedToken(`{"nonce":["n"]}`), "", false},
-		{"not a JWT", "junk", "", true},
-		{"bad base64", "a.!!!.c", "", true},
-		{"bad JSON", unsignedToken(`[`), "", true},
+		{"nonce", unsignedToken(`{"nonce":"n"}`), "n"},
+		{"no nonce", unsignedToken(`{"sub":"s"}`), ""},
+		{"null nonce", unsignedToken(`{"nonce":null}`), ""},
+		{"nonce key in another case", unsignedToken(`{"Nonce":"n"}`), "n"},
+		// A null in a later key of another case leaves the nonce as the
+		// verifier's struct reads it.
+		{"later null in another case", unsignedToken(`{"nonce":"n","Nonce":null}`), "n"},
+		{"later value in another case", unsignedToken(`{"nonce":"a","NONCE":"b"}`), "b"},
+		{"data after the claims", unsignedToken(`{"nonce":"n"} x`), "n"},
+		// The verifier cannot decode these, so it refuses the token.
+		{"nonce not a string", unsignedToken(`{"nonce":["n"]}`), ""},
+		{"not a JWT", "junk", ""},
+		{"bad base64", "a.!!!.c", ""},
+		{"bad JSON", unsignedToken(`[`), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			nonce, ok := unverifiedNonce(tc.token)
-			require.Equal(t, tc.ok, ok)
-			require.Equal(t, tc.nonce, nonce)
+			require.Equal(t, tc.nonce, unverifiedNonce(tc.token))
 		})
 	}
 }
