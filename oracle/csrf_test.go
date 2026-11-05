@@ -15,6 +15,8 @@ import (
 
 	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -317,8 +319,9 @@ func TestFindCookieAndGatewayHeaderValues(t *testing.T) {
 	require.Equal(t, "t1", got.Value)
 }
 
-// TestCSRFRefusalBody checks that a refusal is the gateway's JSON error, a
-// security exception with 403, as a gateway route's PermissionDenied is.
+// TestCSRFRefusalBody checks that a refusal is logged and is the gateway's
+// JSON error, a security exception with 403, as a gateway route's
+// PermissionDenied is.
 func TestCSRFRefusalBody(t *testing.T) {
 	orc := newCSRFTestOracle(t, true)
 	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
@@ -326,11 +329,34 @@ func TestCSRFRefusalBody(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/hello", strings.NewReader("{}"))
 	r.Header.Set("Cookie", "svc_authorization="+token)
+	r.Header.Set(orc.cfg.RequestIDHeader, "req-1")
+	r.Header.Set(CSRFTokenHeader, "wrong-header-value")
+	logs := logtest.NewLocal(orc.logBase.Logger)
+	t.Cleanup(logs.Reset)
 	w := httptest.NewRecorder()
 	orc.csrfProtect(next).ServeHTTP(w, r)
 
+	// The refusal is logged with the request ID and path, and no token or
+	// header value.
+	var refusal *logrus.Entry
+	for _, e := range logs.AllEntries() {
+		if strings.Contains(e.Message, "CSRF check refused") {
+			refusal = e
+		}
+	}
+	require.NotNil(t, refusal, "refusal logged")
+	require.Equal(t, logrus.WarnLevel, refusal.Level)
+	require.Equal(t, "req-1", refusal.Data["req_id"])
+	require.Equal(t, "/v1/hello", refusal.Data["path"])
+	line, err := refusal.String()
+	require.NoError(t, err)
+	require.NotContains(t, line, token)
+	require.NotContains(t, line, "wrong-header-value")
+	require.NotContains(t, line, testNonce)
+
 	require.Equal(t, http.StatusForbidden, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.Contains(t, w.Body.String(), "req-1", "the exception carries the request ID")
 	var body struct {
 		Exception struct {
 			Type        string `json:"type"`

@@ -9,6 +9,9 @@ import (
 
 	jwtgo "github.com/golang-jwt/jwt/v4"
 	"github.com/luthersystems/lutherauth-sdk-go/jwt"
+	"github.com/luthersystems/svc/grpclogging"
+	"github.com/luthersystems/svc/midware"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -29,9 +32,18 @@ func (orc *Oracle) csrfProtect(next http.Handler) http.Handler {
 	errorHandler := orc.gatewayErrorHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !csrfDoubleSubmitOK(r, cookieName) {
+			ctx := grpclogging.NewContext(r.Context())
+			grpclogging.AddLogrusFields(ctx, logrus.Fields{
+				"req_id": orc.requestID(r),
+				"method": r.Method,
+				"path":   r.URL.Path,
+			})
+			// No token or header value is logged.
+			orc.Log(ctx).Warn("CSRF check refused a request: the " + CSRFTokenHeader +
+				" header does not match the auth cookie's nonce")
 			err := status.Error(codes.PermissionDenied,
 				"CSRF check failed: the "+CSRFTokenHeader+" header does not match the session")
-			errorHandler(r.Context(), nil, marshaler, w, r, err)
+			errorHandler(ctx, nil, marshaler, w, r, err)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -87,4 +99,13 @@ func unverifiedNonce(token string) string {
 		return ""
 	}
 	return claims.Nonce
+}
+
+// requestID is the request ID the trace middleware (midware.TraceHeaders)
+// put on the request.
+func (orc *Oracle) requestID(r *http.Request) string {
+	if id := r.Header.Get(orc.cfg.RequestIDHeader); id != "" {
+		return id
+	}
+	return r.Header.Get(midware.DefaultTraceHeader)
 }
