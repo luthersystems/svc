@@ -143,8 +143,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/luthersystems/elps v1.91.0 h1:UdVxirSTNRJdPTwkeJ6oZji+ZJ/cBkegiFOOFISMTxg=
 github.com/luthersystems/elps v1.91.0/go.mod h1:aXsONY1M3kUFzjQoslL7W1LAl2v0D+6bxgE/o/CpX0M=
-github.com/luthersystems/lutherauth-sdk-go v0.0.9 h1:LEnIYxI1mVbMEro/l1vWHSM77hN6KaGjRx/y9D7bFLA=
-github.com/luthersystems/lutherauth-sdk-go v0.0.9/go.mod h1:syYqJjScNdRXOban83YjxKk1zMapSR20gu+4DMbLpXU=
+github.com/luthersystems/lutherauth-sdk-go v0.0.12 h1:aMucmjVvYgYQPnaCDEa95euqO+HYZiWXmKvitShBGlY=
+github.com/luthersystems/lutherauth-sdk-go v0.0.12/go.mod h1:0jPqHtiifst2LtZB5A8s4uYAuMiB8nqQNU7OOiaQln4=
 github.com/luthersystems/shiroclient-sdk-go v0.17.1 h1:eQEiVUr856y3DijJWlGwizTOXB457xJXUjwOtBvro/4=
 github.com/luthersystems/shiroclient-sdk-go v0.17.1/go.mod h1:Zz0/W1eg7QOAEHoMFEzulR6ssozO+BgBkMIF/eF1Nf8=
 github.com/mattn/go-colorable v0.1.9/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
