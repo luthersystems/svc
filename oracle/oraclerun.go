@@ -54,7 +54,7 @@ func init() {
 // as grpc request metadata and forward to the oracle grpc server.  Forwarded
 // headers may be used for authentication flows, request tracing, etc.
 func (orc *Oracle) gatewayForwardedHeaders() []string {
-	return append([]string{
+	headers := append([]string{
 		"Cookie",
 		"X-Forwarded-For",
 		"User-Agent",
@@ -62,6 +62,10 @@ func (orc *Oracle) gatewayForwardedHeaders() []string {
 		"Referer",
 		orc.cfg.RequestIDHeader,
 	}, orc.cfg.ForwardedHeaders...)
+	if orc.cfg.CheckCSRFToken {
+		headers = append(headers, CSRFTokenHeader)
+	}
+	return headers
 }
 
 func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {

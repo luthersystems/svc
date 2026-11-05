@@ -62,6 +62,13 @@ type Config struct {
 	ForwardedHeaders []string
 	// InsecureCookies
 	InsecureCookies bool `yaml:"insecure-cookies"`
+	// CheckCSRFToken turns on the CSRF double-submit check for the auth
+	// cookie. When on, the gateway forwards the X-CSRF-Token request header
+	// to the gRPC server, and a token whose nonce claim is set is accepted
+	// only when that header equals the nonce. A token with no nonce (a
+	// service token, or a token from another issuer) is accepted without the
+	// header. Off by default: no header is forwarded and no check is made.
+	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.
 	extraJWKOptions []jwk.Option
 	// stopFns are functions that are called when the service stops.

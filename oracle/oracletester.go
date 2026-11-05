@@ -183,6 +183,12 @@ func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context
 	// Create a new test context.
 	ctx := MakeTestContext(t)
 
+	// With the CSRF check on, send the header a well-behaved frontend sends:
+	// the token's nonce.
+	if orc.cfg.CheckCSRFToken && claims.Nonce != "" {
+		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(CSRFTokenHeader, claims.Nonce))
+	}
+
 	// Use the auth cookie forwarder to set the token.
 	// GetValue will return the cached (last written) token if available,
 	// and if not, it will fall back to the incoming metadata.
