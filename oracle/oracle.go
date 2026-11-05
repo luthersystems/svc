@@ -225,7 +225,9 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 					oracle.Log,
 					jwkOptions...),
 				unchecked: claimsGetter,
-				exempt:    oracle.cfg.authCookieForwarder.hasServerValue,
+				exempt: func(ctx context.Context) bool {
+					return safeMethodRequest(ctx) || oracle.cfg.authCookieForwarder.hasServerValue(ctx)
+				},
 			}
 		}
 		oracle.claims = claims.NewGRPCClaims(claimsGetter, oracle.Log)

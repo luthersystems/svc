@@ -76,6 +76,11 @@ func (orc *Oracle) forwardedHeaderSet() map[string]struct{} {
 	for _, h := range headers {
 		set[strings.ToLower(h)] = struct{}{}
 	}
+	if orc.cfg.CheckCSRFToken {
+		// Only the gateway sets the method; a client header of that name
+		// must not reach the CSRF check.
+		delete(set, HTTPMethodMetadataKey)
+	}
 	return set
 }
 
@@ -98,6 +103,10 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 				DiscardUnknown: orc.cfg.DiscardUnknown,
 			},
 		}),
+	}
+	if orc.cfg.CheckCSRFToken {
+		// The CSRF check skips safe methods, so it needs the HTTP method.
+		opts = append(opts, runtime.WithMetadata(httpMethodAnnotator))
 	}
 	opts = append(opts, orc.cfg.gatewayOpts...)
 

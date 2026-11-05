@@ -68,8 +68,12 @@ type Config struct {
 	// whatever its issuer, is accepted only when that header equals the
 	// nonce. A token with an empty or absent nonce (lutherauth's service
 	// tokens and Vercel OIDC tokens have none) is accepted without the
-	// header. Off by default: no header is forwarded and no check is made.
-	// It needs AddAuthCookieForwarder; Valid fails without it.
+	// header. The check applies only to unsafe methods: the gateway passes
+	// the HTTP method (metadata HTTPMethodMetadataKey), and GET, HEAD and
+	// OPTIONS skip the check. A gRPC call that did not come through the
+	// gateway has no method and is checked. Off by default: no header is
+	// forwarded and no check is made. It needs AddAuthCookieForwarder;
+	// Valid fails without it.
 	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.
 	extraJWKOptions []jwk.Option

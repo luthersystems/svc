@@ -6,6 +6,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +142,13 @@ func (s *claimsHelloServer) Ping(ctx context.Context, _ *emptypb.Empty) (*emptyp
 	return &emptypb.Empty{}, nil
 }
 
+func (s *claimsHelloServer) SayHello(ctx context.Context, _ *hellov1.HelloRequest) (*hellov1.HelloResponse, error) {
+	if _, err := s.orc.GetClaims(ctx); err != nil {
+		return nil, err
+	}
+	return &hellov1.HelloResponse{}, nil
+}
+
 // TestCSRFCheckThroughGateway sends HTTP requests through the oracle's
 // gateway mux, so it checks that the header reaches the claims check.
 func TestCSRFCheckThroughGateway(t *testing.T) {
@@ -167,37 +175,99 @@ func TestCSRFCheckThroughGateway(t *testing.T) {
 		go func() { _ = gwSrv.Serve(gwLis) }()
 		t.Cleanup(func() { _ = gwSrv.Close() })
 
-		ping := func(t *testing.T, nonce string, csrf *string) int {
+		// call sends GET /v1/ping (a safe method) or POST /v1/hello.
+		call := func(t *testing.T, method, nonce string, csrf *string, extra map[string]string) int {
 			t.Helper()
 			token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(nonce))
 			require.NoError(t, err)
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-				"http://"+gwLis.Addr().String()+"/v1/ping", nil)
+			url, body := "http://"+gwLis.Addr().String()+"/v1/ping", ""
+			if method != http.MethodGet && method != http.MethodHead {
+				url, body = "http://"+gwLis.Addr().String()+"/v1/hello", "{}"
+			}
+			req, err := http.NewRequestWithContext(t.Context(), method, url, strings.NewReader(body))
 			require.NoError(t, err)
 			req.Header.Set("Cookie", "svc_authorization="+token)
 			if csrf != nil {
 				req.Header.Set(CSRFTokenHeader, *csrf)
+			}
+			for k, v := range extra {
+				req.Header.Set(k, v)
 			}
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			return resp.StatusCode
 		}
+		get := http.MethodGet
+		post := http.MethodPost
 
 		if checkCSRF {
 			t.Run("on", func(t *testing.T) {
-				require.Equal(t, http.StatusUnauthorized, ping(t, testNonce, nil))
-				require.Equal(t, http.StatusOK, ping(t, testNonce, ptr(testNonce)))
-				require.Equal(t, http.StatusUnauthorized, ping(t, testNonce, ptr("wrong")))
-				require.Equal(t, http.StatusOK, ping(t, "", nil))
+				// An unsafe method is checked.
+				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil, nil))
+				require.Equal(t, http.StatusOK, call(t, post, testNonce, ptr(testNonce), nil))
+				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, ptr("wrong"), nil))
+				require.Equal(t, http.StatusOK, call(t, post, "", nil, nil))
+				// A safe method is not.
+				require.Equal(t, http.StatusOK, call(t, get, testNonce, nil, nil))
+				require.Equal(t, http.StatusOK, call(t, get, testNonce, ptr("wrong"), nil))
+				// A client cannot claim a safe method with a header.
+				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil,
+					map[string]string{HTTPMethodMetadataKey: http.MethodGet}))
+				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil,
+					map[string]string{"Grpc-Metadata-" + HTTPMethodMetadataKey: http.MethodGet}))
 			})
 		} else {
 			t.Run("off", func(t *testing.T) {
-				require.Equal(t, http.StatusOK, ping(t, testNonce, nil))
-				require.Equal(t, http.StatusOK, ping(t, testNonce, ptr("wrong")))
-				require.Equal(t, http.StatusOK, ping(t, "", nil))
+				require.Equal(t, http.StatusOK, call(t, post, testNonce, nil, nil))
+				require.Equal(t, http.StatusOK, call(t, post, testNonce, ptr("wrong"), nil))
+				require.Equal(t, http.StatusOK, call(t, get, testNonce, nil, nil))
+				require.Equal(t, http.StatusOK, call(t, post, "", nil, nil))
 			})
 		}
+	}
+}
+
+// TestCSRFCheckSafeMethods checks the method exemption without the
+// gateway: a direct gRPC call, with no method, is checked.
+func TestCSRFCheckSafeMethods(t *testing.T) {
+	orc := newCSRFTestOracle(t, true)
+	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
+	require.NoError(t, err)
+	withMethod := func(methods ...string) context.Context {
+		ctx := cookieContext(t, token, nil)
+		kv := make([]string, 0, 2*len(methods))
+		for _, m := range methods {
+			kv = append(kv, HTTPMethodMetadataKey, m)
+		}
+		return appendIncomingMetadata(ctx, kv...)
+	}
+	for _, tc := range []struct {
+		name    string
+		methods []string
+		ok      bool
+	}{
+		{"no method", nil, false},
+		{"GET", []string{"GET"}, true},
+		{"HEAD", []string{"HEAD"}, true},
+		{"OPTIONS", []string{"OPTIONS"}, true},
+		{"lower case get", []string{"get"}, true},
+		{"POST", []string{"POST"}, false},
+		{"PUT", []string{"PUT"}, false},
+		{"PATCH", []string{"PATCH"}, false},
+		{"DELETE", []string{"DELETE"}, false},
+		{"empty", []string{""}, false},
+		{"two values", []string{"GET", "POST"}, false},
+		{"two safe values", []string{"GET", "GET"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := orc.GetClaims(withMethod(tc.methods...))
+			if tc.ok {
+				require.NoError(t, err)
+			} else {
+				require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
+			}
+		})
 	}
 }
 
