@@ -62,6 +62,26 @@ type Config struct {
 	ForwardedHeaders []string
 	// InsecureCookies
 	InsecureCookies bool `yaml:"insecure-cookies"`
+	// CheckCSRFToken turns on the CSRF double-submit check for the auth
+	// cookie. When on, the HTTP gateway refuses with 403 a POST, PUT, PATCH
+	// or DELETE (any method but GET, HEAD and OPTIONS) whose auth cookie
+	// holds a token with a non-empty nonce claim, whatever its issuer, unless
+	// the X-CSRF-Token header equals that nonce. lutherauth puts the nonce in
+	// the ui_csrf_token cookie, which page script reads, only with
+	// AUTH_OAUTH_PROTECT_CSRF on, so turn that on first. A token with an
+	// empty or absent nonce (lutherauth's service tokens and Vercel OIDC
+	// tokens have none) needs no header.
+	//
+	// GET, HEAD and OPTIONS are never checked, so a route must not change
+	// state on those methods: map a write to POST, PUT, PATCH or DELETE in
+	// its google.api.http option or HandlePath call, or the check does not
+	// protect it. A refusal is a 403 JSON security exception and a warning
+	// log line. The check reads the nonce without
+	// verifying the token; the gRPC server still verifies it. A gRPC call
+	// that does not come through the gateway is not a browser request and is
+	// not checked. Off by default. It needs AddAuthCookieForwarder; Valid
+	// fails without it.
+	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.
 	extraJWKOptions []jwk.Option
 	// stopFns are functions that are called when the service stops.
@@ -143,6 +163,11 @@ func (c *Config) Valid() error {
 	}
 	if c.Version == "" {
 		return errors.New("missing version")
+	}
+	if c.CheckCSRFToken && c.authCookieForwarder == nil {
+		// Without an auth cookie there are no claims to check, so the
+		// setting would do nothing and look as if it protected the service.
+		return errors.New("check CSRF token needs an auth cookie (AddAuthCookieForwarder)")
 	}
 	return nil
 }
