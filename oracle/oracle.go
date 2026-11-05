@@ -89,6 +89,10 @@ type Oracle struct {
 	// claims gets app claims from grpc contexts.
 	claims *claims.GRPCClaims
 
+	// forwardedHeaders is the set of lower case HTTP header names the
+	// gateway forwards as gRPC metadata (gatewayForwardedHeaders).
+	forwardedHeaders map[string]struct{}
+
 	// publicContentHandlers configures endpoints to serve public static
 	// content.
 	publicContentHandlers *http.ServeMux
@@ -182,6 +186,7 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 		publicContentHandlers: config.publicContentHandlers,
 	}
 	oracle.logBase = logrus.StandardLogger().WithFields(nil)
+	oracle.forwardedHeaders = oracle.forwardedHeaderSet()
 	for _, opt := range opts {
 		err = opt(oracle)
 		if err != nil {

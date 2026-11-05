@@ -68,13 +68,20 @@ func (orc *Oracle) gatewayForwardedHeaders() []string {
 	return headers
 }
 
-func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {
+// forwardedHeaderSet is gatewayForwardedHeaders as a set of lower case names,
+// built once by newOracle for incomingHeaderMatcher.
+func (orc *Oracle) forwardedHeaderSet() map[string]struct{} {
 	headers := orc.gatewayForwardedHeaders()
+	set := make(map[string]struct{}, len(headers))
+	for _, h := range headers {
+		set[strings.ToLower(h)] = struct{}{}
+	}
+	return set
+}
 
-	for i := range headers {
-		if strings.EqualFold(h, headers[i]) {
-			return h, true
-		}
+func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {
+	if _, ok := orc.forwardedHeaders[strings.ToLower(h)]; ok {
+		return h, true
 	}
 	return "", false
 }

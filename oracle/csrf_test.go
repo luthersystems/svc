@@ -200,3 +200,22 @@ func TestCSRFTokenFromMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "abc", got)
 }
+
+// TestIncomingHeaderMatcher checks the forwarded header set newOracle builds.
+func TestIncomingHeaderMatcher(t *testing.T) {
+	cfg := newTestConfig(t)
+	cfg.AddHeaderForwarder("X-My-Header")
+	orc, closeFn := NewTestOracle(t, cfg)
+	t.Cleanup(closeFn)
+
+	for _, h := range []string{"Cookie", "cookie", "X-Request-Id", "User-Agent", "X-My-Header", "x-my-header", "Referer"} {
+		got, ok := orc.incomingHeaderMatcher(h)
+		require.True(t, ok, h)
+		require.Equal(t, h, got)
+	}
+	for _, h := range []string{"Authorization", "X-Other", "Grpc-Metadata-Foo"} {
+		_, ok := orc.incomingHeaderMatcher(h)
+		require.False(t, ok, h)
+	}
+	require.Len(t, orc.forwardedHeaders, len(orc.gatewayForwardedHeaders()))
+}
