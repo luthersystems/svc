@@ -63,17 +63,18 @@ type Config struct {
 	// InsecureCookies
 	InsecureCookies bool `yaml:"insecure-cookies"`
 	// CheckCSRFToken turns on the CSRF double-submit check for the auth
-	// cookie. When on, the gateway forwards the X-CSRF-Token request header
-	// to the gRPC server, and any token whose nonce claim is not empty,
-	// whatever its issuer, is accepted only when that header equals the
-	// nonce. A token with an empty or absent nonce (lutherauth's service
-	// tokens and Vercel OIDC tokens have none) is accepted without the
-	// header. The check applies only to unsafe methods: the gateway passes
-	// the HTTP method (metadata HTTPMethodMetadataKey), and GET, HEAD and
-	// OPTIONS skip the check. A gRPC call that did not come through the
-	// gateway has no method and is checked. Off by default: no header is
-	// forwarded and no check is made. It needs AddAuthCookieForwarder;
-	// Valid fails without it.
+	// cookie. When on, the HTTP gateway refuses with 403 a POST, PUT, PATCH
+	// or DELETE (any method but GET, HEAD and OPTIONS) whose auth cookie
+	// holds a token with a non-empty nonce claim, whatever its issuer, unless
+	// the X-CSRF-Token header equals that nonce. lutherauth puts the nonce in
+	// the ui_csrf_token cookie, which page script reads, only with
+	// AUTH_OAUTH_PROTECT_CSRF on, so turn that on first. A token with an
+	// empty or absent nonce (lutherauth's service tokens and Vercel OIDC
+	// tokens have none) needs no header. The check reads the nonce without
+	// verifying the token; the gRPC server still verifies it. A gRPC call
+	// that does not come through the gateway is not a browser request and is
+	// not checked. Off by default. It needs AddAuthCookieForwarder; Valid
+	// fails without it.
 	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.
 	extraJWKOptions []jwk.Option

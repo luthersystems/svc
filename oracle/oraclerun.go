@@ -54,7 +54,7 @@ func init() {
 // as grpc request metadata and forward to the oracle grpc server.  Forwarded
 // headers may be used for authentication flows, request tracing, etc.
 func (orc *Oracle) gatewayForwardedHeaders() []string {
-	headers := append([]string{
+	return append([]string{
 		"Cookie",
 		"X-Forwarded-For",
 		"User-Agent",
@@ -62,10 +62,6 @@ func (orc *Oracle) gatewayForwardedHeaders() []string {
 		"Referer",
 		orc.cfg.RequestIDHeader,
 	}, orc.cfg.ForwardedHeaders...)
-	if orc.cfg.CheckCSRFToken {
-		headers = append(headers, CSRFTokenHeader)
-	}
-	return headers
 }
 
 // forwardedHeaderSet is gatewayForwardedHeaders as a set of lower case names,
@@ -75,11 +71,6 @@ func (orc *Oracle) forwardedHeaderSet() map[string]struct{} {
 	set := make(map[string]struct{}, len(headers))
 	for _, h := range headers {
 		set[strings.ToLower(h)] = struct{}{}
-	}
-	if orc.cfg.CheckCSRFToken {
-		// Only the gateway sets the method; a client header of that name
-		// must not reach the CSRF check.
-		delete(set, HTTPMethodMetadataKey)
 	}
 	return set
 }
@@ -103,10 +94,6 @@ func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 				DiscardUnknown: orc.cfg.DiscardUnknown,
 			},
 		}),
-	}
-	if orc.cfg.CheckCSRFToken {
-		// The CSRF check skips safe methods, so it needs the HTTP method.
-		opts = append(opts, runtime.WithMetadata(httpMethodAnnotator))
 	}
 	opts = append(opts, orc.cfg.gatewayOpts...)
 
@@ -167,7 +154,15 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler
 		pathOverrides,
 	}
 
-	return jsonapi, middleware.Wrap(jsonapi)
+	var handler http.Handler = jsonapi
+	if orc.cfg.CheckCSRFToken {
+		// The CSRF double-submit check covers every route on the gateway
+		// mux, the routes a service adds with HandlePath included. The path
+		// overrides above (health check, swagger, public content) are not
+		// checked.
+		handler = csrfProtect(orc.cfg.authCookieForwarder.cookieName, jsonapi)
+	}
+	return jsonapi, middleware.Wrap(handler)
 }
 
 // GrpcGatewayConfig configures the grpc gateway used by the oracle.

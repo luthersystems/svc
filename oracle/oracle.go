@@ -211,25 +211,11 @@ func newOracle(config *Config, opts ...option) (*Oracle, error) {
 
 	if oracle.cfg.authCookieForwarder != nil {
 		jwkOptions := append(oracle.cfg.extraJWKOptions, jwk.WithCache())
-		// With no CSRF getter the SDK makes no CSRF check.
 		claimsGetter := claims.NewJWKClaims(
 			oracle.cfg.authCookieForwarder.GetValue,
 			nil,
 			oracle.Log,
 			jwkOptions...)
-		if oracle.cfg.CheckCSRFToken {
-			claimsGetter = &csrfClaims{
-				checked: claims.NewJWKClaims(
-					oracle.cfg.authCookieForwarder.GetValue,
-					csrfTokenFromMetadata,
-					oracle.Log,
-					jwkOptions...),
-				unchecked: claimsGetter,
-				exempt: func(ctx context.Context) bool {
-					return safeMethodRequest(ctx) || oracle.cfg.authCookieForwarder.hasServerValue(ctx)
-				},
-			}
-		}
 		oracle.claims = claims.NewGRPCClaims(claimsGetter, oracle.Log)
 	}
 

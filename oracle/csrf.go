@@ -3,13 +3,13 @@
 package oracle
 
 import (
-	"context"
+	"bytes"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"strings"
-
-	"github.com/luthersystems/lutherauth-sdk-go/claims"
-	"github.com/luthersystems/lutherauth-sdk-go/jwt"
-	"google.golang.org/grpc/metadata"
 )
 
 // CSRFTokenHeader is the HTTP request header that carries the CSRF token in
@@ -18,65 +18,94 @@ import (
 // the frontend sends its value back in this header.
 const CSRFTokenHeader = "X-CSRF-Token" //nolint:gosec // G101: a header name, not a credential
 
-// HTTPMethodMetadataKey is the gRPC metadata key under which the gateway
-// passes the HTTP request method to the gRPC server when
-// Config.CheckCSRFToken is on. The gateway never forwards a client header of
-// this name.
-const HTTPMethodMetadataKey = "luther-http-method"
-
-// httpMethodAnnotator is a gateway metadata annotator that passes the HTTP
-// request method.
-func httpMethodAnnotator(_ context.Context, r *http.Request) metadata.MD {
-	return metadata.Pairs(HTTPMethodMetadataKey, r.Method)
+// csrfProtect makes the CSRF double-submit check (Config.CheckCSRFToken)
+// before next serves the request. It refuses with 403, not 401: the session
+// is valid, so a frontend must not treat the refusal as an expired login.
+func csrfProtect(cookieName string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !csrfDoubleSubmitOK(r, cookieName) {
+			http.Error(w, "CSRF check failed: the "+CSRFTokenHeader+" header does not match the session", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
-// IsSafeHTTPMethod reports whether method is GET, HEAD or OPTIONS. A safe
-// method changes nothing, so the CSRF check skips it (as OWASP advises): a
-// browser navigation or download link cannot send a custom header.
-func IsSafeHTTPMethod(method string) bool {
-	switch method {
+// csrfDoubleSubmitOK reports whether a request passes the double-submit
+// check. GET, HEAD and OPTIONS pass: they change nothing, and a top-level
+// navigation cannot send the header. On any other method, a request whose
+// auth cookie holds a token with a nonce claim must send that nonce in the
+// X-CSRF-Token header. A request with an Authorization header is checked
+// too, because the oracle reads the token from the cookie even then.
+func csrfDoubleSubmitOK(r *http.Request, cookieName string) bool {
+	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return true
 	}
-	return false
-}
-
-// safeMethodRequest reports whether the gateway marked the request with a
-// safe HTTP method. A request without exactly one method value (a direct
-// gRPC call) is not safe, so it is checked.
-func safeMethodRequest(ctx context.Context) bool {
-	md, _ := metadata.FromIncomingContext(ctx)
-	vals := md.Get(HTTPMethodMetadataKey)
-	return len(vals) == 1 && IsSafeHTTPMethod(strings.ToUpper(vals[0]))
-}
-
-// csrfTokenFromMetadata reads the CSRF token header from the incoming gRPC
-// metadata. The gateway puts it there only when Config.CheckCSRFToken is on.
-// A missing header reads as "", which never equals a nonce, so the SDK
-// refuses the token.
-func csrfTokenFromMetadata(ctx context.Context) (string, error) {
-	return GetIncomingHeader(ctx, CSRFTokenHeader), nil
-}
-
-// csrfClaims verifies the auth token, and makes the CSRF check only for an
-// unsafe HTTP method (POST, PUT, PATCH, DELETE, or a gRPC call that did not
-// come through the gateway) and only when the token came from the cookie the
-// client sent. A token the server wrote with SetValue earlier in the same
-// request (a login) is not compared with the request's header, which belongs
-// to the old session.
-type csrfClaims struct {
-	// checked verifies the token and makes the CSRF check.
-	checked claims.Getter
-	// unchecked verifies the token without the CSRF check.
-	unchecked claims.Getter
-	// exempt reports whether a request skips the CSRF check.
-	exempt func(ctx context.Context) bool
-}
-
-// Claims implements claims.Getter.
-func (c *csrfClaims) Claims(ctx context.Context) (*jwt.Claims, error) {
-	if c.exempt(ctx) {
-		return c.unchecked.Claims(ctx)
+	token, ok := authCookieValue(r, cookieName)
+	if !ok {
+		return true
 	}
-	return c.checked.Claims(ctx)
+	nonce, ok := unverifiedNonce(token)
+	if !ok {
+		return false
+	}
+	if nonce == "" {
+		return true
+	}
+	// Hashing first makes the comparison constant time whatever the lengths.
+	got := sha256.Sum256([]byte(r.Header.Get(CSRFTokenHeader)))
+	want := sha256.Sum256([]byte(nonce))
+	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
+}
+
+// authCookieValue returns the auth cookie as CookieForwarder.GetValue reads
+// it from the forwarded metadata: from the first Cookie header, the first
+// cookie whose name matches, ignoring case.
+func authCookieValue(r *http.Request, name string) (string, bool) {
+	headers := r.Header.Values("Cookie")
+	if len(headers) == 0 {
+		return "", false
+	}
+	first := http.Request{Header: http.Header{"Cookie": headers[:1]}}
+	for _, c := range first.Cookies() {
+		if strings.EqualFold(c.Name, name) {
+			return c.Value, true
+		}
+	}
+	return "", false
+}
+
+// unverifiedNonce reads the nonce claim of a JWT without verifying it. A
+// token whose payload does not decode has no claims the verifier could
+// accept, so it reports an empty nonce and leaves the refusal to the
+// verifier. It reports false only for a nonce claim that is not a string,
+// which fails closed.
+func unverifiedNonce(token string) (string, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", true
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", true
+	}
+	// Decode as golang-jwt does into the SDK's claims struct (a json.Decoder,
+	// which ignores data after the first value, into a struct field, which
+	// matches the key ignoring case), so that this reads the nonce the
+	// verifier reads.
+	var fields struct {
+		Nonce json.RawMessage `json:"nonce"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&fields); err != nil {
+		return "", true
+	}
+	if fields.Nonce == nil {
+		return "", true
+	}
+	var nonce string
+	if err := json.Unmarshal(fields.Nonce, &nonce); err != nil {
+		return "", false
+	}
+	return nonce, true
 }

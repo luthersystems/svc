@@ -4,8 +4,10 @@ package oracle
 
 import (
 	"context"
+	"encoding/base64"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -14,10 +16,8 @@ import (
 	hellov1 "github.com/luthersystems/svc/oracle/testservice/gen/go/proto/hello/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -38,98 +38,98 @@ func testClaims(nonce string) *jwt.Claims {
 	return c
 }
 
-// cookieContext is the context the gateway gives the gRPC server for a
-// browser request: the auth token in the Cookie header and, when csrf is
-// non-nil, the X-CSRF-Token header.
-func cookieContext(t *testing.T, token string, csrf *string) context.Context {
-	t.Helper()
-	md := metadata.Pairs("cookie", "svc_authorization="+token)
-	if csrf != nil {
-		md.Append(CSRFTokenHeader, *csrf)
-	}
-	return metadata.NewIncomingContext(MakeTestContext(t), md)
+// unsignedToken is a JWT with the given payload and no valid signature.
+func unsignedToken(payload string) string {
+	enc := base64.RawURLEncoding.EncodeToString
+	return enc([]byte(`{"alg":"RS256"}`)) + "." + enc([]byte(payload)) + ".sig"
 }
 
-func ptr(s string) *string { return &s }
-
-func TestCSRFCheck(t *testing.T) {
-	on := newCSRFTestOracle(t, true)
-	off := newCSRFTestOracle(t, false)
-
-	tests := []struct {
-		name     string
-		orc      *Oracle
-		nonce    string
-		header   *string
-		wantCode codes.Code
-	}{
-		{"on, nonce, no header", on, testNonce, nil, codes.Unauthenticated},
-		{"on, nonce, matching header", on, testNonce, ptr(testNonce), codes.OK},
-		{"on, nonce, wrong header", on, testNonce, ptr("ffff" + testNonce[4:]), codes.Unauthenticated},
-		{"on, nonce, empty header", on, testNonce, ptr(""), codes.Unauthenticated},
-		{"on, no nonce, no header", on, "", nil, codes.OK},
-		{"on, no nonce, any header", on, "", ptr("anything"), codes.OK},
-		{"off, nonce, no header", off, testNonce, nil, codes.OK},
-		{"off, nonce, wrong header", off, testNonce, ptr("wrong"), codes.OK},
-		{"off, no nonce, no header", off, "", nil, codes.OK},
+func TestCSRFDoubleSubmitOK(t *testing.T) {
+	orc := newCSRFTestOracle(t, true)
+	token := func(c *jwt.Claims) string {
+		tok, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(c)
+		require.NoError(t, err)
+		return tok
 	}
-	for _, tc := range tests {
+	withNonce := token(testClaims(testNonce))
+	noNonce := token(testClaims(""))
+	// The check covers a nonce whatever the token's issuer.
+	otherIssuer := jwt.NewClaims("workload", "https://oidc.example.test/team", "lutherapp:svc")
+	otherIssuer.Nonce = testNonce
+	otherIssuerNonce := token(otherIssuer)
+
+	cookie := func(tok string) string { return "svc_authorization=" + tok }
+	for _, tc := range []struct {
+		name    string
+		method  string
+		cookies []string
+		header  map[string]string
+		ok      bool
+	}{
+		{"POST, nonce, no header", http.MethodPost, []string{cookie(withNonce)}, nil, false},
+		{"POST, nonce, matching header", http.MethodPost, []string{cookie(withNonce)}, map[string]string{CSRFTokenHeader: testNonce}, true},
+		{"POST, nonce, wrong header", http.MethodPost, []string{cookie(withNonce)}, map[string]string{CSRFTokenHeader: "ffff" + testNonce[4:]}, false},
+		{"POST, nonce, prefix of the nonce", http.MethodPost, []string{cookie(withNonce)}, map[string]string{CSRFTokenHeader: testNonce[:8]}, false},
+		{"POST, nonce, empty header", http.MethodPost, []string{cookie(withNonce)}, map[string]string{CSRFTokenHeader: ""}, false},
+		{"PUT, nonce, no header", http.MethodPut, []string{cookie(withNonce)}, nil, false},
+		{"PATCH, nonce, no header", http.MethodPatch, []string{cookie(withNonce)}, nil, false},
+		{"DELETE, nonce, no header", http.MethodDelete, []string{cookie(withNonce)}, nil, false},
+		{"GET, nonce, no header", http.MethodGet, []string{cookie(withNonce)}, nil, true},
+		{"HEAD, nonce, wrong header", http.MethodHead, []string{cookie(withNonce)}, map[string]string{CSRFTokenHeader: "wrong"}, true},
+		{"OPTIONS, nonce, no header", http.MethodOptions, []string{cookie(withNonce)}, nil, true},
+		{"POST, no nonce, no header", http.MethodPost, []string{cookie(noNonce)}, nil, true},
+		{"POST, other issuer's nonce, no header", http.MethodPost, []string{cookie(otherIssuerNonce)}, nil, false},
+		{"POST, cookie name case-insensitive", http.MethodPost, []string{"SVC_AUTHORIZATION=" + withNonce}, nil, false},
+		// The oracle reads the token from the cookie even with an
+		// Authorization header, so that header does not skip the check.
+		{"POST, Authorization beside a nonce cookie", http.MethodPost, []string{cookie(withNonce)}, map[string]string{"Authorization": "Bearer x"}, false},
+		{"POST, no auth cookie", http.MethodPost, []string{"other=1"}, nil, true},
+		{"POST, no cookie", http.MethodPost, nil, nil, true},
+		// GetValue reads only the first Cookie header.
+		{"POST, auth cookie in a second Cookie header", http.MethodPost, []string{"other=1", cookie(withNonce)}, nil, true},
+		{"POST, junk token", http.MethodPost, []string{cookie("junk")}, nil, true},
+		{"POST, nonce not a string", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":1}`))}, nil, false},
+		{"POST, nonce key in another case", http.MethodPost, []string{cookie(unsignedToken(`{"NONCE":"n"}`))}, nil, false},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			token, err := tc.orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(tc.nonce))
-			require.NoError(t, err)
-			got, err := tc.orc.GetClaims(cookieContext(t, token, tc.header))
-			require.Equal(t, tc.wantCode, status.Code(err), "error: %v", err)
-			if tc.wantCode == codes.OK {
-				require.Equal(t, "sam@luther.systems", got.Subject)
+			r := httptest.NewRequestWithContext(t.Context(), tc.method, "/v1/hello", nil)
+			for _, c := range tc.cookies {
+				r.Header.Add("Cookie", c)
 			}
+			for k, v := range tc.header {
+				r.Header.Set(k, v)
+			}
+			require.Equal(t, tc.ok, csrfDoubleSubmitOK(r, "svc_authorization"))
 		})
 	}
 }
 
-func TestCSRFForwardedHeader(t *testing.T) {
-	on := newCSRFTestOracle(t, true)
-	off := newCSRFTestOracle(t, false)
-
-	_, ok := on.incomingHeaderMatcher("X-Csrf-Token")
-	require.True(t, ok, "check on: the gateway forwards the CSRF header")
-	_, ok = off.incomingHeaderMatcher("X-Csrf-Token")
-	require.False(t, ok, "check off: the gateway does not forward the CSRF header")
-	require.Len(t, on.gatewayForwardedHeaders(), len(off.gatewayForwardedHeaders())+1)
+func TestUnverifiedNonce(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+		nonce string
+		ok    bool
+	}{
+		{"nonce", unsignedToken(`{"nonce":"n"}`), "n", true},
+		{"no nonce", unsignedToken(`{"sub":"s"}`), "", true},
+		{"null nonce", unsignedToken(`{"nonce":null}`), "", true},
+		{"nonce key in another case", unsignedToken(`{"Nonce":"n"}`), "n", true},
+		{"data after the claims", unsignedToken(`{"nonce":"n"} x`), "n", true},
+		{"nonce not a string", unsignedToken(`{"nonce":["n"]}`), "", false},
+		{"not a JWT", "junk", "", true},
+		{"bad base64", "a.!!!.c", "", true},
+		{"bad JSON", unsignedToken(`[`), "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			nonce, ok := unverifiedNonce(tc.token)
+			require.Equal(t, tc.ok, ok)
+			require.Equal(t, tc.nonce, nonce)
+		})
+	}
 }
 
-func TestMakeTestAuthContextSendsCSRFHeader(t *testing.T) {
-	on := newCSRFTestOracle(t, true)
-	ctx := on.MakeTestAuthContext(t, testClaims(testNonce))
-	claims, err := on.GetClaims(ctx)
-	require.NoError(t, err)
-	require.Equal(t, testNonce, claims.Nonce)
-
-	// The token arrives as the client's cookie, so the check applies.
-	_, err = on.GetClaims(on.MakeTestAuthContextWithoutCSRFToken(t, testClaims(testNonce)))
-	require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
-	_, err = on.GetClaims(on.MakeTestAuthContextWithoutCSRFToken(t, testClaims("")))
-	require.NoError(t, err, "a token with no nonce needs no header")
-
-	// Off: both helpers give a context that passes.
-	off := newCSRFTestOracle(t, false)
-	_, err = off.GetClaims(off.MakeTestAuthContext(t, testClaims(testNonce)))
-	require.NoError(t, err)
-	_, err = off.GetClaims(off.MakeTestAuthContextWithoutCSRFToken(t, testClaims(testNonce)))
-	require.NoError(t, err)
-}
-
-func TestAppendIncomingMetadata(t *testing.T) {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "r1"))
-	ctx = appendIncomingMetadata(ctx, "cookie", "a=b")
-	ctx = appendIncomingMetadata(ctx, CSRFTokenHeader, "n")
-	md, ok := metadata.FromIncomingContext(ctx)
-	require.True(t, ok)
-	require.Equal(t, []string{"r1"}, md.Get("x-request-id"), "existing metadata is kept")
-	require.Equal(t, []string{"a=b"}, md.Get("cookie"))
-	require.Equal(t, []string{"n"}, md.Get("x-csrf-token"))
-}
-
-// claimsHelloServer answers Ping with the result of the oracle's claims check.
+// claimsHelloServer answers with the result of the oracle's claims check.
 type claimsHelloServer struct {
 	hellov1.UnimplementedHelloServiceServer
 	orc *Oracle
@@ -150,7 +150,7 @@ func (s *claimsHelloServer) SayHello(ctx context.Context, _ *hellov1.HelloReques
 }
 
 // TestCSRFCheckThroughGateway sends HTTP requests through the oracle's
-// gateway mux, so it checks that the header reaches the claims check.
+// gateway handler, where the check is made.
 func TestCSRFCheckThroughGateway(t *testing.T) {
 	for _, checkCSRF := range []bool{true, false} {
 		orc := newCSRFTestOracle(t, checkCSRF)
@@ -167,138 +167,82 @@ func TestCSRFCheckThroughGateway(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = conn.Close() })
 
-		mux := orc.grpcGatewayMux()
+		mux, handler := orc.grpcGateway(nil, nil)
 		require.NoError(t, hellov1.RegisterHelloServiceHandler(t.Context(), mux, conn))
+		// A route a service adds to the mux itself is checked too.
+		require.NoError(t, mux.HandlePath(http.MethodPost, "/v1/raw", func(w http.ResponseWriter, _ *http.Request, _ map[string]string) {
+			w.WriteHeader(http.StatusOK)
+		}))
 		gwLis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		require.NoError(t, err)
-		gwSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		gwSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 		go func() { _ = gwSrv.Serve(gwLis) }()
 		t.Cleanup(func() { _ = gwSrv.Close() })
 
-		// call sends GET /v1/ping (a safe method) or POST /v1/hello.
-		call := func(t *testing.T, method, nonce string, csrf *string, extra map[string]string) int {
+		call := func(t *testing.T, method, path, nonce string, csrf *string) int {
 			t.Helper()
 			token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(nonce))
 			require.NoError(t, err)
-			url, body := "http://"+gwLis.Addr().String()+"/v1/ping", ""
-			if method != http.MethodGet && method != http.MethodHead {
-				url, body = "http://"+gwLis.Addr().String()+"/v1/hello", "{}"
+			body := ""
+			if method == http.MethodPost {
+				body = "{}"
 			}
-			req, err := http.NewRequestWithContext(t.Context(), method, url, strings.NewReader(body))
+			req, err := http.NewRequestWithContext(t.Context(), method,
+				"http://"+gwLis.Addr().String()+path, strings.NewReader(body))
 			require.NoError(t, err)
 			req.Header.Set("Cookie", "svc_authorization="+token)
 			if csrf != nil {
 				req.Header.Set(CSRFTokenHeader, *csrf)
-			}
-			for k, v := range extra {
-				req.Header.Set(k, v)
 			}
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			return resp.StatusCode
 		}
-		get := http.MethodGet
-		post := http.MethodPost
+		get, post := http.MethodGet, http.MethodPost
+		ptr := func(s string) *string { return &s }
 
 		if checkCSRF {
 			t.Run("on", func(t *testing.T) {
-				// An unsafe method is checked.
-				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil, nil))
-				require.Equal(t, http.StatusOK, call(t, post, testNonce, ptr(testNonce), nil))
-				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, ptr("wrong"), nil))
-				require.Equal(t, http.StatusOK, call(t, post, "", nil, nil))
-				// A safe method is not.
-				require.Equal(t, http.StatusOK, call(t, get, testNonce, nil, nil))
-				require.Equal(t, http.StatusOK, call(t, get, testNonce, ptr("wrong"), nil))
-				// A client cannot claim a safe method with a header.
-				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil,
-					map[string]string{HTTPMethodMetadataKey: http.MethodGet}))
-				require.Equal(t, http.StatusUnauthorized, call(t, post, testNonce, nil,
-					map[string]string{"Grpc-Metadata-" + HTTPMethodMetadataKey: http.MethodGet}))
+				require.Equal(t, http.StatusForbidden, call(t, post, "/v1/hello", testNonce, nil))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/hello", testNonce, ptr(testNonce)))
+				require.Equal(t, http.StatusForbidden, call(t, post, "/v1/hello", testNonce, ptr("wrong")))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/hello", "", nil))
+				require.Equal(t, http.StatusForbidden, call(t, post, "/v1/raw", testNonce, nil))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/raw", testNonce, ptr(testNonce)))
+				// A safe method is not checked.
+				require.Equal(t, http.StatusOK, call(t, get, "/v1/ping", testNonce, nil))
+				require.Equal(t, http.StatusOK, call(t, get, "/v1/ping", testNonce, ptr("wrong")))
 			})
 		} else {
 			t.Run("off", func(t *testing.T) {
-				require.Equal(t, http.StatusOK, call(t, post, testNonce, nil, nil))
-				require.Equal(t, http.StatusOK, call(t, post, testNonce, ptr("wrong"), nil))
-				require.Equal(t, http.StatusOK, call(t, get, testNonce, nil, nil))
-				require.Equal(t, http.StatusOK, call(t, post, "", nil, nil))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/hello", testNonce, nil))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/hello", testNonce, ptr("wrong")))
+				require.Equal(t, http.StatusOK, call(t, post, "/v1/raw", testNonce, nil))
+				require.Equal(t, http.StatusOK, call(t, get, "/v1/ping", testNonce, nil))
 			})
 		}
 	}
 }
 
-// TestCSRFCheckSafeMethods checks the method exemption without the
-// gateway: a direct gRPC call, with no method, is checked.
-func TestCSRFCheckSafeMethods(t *testing.T) {
+// TestCSRFCheckNotInClaims checks that GetClaims makes no CSRF check: a
+// gRPC call that does not come through the gateway is not a browser request.
+func TestCSRFCheckNotInClaims(t *testing.T) {
 	orc := newCSRFTestOracle(t, true)
 	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
 	require.NoError(t, err)
-	withMethod := func(methods ...string) context.Context {
-		ctx := cookieContext(t, token, nil)
-		kv := make([]string, 0, 2*len(methods))
-		for _, m := range methods {
-			kv = append(kv, HTTPMethodMetadataKey, m)
-		}
-		return appendIncomingMetadata(ctx, kv...)
-	}
-	for _, tc := range []struct {
-		name    string
-		methods []string
-		ok      bool
-	}{
-		{"no method", nil, false},
-		{"GET", []string{"GET"}, true},
-		{"HEAD", []string{"HEAD"}, true},
-		{"OPTIONS", []string{"OPTIONS"}, true},
-		{"lower case get", []string{"get"}, true},
-		{"POST", []string{"POST"}, false},
-		{"PUT", []string{"PUT"}, false},
-		{"PATCH", []string{"PATCH"}, false},
-		{"DELETE", []string{"DELETE"}, false},
-		{"empty", []string{""}, false},
-		{"two values", []string{"GET", "POST"}, false},
-		{"two safe values", []string{"GET", "GET"}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := orc.GetClaims(withMethod(tc.methods...))
-			if tc.ok {
-				require.NoError(t, err)
-			} else {
-				require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
-			}
-		})
-	}
-}
-
-// TestCSRFCheckAnyIssuer pins the CheckCSRFToken doc: the SDK checks a
-// token with a nonce whatever its issuer.
-func TestCSRFCheckAnyIssuer(t *testing.T) {
-	on := newCSRFTestOracle(t, true)
-	c := jwt.NewClaims("workload", "https://oidc.example.test/team", "lutherapp:svc")
-	c.Nonce = testNonce
-	token, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(c)
+	ctx := metadata.NewIncomingContext(MakeTestContext(t), metadata.Pairs("cookie", "svc_authorization="+token))
+	_, err = orc.GetClaims(ctx)
 	require.NoError(t, err)
-	_, err = on.GetClaims(cookieContext(t, token, nil))
-	require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
-	_, err = on.GetClaims(cookieContext(t, token, ptr(testNonce)))
+	_, err = orc.GetClaims(orc.MakeTestAuthContext(t, testClaims(testNonce)))
 	require.NoError(t, err)
-}
-
-func TestCSRFTokenFromMetadata(t *testing.T) {
-	got, err := csrfTokenFromMetadata(context.Background())
-	require.NoError(t, err)
-	require.Empty(t, got, "no metadata")
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-csrf-token", "abc"))
-	got, err = csrfTokenFromMetadata(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "abc", got)
 }
 
 // TestIncomingHeaderMatcher checks the forwarded header set newOracle builds.
 func TestIncomingHeaderMatcher(t *testing.T) {
 	cfg := newTestConfig(t)
 	cfg.AddHeaderForwarder("X-My-Header")
+	cfg.CheckCSRFToken = true
 	orc, closeFn := NewTestOracle(t, cfg)
 	t.Cleanup(closeFn)
 
@@ -307,7 +251,8 @@ func TestIncomingHeaderMatcher(t *testing.T) {
 		require.True(t, ok, h)
 		require.Equal(t, h, got)
 	}
-	for _, h := range []string{"Authorization", "X-Other", "Grpc-Metadata-Foo"} {
+	// The CSRF header is checked on the gateway, so it is not forwarded.
+	for _, h := range []string{"Authorization", "X-Other", "Grpc-Metadata-Foo", CSRFTokenHeader} {
 		_, ok := orc.incomingHeaderMatcher(h)
 		require.False(t, ok, h)
 	}
@@ -326,35 +271,4 @@ func TestCSRFCheckNeedsAuthCookie(t *testing.T) {
 
 	off := DefaultConfig()
 	require.NoError(t, off.Valid(), "off needs no cookie")
-}
-
-// TestCSRFCheckSkipsServerWrittenToken checks that a token the server set
-// with SetValue in this request (a login) is not compared with the request's
-// CSRF header, which belongs to the old session.
-func TestCSRFCheckSkipsServerWrittenToken(t *testing.T) {
-	on := newCSRFTestOracle(t, true)
-	const newNonce = "fedcba9876543210fedcba9876543210"
-
-	oldToken, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
-	require.NoError(t, err)
-	newClaims := testClaims(newNonce)
-	newClaims.Subject = "new@luther.systems"
-	newToken, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(newClaims)
-	require.NoError(t, err)
-
-	// The browser sent the old cookie and its header; the handler logs in.
-	ctx := cookieContext(t, oldToken, ptr(testNonce))
-	ctx = on.cfg.authCookieForwarder.SetValue(ctx, newToken)
-	got, err := on.GetClaims(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "new@luther.systems", got.Subject)
-
-	// No cookie or header at all: the server-written token still passes.
-	ctx = on.cfg.authCookieForwarder.SetValue(MakeTestContext(t), newToken)
-	_, err = on.GetClaims(ctx)
-	require.NoError(t, err)
-
-	// The cookie the client sent is still checked.
-	_, err = on.GetClaims(cookieContext(t, newToken, ptr(testNonce)))
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
