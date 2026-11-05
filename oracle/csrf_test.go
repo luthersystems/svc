@@ -284,7 +284,10 @@ func TestIncomingHeaderMatcher(t *testing.T) {
 		_, ok := orc.incomingHeaderMatcher(h)
 		require.False(t, ok, h)
 	}
-	require.Len(t, orc.forwardedHeaders, len(orc.gatewayForwardedHeaders()))
+	// Every forwarded header is in the set, lower case.
+	for _, h := range orc.gatewayForwardedHeaders() {
+		require.Contains(t, orc.forwardedHeaders, strings.ToLower(h), h)
+	}
 }
 
 func TestCSRFCheckNeedsAuthCookie(t *testing.T) {
