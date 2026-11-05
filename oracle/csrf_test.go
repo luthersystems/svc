@@ -102,6 +102,30 @@ func TestMakeTestAuthContextSendsCSRFHeader(t *testing.T) {
 	claims, err := on.GetClaims(ctx)
 	require.NoError(t, err)
 	require.Equal(t, testNonce, claims.Nonce)
+
+	// The token arrives as the client's cookie, so the check applies.
+	_, err = on.GetClaims(on.MakeTestAuthContextWithoutCSRFToken(t, testClaims(testNonce)))
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
+	_, err = on.GetClaims(on.MakeTestAuthContextWithoutCSRFToken(t, testClaims("")))
+	require.NoError(t, err, "a token with no nonce needs no header")
+
+	// Off: both helpers give a context that passes.
+	off := newCSRFTestOracle(t, false)
+	_, err = off.GetClaims(off.MakeTestAuthContext(t, testClaims(testNonce)))
+	require.NoError(t, err)
+	_, err = off.GetClaims(off.MakeTestAuthContextWithoutCSRFToken(t, testClaims(testNonce)))
+	require.NoError(t, err)
+}
+
+func TestAppendIncomingMetadata(t *testing.T) {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "r1"))
+	ctx = appendIncomingMetadata(ctx, "cookie", "a=b")
+	ctx = appendIncomingMetadata(ctx, CSRFTokenHeader, "n")
+	md, ok := metadata.FromIncomingContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, []string{"r1"}, md.Get("x-request-id"), "existing metadata is kept")
+	require.Equal(t, []string{"a=b"}, md.Get("cookie"))
+	require.Equal(t, []string{"n"}, md.Get("x-csrf-token"))
 }
 
 // claimsHelloServer answers Ping with the result of the oracle's claims check.

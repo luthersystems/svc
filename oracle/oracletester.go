@@ -169,7 +169,23 @@ func MakeTestContext(_ *testing.T) context.Context {
 
 // MakeTestAuthContext creates a context for testing the oracle,
 // where you can inject an authenticated user context.
+//
+// With Config.CheckCSRFToken on, the token arrives as the client's auth
+// cookie, and the context carries the X-CSRF-Token header a well-behaved
+// frontend sends: the token's nonce. Use MakeTestAuthContextWithoutCSRFToken
+// to test a request that lacks the header.
 func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context.Context {
+	return orc.makeTestAuthContext(t, claims, true)
+}
+
+// MakeTestAuthContextWithoutCSRFToken is MakeTestAuthContext without the
+// X-CSRF-Token header, for testing that the CSRF check refuses a request.
+// With Config.CheckCSRFToken off it is the same as MakeTestAuthContext.
+func (orc *Oracle) MakeTestAuthContextWithoutCSRFToken(t *testing.T, claims *jwt.Claims) context.Context {
+	return orc.makeTestAuthContext(t, claims, false)
+}
+
+func (orc *Oracle) makeTestAuthContext(t *testing.T, claims *jwt.Claims, sendCSRFToken bool) context.Context {
 	if orc == nil || orc.cfg.fakeIDP == nil || orc.cfg.authCookieForwarder == nil {
 		t.Fatal("oracle not configured for auth")
 	}
@@ -183,14 +199,26 @@ func (orc *Oracle) MakeTestAuthContext(t *testing.T, claims *jwt.Claims) context
 	// Create a new test context.
 	ctx := MakeTestContext(t)
 
-	// With the CSRF check on, send the header a well-behaved frontend sends:
-	// the token's nonce.
-	if orc.cfg.CheckCSRFToken && claims.Nonce != "" {
-		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(CSRFTokenHeader, claims.Nonce))
+	if orc.cfg.CheckCSRFToken {
+		// The CSRF check applies only to a token from the client's cookie
+		// (a token set with SetValue skips it), so send the token as one.
+		cookie := orc.cfg.authCookieForwarder.cookieName + "=" + token
+		ctx = appendIncomingMetadata(ctx, "cookie", cookie)
+		if sendCSRFToken && claims.Nonce != "" {
+			ctx = appendIncomingMetadata(ctx, CSRFTokenHeader, claims.Nonce)
+		}
+		return ctx
 	}
 
 	// Use the auth cookie forwarder to set the token.
 	// GetValue will return the cached (last written) token if available,
 	// and if not, it will fall back to the incoming metadata.
 	return orc.cfg.authCookieForwarder.SetValue(ctx, token)
+}
+
+// appendIncomingMetadata adds key/value pairs to the context's incoming gRPC
+// metadata, keeping what is already there.
+func appendIncomingMetadata(ctx context.Context, kv ...string) context.Context {
+	md, _ := metadata.FromIncomingContext(ctx)
+	return metadata.NewIncomingContext(ctx, metadata.Join(md, metadata.Pairs(kv...)))
 }
