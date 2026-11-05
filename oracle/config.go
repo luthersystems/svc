@@ -64,9 +64,10 @@ type Config struct {
 	InsecureCookies bool `yaml:"insecure-cookies"`
 	// CheckCSRFToken turns on the CSRF double-submit check for the auth
 	// cookie. When on, the gateway forwards the X-CSRF-Token request header
-	// to the gRPC server, and a token whose nonce claim is set is accepted
-	// only when that header equals the nonce. A token with no nonce (a
-	// service token, or a token from another issuer) is accepted without the
+	// to the gRPC server, and any token whose nonce claim is not empty,
+	// whatever its issuer, is accepted only when that header equals the
+	// nonce. A token with an empty or absent nonce (lutherauth's service
+	// tokens and Vercel OIDC tokens have none) is accepted without the
 	// header. Off by default: no header is forwarded and no check is made.
 	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.

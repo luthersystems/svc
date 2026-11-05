@@ -176,3 +176,17 @@ func TestCSRFCheckThroughGateway(t *testing.T) {
 		}
 	}
 }
+
+// TestCSRFCheckAnyIssuer pins the CheckCSRFToken doc: the SDK checks a
+// token with a nonce whatever its issuer.
+func TestCSRFCheckAnyIssuer(t *testing.T) {
+	on := newCSRFTestOracle(t, true)
+	c := jwt.NewClaims("workload", "https://oidc.example.test/team", "lutherapp:svc")
+	c.Nonce = testNonce
+	token, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(c)
+	require.NoError(t, err)
+	_, err = on.GetClaims(cookieContext(t, token, nil))
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "error: %v", err)
+	_, err = on.GetClaims(cookieContext(t, token, ptr(testNonce)))
+	require.NoError(t, err)
+}
