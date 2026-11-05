@@ -219,3 +219,17 @@ func TestIncomingHeaderMatcher(t *testing.T) {
 	}
 	require.Len(t, orc.forwardedHeaders, len(orc.gatewayForwardedHeaders()))
 }
+
+func TestCSRFCheckNeedsAuthCookie(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.CheckCSRFToken = true
+	require.ErrorContains(t, cfg.Valid(), "auth cookie")
+	_, err := NewOracle(cfg)
+	require.ErrorContains(t, err, "auth cookie", "newOracle refuses it too")
+
+	cfg.AddAuthCookieForwarder("svc_authorization", 300, false, true)
+	require.NoError(t, cfg.Valid())
+
+	off := DefaultConfig()
+	require.NoError(t, off.Valid(), "off needs no cookie")
+}

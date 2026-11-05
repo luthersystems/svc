@@ -69,6 +69,7 @@ type Config struct {
 	// nonce. A token with an empty or absent nonce (lutherauth's service
 	// tokens and Vercel OIDC tokens have none) is accepted without the
 	// header. Off by default: no header is forwarded and no check is made.
+	// It needs AddAuthCookieForwarder; Valid fails without it.
 	CheckCSRFToken bool `yaml:"check-csrf-token"`
 	// extraJWKOptions has additional configuration for JWK claims.
 	extraJWKOptions []jwk.Option
@@ -151,6 +152,11 @@ func (c *Config) Valid() error {
 	}
 	if c.Version == "" {
 		return errors.New("missing version")
+	}
+	if c.CheckCSRFToken && c.authCookieForwarder == nil {
+		// Without an auth cookie there are no claims to check, so the
+		// setting would do nothing and look as if it protected the service.
+		return errors.New("check CSRF token needs an auth cookie (AddAuthCookieForwarder)")
 	}
 	return nil
 }
