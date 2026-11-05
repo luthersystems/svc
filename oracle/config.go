@@ -70,7 +70,13 @@ type Config struct {
 	// the ui_csrf_token cookie, which page script reads, only with
 	// AUTH_OAUTH_PROTECT_CSRF on, so turn that on first. A token with an
 	// empty or absent nonce (lutherauth's service tokens and Vercel OIDC
-	// tokens have none) needs no header. The check reads the nonce without
+	// tokens have none) needs no header.
+	//
+	// GET, HEAD and OPTIONS are never checked, so a route must not change
+	// state on those methods: map a write to POST, PUT, PATCH or DELETE in
+	// its google.api.http option or HandlePath call, or the check does not
+	// protect it. A refusal is a 403 JSON security exception and a warning
+	// log line. The check reads the nonce without
 	// verifying the token; the gRPC server still verifies it. A gRPC call
 	// that does not come through the gateway is not a browser request and is
 	// not checked. Off by default. It needs AddAuthCookieForwarder; Valid
