@@ -4,6 +4,9 @@ package oracle
 
 import (
 	"context"
+
+	"github.com/luthersystems/lutherauth-sdk-go/claims"
+	"github.com/luthersystems/lutherauth-sdk-go/jwt"
 )
 
 // CSRFTokenHeader is the HTTP request header that carries the CSRF token in
@@ -18,4 +21,25 @@ const CSRFTokenHeader = "X-CSRF-Token" //nolint:gosec // G101: a header name, no
 // refuses the token.
 func csrfTokenFromMetadata(ctx context.Context) (string, error) {
 	return GetIncomingHeader(ctx, CSRFTokenHeader), nil
+}
+
+// csrfClaims verifies the auth token, and makes the CSRF check only when the
+// token came from the cookie the client sent. A token the server wrote with
+// SetValue earlier in the same request (a login) is not compared with the
+// request's header, which belongs to the old session.
+type csrfClaims struct {
+	// checked verifies the token and makes the CSRF check.
+	checked claims.Getter
+	// unchecked verifies the token without the CSRF check.
+	unchecked claims.Getter
+	// exempt reports whether a request skips the CSRF check.
+	exempt func(ctx context.Context) bool
+}
+
+// Claims implements claims.Getter.
+func (c *csrfClaims) Claims(ctx context.Context) (*jwt.Claims, error) {
+	if c.exempt(ctx) {
+		return c.unchecked.Claims(ctx)
+	}
+	return c.checked.Claims(ctx)
 }

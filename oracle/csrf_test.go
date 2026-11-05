@@ -233,3 +233,34 @@ func TestCSRFCheckNeedsAuthCookie(t *testing.T) {
 	off := DefaultConfig()
 	require.NoError(t, off.Valid(), "off needs no cookie")
 }
+
+// TestCSRFCheckSkipsServerWrittenToken checks that a token the server set
+// with SetValue in this request (a login) is not compared with the request's
+// CSRF header, which belongs to the old session.
+func TestCSRFCheckSkipsServerWrittenToken(t *testing.T) {
+	on := newCSRFTestOracle(t, true)
+	const newNonce = "fedcba9876543210fedcba9876543210"
+
+	oldToken, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
+	require.NoError(t, err)
+	newClaims := testClaims(newNonce)
+	newClaims.Subject = "new@luther.systems"
+	newToken, err := on.cfg.fakeIDP.MakeFakeIDPAuthToken(newClaims)
+	require.NoError(t, err)
+
+	// The browser sent the old cookie and its header; the handler logs in.
+	ctx := cookieContext(t, oldToken, ptr(testNonce))
+	ctx = on.cfg.authCookieForwarder.SetValue(ctx, newToken)
+	got, err := on.GetClaims(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "new@luther.systems", got.Subject)
+
+	// No cookie or header at all: the server-written token still passes.
+	ctx = on.cfg.authCookieForwarder.SetValue(MakeTestContext(t), newToken)
+	_, err = on.GetClaims(ctx)
+	require.NoError(t, err)
+
+	// The cookie the client sent is still checked.
+	_, err = on.GetClaims(cookieContext(t, newToken, ptr(testNonce)))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}

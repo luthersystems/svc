@@ -57,6 +57,17 @@ func (cf *CookieForwarder) SetValue(ctx context.Context, val string) context.Con
 	return context.WithValue(ctx, cf.key, val)
 }
 
+// hasServerValue reports whether the server set the value with SetValue
+// earlier in this request, so that GetValue returns it and not the cookie
+// the client sent.
+func (cf *CookieForwarder) hasServerValue(ctx context.Context) bool {
+	if cf == nil {
+		return false
+	}
+	val, ok := ctx.Value(cf.key).(string)
+	return ok && val != ""
+}
+
 // GetValue retrieves the given value from the gRPC metadata for the
 // forwarder's configured header.
 func (cf *CookieForwarder) GetValue(ctx context.Context) (string, error) {
