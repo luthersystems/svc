@@ -85,8 +85,15 @@ func TestCSRFDoubleSubmitOK(t *testing.T) {
 		{"POST, Authorization beside a nonce cookie", http.MethodPost, []string{cookie(withNonce)}, map[string]string{"Authorization": "Bearer x"}, false},
 		{"POST, no auth cookie", http.MethodPost, []string{"other=1"}, nil, true},
 		{"POST, no cookie", http.MethodPost, nil, nil, true},
-		// GetValue reads only the first Cookie header.
+		// The oracle reads only the first Cookie header.
 		{"POST, auth cookie in a second Cookie header", http.MethodPost, []string{"other=1", cookie(withNonce)}, nil, true},
+		// The gateway drops a header value that is not printable ASCII, so
+		// a gateway route reads the second header's token: it is checked.
+		{"POST, non-ASCII first header, nonce token in the second", http.MethodPost, []string{"x=\u00e9; " + cookie(noNonce), cookie(withNonce)}, nil, false},
+		{"POST, non-ASCII first header, nonce token in the second, matching header", http.MethodPost, []string{"x=\u00e9; " + cookie(noNonce), cookie(withNonce)}, map[string]string{CSRFTokenHeader: testNonce}, true},
+		// A raw route may read the first header's token: it is checked too.
+		{"POST, nonce token in a non-ASCII first header", http.MethodPost, []string{"x=\u00e9; " + cookie(withNonce), cookie(noNonce)}, nil, false},
+		{"POST, non-ASCII first header, no nonce in either", http.MethodPost, []string{"x=\u00e9; " + cookie(noNonce), cookie(noNonce)}, nil, true},
 		{"POST, junk token", http.MethodPost, []string{cookie("junk")}, nil, true},
 		{"POST, nonce not a string", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":1}`))}, nil, true},
 		{"POST, later null in another case", http.MethodPost, []string{cookie(unsignedToken(`{"nonce":"n","Nonce":null}`))}, nil, false},
@@ -213,6 +220,21 @@ func TestCSRFCheckThroughGateway(t *testing.T) {
 				require.Equal(t, http.StatusOK, call(t, post, "/v1/hello", "", nil))
 				require.Equal(t, http.StatusForbidden, call(t, post, "/v1/raw", testNonce, nil))
 				require.Equal(t, http.StatusOK, call(t, post, "/v1/raw", testNonce, ptr(testNonce)))
+				// The gateway drops the non-ASCII first Cookie header, so the
+				// server reads the second header's token, which is checked.
+				noNonce, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(""))
+				require.NoError(t, err)
+				withNonce, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
+				require.NoError(t, err)
+				req, err := http.NewRequestWithContext(t.Context(), post,
+					"http://"+gwLis.Addr().String()+"/v1/hello", strings.NewReader("{}"))
+				require.NoError(t, err)
+				req.Header.Add("Cookie", "x=\u00e9; svc_authorization="+noNonce)
+				req.Header.Add("Cookie", "svc_authorization="+withNonce)
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				require.Equal(t, http.StatusForbidden, resp.StatusCode)
 				// A safe method is not checked.
 				require.Equal(t, http.StatusOK, call(t, get, "/v1/ping", testNonce, nil))
 				require.Equal(t, http.StatusOK, call(t, get, "/v1/ping", testNonce, ptr("wrong")))
@@ -274,4 +296,22 @@ func TestCSRFCheckNeedsAuthCookie(t *testing.T) {
 
 	off := DefaultConfig()
 	require.NoError(t, off.Valid(), "off needs no cookie")
+}
+
+func TestFindCookieAndGatewayHeaderValues(t *testing.T) {
+	c, ok := findCookie([]string{"a=1; SVC_AUTHORIZATION=t1; svc_authorization=t2", "svc_authorization=t3"}, "svc_authorization")
+	require.True(t, ok)
+	require.Equal(t, "t1", c.Value, "first header, first match ignoring case")
+	_, ok = findCookie([]string{"a=1", "svc_authorization=t3"}, "svc_authorization")
+	require.False(t, ok, "only the first header is read")
+	_, ok = findCookie(nil, "svc_authorization")
+	require.False(t, ok)
+
+	require.Equal(t, []string{"a=1", "b=~ 2"}, gatewayHeaderValues([]string{"x=\u00e9", "a=1", "t=\t", "b=~ 2", "d=\x7f"}))
+
+	// getIncomingCookie reads the gateway's metadata with the same rule.
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("cookie", "svc_authorization=t1", "cookie", "svc_authorization=t2"))
+	got, err := getIncomingCookie(ctx, "svc_authorization")
+	require.NoError(t, err)
+	require.Equal(t, "t1", got.Value)
 }

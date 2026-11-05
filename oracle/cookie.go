@@ -120,27 +120,48 @@ func getIncomingCookie(ctx context.Context, cookieName string) (*http.Cookie, er
 	if len(cookies) < 1 {
 		return nil, fmt.Errorf("missing cookie header: %s", cookieName)
 	}
-	// Usually there's exactly one 'cookie' string, e.g. "k1=v1; k2=v2"
-	// but you can handle multiple if needed.
-	rawCookieHeader := cookies[0]
-
-	// We can parse the cookie using net/http logic:
-	header := http.Header{}
-	header.Add("Cookie", rawCookieHeader)
-	request := http.Request{Header: header}
-	allCookies := request.Cookies()
-
-	var found *http.Cookie
-	for _, c := range allCookies {
-		if strings.EqualFold(c.Name, cookieName) {
-			found = c
-			break
-		}
-	}
-	if found == nil {
+	found, ok := findCookie(cookies, cookieName)
+	if !ok {
 		return nil, errors.New("cookie not found in metadata")
 	}
 	return found, nil
+}
+
+// findCookie picks the named cookie from Cookie header values as the oracle
+// reads the auth cookie: from the first value, the first cookie whose name
+// matches, ignoring case. The CSRF check (csrfDoubleSubmitOK) picks the
+// token with it too, so the two read the same cookie.
+func findCookie(cookieHeaders []string, name string) (*http.Cookie, bool) {
+	if len(cookieHeaders) == 0 {
+		return nil, false
+	}
+	request := http.Request{Header: http.Header{"Cookie": cookieHeaders[:1]}}
+	for _, c := range request.Cookies() {
+		if strings.EqualFold(c.Name, name) {
+			return c, true
+		}
+	}
+	return nil, false
+}
+
+// gatewayHeaderValues is the header values the gateway forwards as gRPC
+// metadata: grpc-gateway drops a value that is not printable ASCII (0x20 to
+// 0x7E), as gRPC requires.
+func gatewayHeaderValues(values []string) []string {
+	var out []string
+	for _, v := range values {
+		ok := true
+		for _, b := range []byte(v) {
+			if b < 0x20 || b > 0x7e {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // getCookie is just a small helper that fetches a cookie and returns

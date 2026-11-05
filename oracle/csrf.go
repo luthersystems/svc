@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
-	"strings"
 
 	jwtgo "github.com/golang-jwt/jwt/v4"
 	"github.com/luthersystems/lutherauth-sdk-go/jwt"
@@ -42,35 +41,31 @@ func csrfDoubleSubmitOK(r *http.Request, cookieName string) bool {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return true
 	}
-	token, ok := authCookieValue(r, cookieName)
-	if !ok {
-		return true
+	// Check every token a route can read: a gateway route reads the Cookie
+	// headers the gateway forwards, and a route added with HandlePath may
+	// read the raw first Cookie header.
+	header := r.Header.Get(CSRFTokenHeader)
+	cookies := r.Header.Values("Cookie")
+	for _, values := range [][]string{gatewayHeaderValues(cookies), cookies} {
+		c, ok := findCookie(values, cookieName)
+		if ok && !nonceMatches(c.Value, header) {
+			return false
+		}
 	}
+	return true
+}
+
+// nonceMatches reports whether a token has no nonce claim or header equals
+// it.
+func nonceMatches(token, header string) bool {
 	nonce := unverifiedNonce(token)
 	if nonce == "" {
 		return true
 	}
 	// Hashing first makes the comparison constant time whatever the lengths.
-	got := sha256.Sum256([]byte(r.Header.Get(CSRFTokenHeader)))
+	got := sha256.Sum256([]byte(header))
 	want := sha256.Sum256([]byte(nonce))
 	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
-}
-
-// authCookieValue returns the auth cookie as CookieForwarder.GetValue reads
-// it from the forwarded metadata: from the first Cookie header, the first
-// cookie whose name matches, ignoring case.
-func authCookieValue(r *http.Request, name string) (string, bool) {
-	headers := r.Header.Values("Cookie")
-	if len(headers) == 0 {
-		return "", false
-	}
-	first := http.Request{Header: http.Header{"Cookie": headers[:1]}}
-	for _, c := range first.Cookies() {
-		if strings.EqualFold(c.Name, name) {
-			return c.Value, true
-		}
-	}
-	return "", false
 }
 
 // unverifiedNonce reads the nonce claim of a JWT without verifying it. It
