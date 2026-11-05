@@ -190,3 +190,13 @@ func TestCSRFCheckAnyIssuer(t *testing.T) {
 	_, err = on.GetClaims(cookieContext(t, token, ptr(testNonce)))
 	require.NoError(t, err)
 }
+
+func TestCSRFTokenFromMetadata(t *testing.T) {
+	got, err := csrfTokenFromMetadata(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, got, "no metadata")
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-csrf-token", "abc"))
+	got, err = csrfTokenFromMetadata(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "abc", got)
+}
