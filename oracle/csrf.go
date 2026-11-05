@@ -9,6 +9,8 @@ import (
 
 	jwtgo "github.com/golang-jwt/jwt/v4"
 	"github.com/luthersystems/lutherauth-sdk-go/jwt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // CSRFTokenHeader is the HTTP request header that carries the CSRF token in
@@ -18,12 +20,18 @@ import (
 const CSRFTokenHeader = "X-CSRF-Token" //nolint:gosec // G101: a header name, not a credential
 
 // csrfProtect makes the CSRF double-submit check (Config.CheckCSRFToken)
-// before next serves the request. It refuses with 403, not 401: the session
-// is valid, so a frontend must not treat the refusal as an expired login.
-func csrfProtect(cookieName string, next http.Handler) http.Handler {
+// before next serves the request. It refuses with 403 PermissionDenied, not
+// 401: the session is valid, so a frontend must not treat the refusal as an
+// expired login. The response body is the gateway's JSON error.
+func (orc *Oracle) csrfProtect(next http.Handler) http.Handler {
+	cookieName := orc.cfg.authCookieForwarder.cookieName
+	marshaler := orc.jsonMarshaler()
+	errorHandler := orc.gatewayErrorHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !csrfDoubleSubmitOK(r, cookieName) {
-			http.Error(w, "CSRF check failed: the "+CSRFTokenHeader+" header does not match the session", http.StatusForbidden)
+			err := status.Error(codes.PermissionDenied,
+				"CSRF check failed: the "+CSRFTokenHeader+" header does not match the session")
+			errorHandler(r.Context(), nil, marshaler, w, r, err)
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -5,6 +5,7 @@ package oracle
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -314,4 +315,29 @@ func TestFindCookieAndGatewayHeaderValues(t *testing.T) {
 	got, err := getIncomingCookie(ctx, "svc_authorization")
 	require.NoError(t, err)
 	require.Equal(t, "t1", got.Value)
+}
+
+// TestCSRFRefusalBody checks that a refusal is the gateway's JSON error, a
+// security exception with 403, as a gateway route's PermissionDenied is.
+func TestCSRFRefusalBody(t *testing.T) {
+	orc := newCSRFTestOracle(t, true)
+	token, err := orc.cfg.fakeIDP.MakeFakeIDPAuthToken(testClaims(testNonce))
+	require.NoError(t, err)
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/hello", strings.NewReader("{}"))
+	r.Header.Set("Cookie", "svc_authorization="+token)
+	w := httptest.NewRecorder()
+	orc.csrfProtect(next).ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	var body struct {
+		Exception struct {
+			Type        string `json:"type"`
+			Description string `json:"description"`
+		} `json:"exception"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), w.Body.String())
+	require.Equal(t, "SECURITY_VIOLATION", body.Exception.Type)
+	require.Contains(t, body.Exception.Description, "CSRF check failed")
 }

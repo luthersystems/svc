@@ -82,18 +82,28 @@ func (orc *Oracle) incomingHeaderMatcher(h string) (string, bool) {
 	return "", false
 }
 
+// jsonMarshaler is the gateway's marshaler.
+func (orc *Oracle) jsonMarshaler() *runtime.JSONPb {
+	return &runtime.JSONPb{
+		MarshalOptions: protojson.MarshalOptions{
+			UseProtoNames: true,
+		},
+		UnmarshalOptions: protojson.UnmarshalOptions{
+			DiscardUnknown: orc.cfg.DiscardUnknown,
+		},
+	}
+}
+
+// gatewayErrorHandler is the gateway's error handler.
+func (orc *Oracle) gatewayErrorHandler() runtime.ErrorHandlerFunc {
+	return runtime.ErrorHandlerFunc(svcerr.ErrIntercept(orc.Log))
+}
+
 func (orc *Oracle) grpcGatewayMux() *runtime.ServeMux {
 	opts := []runtime.ServeMuxOption{
-		runtime.WithErrorHandler(svcerr.ErrIntercept(orc.Log)),
+		runtime.WithErrorHandler(orc.gatewayErrorHandler()),
 		runtime.WithIncomingHeaderMatcher(orc.incomingHeaderMatcher),
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				UseProtoNames: true,
-			},
-			UnmarshalOptions: protojson.UnmarshalOptions{
-				DiscardUnknown: orc.cfg.DiscardUnknown,
-			},
-		}),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, orc.jsonMarshaler()),
 	}
 	opts = append(opts, orc.cfg.gatewayOpts...)
 
@@ -160,7 +170,7 @@ func (orc *Oracle) grpcGateway(swaggerHandler http.Handler, publicContentHandler
 		// mux, the routes a service adds with HandlePath included. The path
 		// overrides above (health check, swagger, public content) are not
 		// checked.
-		handler = csrfProtect(orc.cfg.authCookieForwarder.cookieName, jsonapi)
+		handler = orc.csrfProtect(jsonapi)
 	}
 	return jsonapi, middleware.Wrap(handler)
 }
