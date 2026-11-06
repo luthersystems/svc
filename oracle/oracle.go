@@ -311,7 +311,15 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 		extra = append(extra, shiroclient.WithHTTPClient(healthCheckHTTPClient))
 	}
 	sopts := orc.txConfigs(ctx, extra...)
-	ccHealth, err := orc.phylum.GetHealthCheck(ctx, []string{"phylum"}, sopts...)
+	callCtx := ctx
+	if !orc.tracer.Enabled() {
+		// shiroclient-sdk-go v0.18.0 and later puts the context's trace
+		// in the request headers itself. With tracing off, the oracle
+		// forwards no trace, so the caller's trace does not reach the
+		// gateway.
+		callCtx = trace.ContextWithSpanContext(ctx, trace.SpanContext{})
+	}
+	ccHealth, err := orc.phylum.GetHealthCheck(callCtx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return []*healthcheck.HealthCheckReport{{
 			ServiceName:    orc.cfg.PhylumServiceName,
