@@ -144,13 +144,30 @@ func TestHealthCheckPropagatesTrace(t *testing.T) {
 	require.Len(t, reqs, 1)
 	require.True(t, reqs[0].IsValid(), "gateway health_check request carried no trace context")
 	require.Equal(t, hc.SpanContext.TraceID(), reqs[0].TraceID())
-	parentIsChild := false
-	for _, c := range children {
-		if c.SpanContext.SpanID() == reqs[0].SpanID() {
-			parentIsChild = true
-		}
+	// The gateway request's parent is a span under HealthCheck: the
+	// shiroclient SDK (v0.18.0 and later) records its own sdk:HealthCheck
+	// span under the oracle's PhylumHealthCheck span.
+	require.True(t, descendsFrom(spans, reqs[0].SpanID(), hc.SpanContext.SpanID()),
+		"gateway request's parent span is not under HealthCheck")
+}
+
+// descendsFrom reports whether the span id is ancestor or a span under it.
+func descendsFrom(spans tracetest.SpanStubs, id, ancestor trace.SpanID) bool {
+	parents := make(map[trace.SpanID]trace.SpanID, len(spans))
+	for _, s := range spans {
+		parents[s.SpanContext.SpanID()] = s.Parent.SpanID()
 	}
-	require.True(t, parentIsChild, "gateway request's parent span is not a child of HealthCheck")
+	for i := 0; i <= len(spans); i++ {
+		if id == ancestor {
+			return true
+		}
+		parent, ok := parents[id]
+		if !ok {
+			return false
+		}
+		id = parent
+	}
+	return false
 }
 
 // TestHealthCheckHandlerContinuesIncomingTrace checks that the HTTP health

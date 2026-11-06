@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"net/http"
@@ -96,6 +97,9 @@ type Config struct {
 	publicContentHandlers *http.ServeMux
 	// publicContentPathPrefix configures endpoint to serve public content.
 	publicContentPathPrefix string
+	// healthCheckWriteAuthorizer allows the health check write; nil turns
+	// the write off. See SetHealthCheckWriteAuthorizer.
+	healthCheckWriteAuthorizer func(context.Context) error
 	// DiscardUnknown will ignore unknown fields (not throw an error).
 	DiscardUnknown bool `yaml:"discard-unknown"`
 }
@@ -131,6 +135,36 @@ func (c *Config) SetPublicContentHandlerOrPanic(publicFS embed.FS, prefix string
 	cleanPrefix := static.CleanPathPrefix(prefix)
 	c.publicContentHandlers.Handle(cleanPrefix, h)
 	c.publicContentPathPrefix = cleanPrefix
+}
+
+// SetHealthCheckWriteAuthorizer turns on the health check write and sets
+// the check that allows it. A health check request with write set asks the
+// gateway to write one heartbeat transaction and read it back, which proves
+// that the network can endorse, order and commit
+// (luthersystems/substrate#1037). Without an authorizer, the oracle refuses
+// every write with PermissionDenied and never asks the gateway.
+//
+// The plain health check is open to everyone, so a service must choose who
+// may write: authorize returns nil for a caller that may, and an error for
+// any other. It runs with the gRPC request context, so it can read the
+// caller's claims (Oracle.GetClaims). The oracle sends the caller's token,
+// when it has one, to the gateway with the write, so the transaction
+// records its issuer.
+//
+// The health check is a GET, so CheckCSRFToken does not cover it, and a
+// browser sends the auth cookie with a cross-site GET. A cross-site page
+// can therefore make an allowed user's browser ask for one write. The
+// write changes only the heartbeat and the gateway runs one at a time, so
+// allow only the subjects that need it (a smoke-test or service account),
+// not every user.
+//
+// The gateway refuses the write unless it runs with --health-check-write,
+// and the chaincode refuses it unless the gateway's MSP is the admin MSP.
+func (c *Config) SetHealthCheckWriteAuthorizer(authorize func(ctx context.Context) error) {
+	if c == nil {
+		return
+	}
+	c.healthCheckWriteAuthorizer = authorize
 }
 
 // SetOTLPEndpoint is a helper to set the OTLP trace endpoint.

@@ -268,7 +268,7 @@ func (orc *Oracle) StartGateway(ctx context.Context, grpcConfig GrpcGatewayConfi
 		orc.Log(ctx).Infof("init healthcheck")
 		hctx, hcancel := context.WithDeadline(ctx, time.Now().Add(10*time.Second))
 		defer hcancel()
-		orc.phylumHealthCheck(hctx)
+		orc.phylumHealthCheck(hctx, nil)
 	}()
 
 	oracleServer := &http.Server{

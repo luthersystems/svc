@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	common "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/common/v1"
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
@@ -78,6 +79,17 @@ func (orc *Oracle) healthCheckHandler() http.Handler {
 		}
 
 		resp, err := orc.GetHealthCheck(ctx, reqProto)
+		// A refused write (luthersystems/substrate#1037) is the caller's
+		// error, not a DOWN service. This path has no gRPC metadata, so an
+		// authorizer that reads claims refuses every write here.
+		if ex := resp.GetException(); err == nil && ex != nil {
+			code := http.StatusBadRequest
+			if ex.GetType() == common.Exception_SECURITY_VIOLATION {
+				code = http.StatusForbidden
+			}
+			sendResponse(resp, code)
+			return
+		}
 		if err != nil || len(resp.GetReports()) == 0 {
 			switch ctx.Err() {
 			case context.Canceled:

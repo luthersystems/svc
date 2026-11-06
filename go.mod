@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.10
 
 require (
-	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.12-20250430044901-c62151e471be.2
+	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.12-20261106161512-517840fd7c10.2
 	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Azure/go-autorest/autorest v0.11.30
 	github.com/Azure/go-autorest/autorest/adal v0.9.24
@@ -21,7 +21,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
 	github.com/luthersystems/elps v1.91.0
 	github.com/luthersystems/lutherauth-sdk-go v0.0.12
-	github.com/luthersystems/shiroclient-sdk-go v0.17.1
+	github.com/luthersystems/shiroclient-sdk-go v0.19.0
 	github.com/nyaruka/phonenumbers v1.8.1
 	github.com/prometheus/client_golang v1.25.0
 	github.com/sirupsen/logrus v1.10.2
@@ -34,7 +34,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	golang.org/x/crypto v0.58.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
 
