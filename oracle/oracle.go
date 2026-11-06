@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	common "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/common/v1"
 	healthcheck "buf.build/gen/go/luthersystems/protos/protocolbuffers/go/healthcheck/v1"
 	"github.com/luthersystems/lutherauth-sdk-go/claims"
 	"github.com/luthersystems/lutherauth-sdk-go/jwk"
@@ -24,6 +25,7 @@ import (
 	"github.com/luthersystems/shiroclient-sdk-go/shiroclient/phylum"
 	"github.com/luthersystems/svc/grpclogging"
 	"github.com/luthersystems/svc/opttrace"
+	"github.com/luthersystems/svc/svcerr"
 	"github.com/luthersystems/svc/txctx"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -303,10 +305,10 @@ var healthCheckHTTPClient = &http.Client{
 	Transport: traceHeaderTransport{base: http.DefaultTransport},
 }
 
-func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthCheckReport {
+func (orc *Oracle) phylumHealthCheck(ctx context.Context, write []shiroclient.Config) []*healthcheck.HealthCheckReport {
 	ctx, span := orc.tracer.Span(ctx, "PhylumHealthCheck", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
-	var extra []shiroclient.Config
+	extra := write
 	if orc.tracer.Enabled() {
 		extra = append(extra, shiroclient.WithHTTPClient(healthCheckHTTPClient))
 	}
@@ -321,6 +323,7 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 	}
 	ccHealth, err := orc.phylum.GetHealthCheck(callCtx, []string{"phylum"}, sopts...)
 	if err != nil && !errors.Is(err, context.Canceled) {
+		orc.Log(ctx).WithError(err).Warn("gateway health check failed")
 		return []*healthcheck.HealthCheckReport{{
 			ServiceName:    orc.cfg.PhylumServiceName,
 			ServiceVersion: "",
@@ -348,11 +351,15 @@ func (orc *Oracle) phylumHealthCheck(ctx context.Context) []*healthcheck.HealthC
 func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealthCheckRequest) (*healthcheck.GetHealthCheckResponse, error) {
 	ctx, span := orc.tracer.Span(ctx, "HealthCheck", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
-	// No ACL: Open to everyone
+	// No ACL: Open to everyone, except the write.
+	write, ex := orc.healthCheckWriteConfigs(ctx, req)
+	if ex != nil {
+		return &healthcheck.GetHealthCheckResponse{Exception: ex}, nil
+	}
 	healthy := true
 	var reports []*healthcheck.HealthCheckReport
 	if !req.GetHttpOnly() {
-		reports = orc.phylumHealthCheck(ctx)
+		reports = orc.phylumHealthCheck(ctx, write)
 		for _, report := range reports {
 			if !strings.EqualFold(report.GetStatus(), "UP") {
 				healthy = false
@@ -383,6 +390,41 @@ func (orc *Oracle) GetHealthCheck(ctx context.Context, req *healthcheck.GetHealt
 	}
 
 	return resp, nil
+}
+
+// healthCheckWriteConfigs returns the gateway configs for a health check
+// that asks for the write (luthersystems/substrate#1037), or nil for a plain
+// check. It refuses the write before anything is sent, with an exception:
+// a business exception (HTTP 400) when the request also asks for the HTTP
+// check only, which skips the gateway, and a security exception (HTTP 403)
+// when the service set no authorizer (Config.SetHealthCheckWriteAuthorizer)
+// or the authorizer refuses the caller. A refused request has no reports,
+// so a caller cannot read a refusal as a healthy network.
+func (orc *Oracle) healthCheckWriteConfigs(ctx context.Context, req *healthcheck.GetHealthCheckRequest) ([]shiroclient.Config, *common.Exception) {
+	if !req.GetWrite() {
+		return nil, nil
+	}
+	if req.GetHttpOnly() {
+		return nil, svcerr.BusinessException(ctx, "the health check write needs the gateway check: drop http_only")
+	}
+	authorize := orc.cfg.healthCheckWriteAuthorizer
+	if authorize == nil {
+		return nil, svcerr.SecurityException(ctx, "the health check write is off on this oracle")
+	}
+	if err := authorize(ctx); err != nil {
+		orc.Log(ctx).WithError(err).Warn("health check write refused")
+		return nil, svcerr.SecurityException(ctx, "caller may not run the health check write")
+	}
+	configs := []shiroclient.Config{shiroclient.WithHealthCheckWrite(true)}
+	// The authorizer decides who may write; the token only lets the
+	// transaction record its issuer, so a caller without claims still
+	// writes.
+	if orc.claims != nil {
+		if c, err := orc.GetClaims(ctx); err == nil && c.Token() != "" {
+			configs = append(configs, shiroclient.WithAuthToken(c.Token()))
+		}
+	}
+	return configs, nil
 }
 
 // close blocks the caller until all spawned go routines complete, then closes the phylum
