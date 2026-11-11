@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -40,6 +41,9 @@ type config struct {
 	syncExport      bool
 	batchOpts       []sdktrace.BatchSpanProcessorOption
 	exporter        sdktrace.SpanExporter
+	// ownerDetector finds the process owner. A test replaces it with one
+	// that fails.
+	ownerDetector resource.Option
 }
 
 // WithOTLPExporter configured an OTLP trace exporter
@@ -88,9 +92,10 @@ func WithExporter(exp sdktrace.SpanExporter) Option {
 // New creates a Tracer that will create spans if configured with an exporter.
 // If not, the Span method will use a no-op tracing provider. When enabled, the
 // spans will have the supplied service name.  The context is used to initialize
-// a configured OTLP exporter, if any.
+// a configured OTLP exporter, if any. New returns an error when a resource
+// attribute cannot be read, except the process owner (see newResource).
 func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, error) {
-	c := &config{}
+	c := &config{ownerDetector: resource.WithProcessOwner()}
 	for _, opt := range opts {
 		err := opt(c)
 		if err != nil {
@@ -108,16 +113,9 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 			return nil, err
 		}
 	}
-	resources, err := resource.New(ctx,
-		resource.WithAttributes(semconv.ServiceName(serviceName)),
-		resource.WithFromEnv(),
-		resource.WithProcess(),
-		resource.WithOS(),
-		resource.WithContainer(),
-		resource.WithHost(),
-	)
+	resources, err := newResource(ctx, serviceName, c.ownerDetector)
 	if err != nil {
-		return nil, fmt.Errorf("resource lookup: %w", err)
+		return nil, err
 	}
 	tpOpts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(resources),
@@ -134,6 +132,47 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 	return &Tracer{
 		exportTP: sdktrace.NewTracerProvider(tpOpts...),
 	}, nil
+}
+
+// newResource returns the trace resource: the service name, the attributes
+// of OTEL_RESOURCE_ATTRIBUTES and OTEL_SERVICE_NAME, and the process, OS,
+// container and host attributes. A detector error is returned, so a
+// malformed OTEL_RESOURCE_ATTRIBUTES stops the service, as before.
+//
+// The process owner is the one exception. Its detector calls
+// os/user.Current, which fails in a static binary that runs as a uid with
+// no /etc/passwd entry and no $USER: the shiroclient gateway, run as the
+// host user, then exited at start (svc#145). The owner is an optional
+// attribute, so without it the resource has no process.owner and a
+// warning is logged.
+func newResource(ctx context.Context, serviceName string, ownerDetector resource.Option) (*resource.Resource, error) {
+	res, err := resource.New(ctx,
+		resource.WithAttributes(semconv.ServiceName(serviceName)),
+		resource.WithFromEnv(),
+		// resource.WithProcess() without WithProcessOwner.
+		resource.WithProcessPID(),
+		resource.WithProcessExecutableName(),
+		resource.WithProcessExecutablePath(),
+		resource.WithProcessCommandArgs(),
+		resource.WithProcessRuntimeName(),
+		resource.WithProcessRuntimeVersion(),
+		resource.WithProcessRuntimeDescription(),
+		resource.WithOS(),
+		resource.WithContainer(),
+		resource.WithHost(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("resource lookup: %w", err)
+	}
+	owner, err := resource.New(ctx, ownerDetector)
+	if err == nil {
+		owner, err = resource.Merge(res, owner)
+	}
+	if err != nil {
+		logrus.WithError(err).Warn("opttrace: trace resource has no process owner")
+		return res, nil
+	}
+	return owner, nil
 }
 
 func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, error) {
