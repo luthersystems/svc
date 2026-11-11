@@ -108,16 +108,16 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 			return nil, err
 		}
 	}
-	resources, err := resource.New(ctx,
-		resource.WithAttributes(semconv.ServiceName(serviceName)),
-		resource.WithFromEnv(),
-		resource.WithProcess(),
-		resource.WithOS(),
-		resource.WithContainer(),
-		resource.WithHost(),
-	)
+	resources, err := resource.New(ctx, resourceOptions(serviceName)...)
 	if err != nil {
-		return nil, fmt.Errorf("resource lookup: %w", err)
+		// A detector that fails leaves out only its own attributes, and
+		// resource.New still returns the attributes of the others. So the
+		// error is reported, not returned: a missing optional attribute
+		// must not stop a service from starting. For example, the process
+		// owner detector calls os/user.Current, which fails in a static
+		// binary that runs as a uid with no /etc/passwd entry and no
+		// $USER (svc#145).
+		otel.Handle(fmt.Errorf("opttrace: resource lookup, using a partial resource: %w", err))
 	}
 	tpOpts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(resources),
@@ -134,6 +134,19 @@ func New(ctx context.Context, serviceName string, opts ...Option) (*Tracer, erro
 	return &Tracer{
 		exportTP: sdktrace.NewTracerProvider(tpOpts...),
 	}, nil
+}
+
+// resourceOptions returns the attributes and detectors of the trace resource.
+// It is a variable so that a test can add a detector that fails.
+var resourceOptions = func(serviceName string) []resource.Option {
+	return []resource.Option{
+		resource.WithAttributes(semconv.ServiceName(serviceName)),
+		resource.WithFromEnv(),
+		resource.WithProcess(),
+		resource.WithOS(),
+		resource.WithContainer(),
+		resource.WithHost(),
+	}
 }
 
 func otlpExporter(ctx context.Context, traceURI string) (*otlptrace.Exporter, error) {
