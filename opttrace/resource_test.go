@@ -68,7 +68,9 @@ func TestNewWithoutProcessOwner(t *testing.T) {
 	entry := hook.LastEntry()
 	require.NotNil(t, entry)
 	assert.Equal(t, logrus.WarnLevel, entry.Level)
-	assert.ErrorContains(t, entry.Data[logrus.ErrorKey].(error), "requires cgo")
+	logged, ok := entry.Data[logrus.ErrorKey].(error)
+	require.True(t, ok, "the warning carries the detector error")
+	assert.ErrorContains(t, logged, "requires cgo")
 }
 
 // The other detectors still fail fast: a malformed OTEL_RESOURCE_ATTRIBUTES
