@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"regexp"
 	"unicode/utf8"
 )
 
@@ -64,7 +65,7 @@ func (g Golden) Matches(r Result) bool {
 	if g.MsgB64 != nil {
 		msg = string(g.MsgB64)
 	}
-	if r.ErrKind != g.Kind || r.ErrMsg != msg {
+	if r.ErrKind != g.Kind || engineNeutral(r.ErrMsg) != engineNeutral(msg) {
 		return false
 	}
 	if r.ErrKind != KindNone {
@@ -77,6 +78,19 @@ func (g Golden) Matches(r Result) bool {
 		return string(g.OutB64) == r.Out
 	}
 	return g.SHA256 == hashString(r.Out) && g.Len == len(r.Out)
+}
+
+// unmarshalField is the part of a json.Unmarshal type error that only Go
+// 1.27's v2 JSON engine writes for a map value: v2 names the field ("Go
+// struct field .a of type float64"), v1 does not ("Go value of type
+// float64"). The reference decodes with json.Unmarshal, so its error text
+// depends on the engine the test runs on.
+var unmarshalField = regexp.MustCompile(`into Go struct field \.[^ ]* of type `)
+
+// engineNeutral rewrites msg to the v1 engine's text, so that a golden
+// recorded on either engine matches a run on either.
+func engineNeutral(msg string) string {
+	return unmarshalField.ReplaceAllString(msg, "into Go value of type ")
 }
 
 // ReadGoldens reads a golden file. A missing file is an empty set.

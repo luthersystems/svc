@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -54,6 +55,9 @@ func TestJSONStringLen(t *testing.T) {
 		ins = append(ins, string([]byte{byte(b)}), "a"+string([]byte{byte(b)})+"é")
 	}
 	for _, s := range ins {
+		if jsonV2 && !utf8.ValidString(s) {
+			continue // v2 writes U+FFFD, not the v1 escape the walk charges (#147)
+		}
 		want, err := json.Marshal(s)
 		require.NoError(t, err)
 		require.Equal(t, int64(len(want)), jsonStringLen(s), "%q", s)
@@ -264,8 +268,7 @@ func TestGoJSONCostMatchesMarshal(t *testing.T) {
 				require.NoError(t, merr, name)
 				require.LessOrEqual(t, bud.size, int64(len(b)), "%s: the size is a lower bound", name)
 			} else {
-				require.Error(t, got, name)
-				require.Equal(t, want.Error(), got.Error(), name)
+				requireMarshalError(t, want, got, name)
 			}
 			if steps >= 0 {
 				require.Equal(t, steps, bud.used, "%s: same steps every run", name)
@@ -324,6 +327,9 @@ func TestGoJSONCostStringOption(t *testing.T) {
 // reproduces. If a Go release (or GOEXPERIMENT=jsonv2) changes them, this
 // fails, and jsongo.go must follow.
 func TestEncodingJSONTexts(t *testing.T) {
+	if jsonV2 {
+		t.Skip("pins encoding/json's v1 texts, which jsongo.go copies; CI runs it with GOEXPERIMENT=nojsonv2 (#147)")
+	}
 	cyc := &jsCycle{}
 	cyc.Self = cyc
 	for _, c := range []struct {
@@ -358,6 +364,9 @@ func TestJSONQuotedStringLen(t *testing.T) {
 		ins = append(ins, string([]byte{byte(b)}), "a"+string([]byte{byte(b)})+"é")
 	}
 	for _, s := range ins {
+		if jsonV2 && !utf8.ValidString(s) {
+			continue // v2 writes U+FFFD, not the v1 escape the walk charges (#147)
+		}
 		got, err := json.Marshal(struct {
 			S string `json:",string"`
 		}{s})
@@ -476,7 +485,7 @@ func TestRawMessageCharged(t *testing.T) {
 	_, merr := json.Marshal(bad)
 	require.Error(t, merr)
 	bud := &goBudget{max: 1 << 40}
-	require.EqualError(t, goJSONCost(bud, reflect.ValueOf(bad), 0), merr.Error())
+	requireMarshalError(t, merr, goJSONCost(bud, reflect.ValueOf(bad), 0))
 	require.GreaterOrEqual(t, bud.used, int64(2*len(big)/16))
 
 	thenNaN := struct {
@@ -486,7 +495,7 @@ func TestRawMessageCharged(t *testing.T) {
 	_, merr = json.Marshal(thenNaN)
 	require.Error(t, merr)
 	bud = &goBudget{max: 1 << 40}
-	require.EqualError(t, goJSONCost(bud, reflect.ValueOf(thenNaN), 0), merr.Error())
+	requireMarshalError(t, merr, goJSONCost(bud, reflect.ValueOf(thenNaN), 0))
 	require.GreaterOrEqual(t, bud.used, int64(2*len(big)/16))
 
 	bud = &goBudget{max: 1000}
@@ -579,7 +588,7 @@ func TestRawMessageBehindMarshaler(t *testing.T) {
 		_, merr := json.Marshal(v)
 		require.Error(t, merr, name)
 		bud := &goBudget{max: 1 << 40}
-		require.EqualError(t, goJSONCost(bud, reflect.ValueOf(v), 0), merr.Error(), name)
+		requireMarshalError(t, merr, goJSONCost(bud, reflect.ValueOf(v), 0), name)
 		require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), name)
 	}
 
@@ -626,7 +635,7 @@ func TestRawMessageEmbedded(t *testing.T) {
 		require.Error(t, merr, name)
 		bud := &goBudget{max: 1 << 40}
 		if err := goJSONCost(bud, reflect.ValueOf(v), 0); err != nil {
-			require.EqualError(t, err, merr.Error(), name)
+			requireMarshalError(t, merr, err, name)
 		}
 		require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), name)
 	}
@@ -659,7 +668,7 @@ func TestRawMessageSelectorRules(t *testing.T) {
 	require.Error(t, merr)
 	bud := &goBudget{max: 1 << 40}
 	if err := goJSONCost(bud, reflect.ValueOf(v), 0); err != nil {
-		require.EqualError(t, err, merr.Error())
+		requireMarshalError(t, merr, err)
 	}
 	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16), "the depth-1 RawMessage's bytes")
 
@@ -723,11 +732,16 @@ func TestRawMessageTiedEmbedding(t *testing.T) {
 	v := reflect.New(typ).Elem()
 	v.Field(0).Set(reflect.ValueOf(raw))
 	v.Field(1).Set(reflect.ValueOf(json.RawMessage(`1`)))
-	_, merr := json.Marshal(v.Interface())
-	require.Error(t, merr)
 	bud := &goBudget{max: 1 << 40}
-	if err := goJSONCost(bud, v, 0); err != nil {
-		require.EqualError(t, err, merr.Error())
+	err := goJSONCost(bud, v, 0)
+	// encoding/json/v2 panics (nil pointer) on this type (#147), so only
+	// v1 compares with it; the walk must not panic on either engine.
+	if !jsonV2 {
+		_, merr := json.Marshal(v.Interface())
+		require.Error(t, merr)
+		if err != nil {
+			require.EqualError(t, err, merr.Error())
+		}
 	}
 	require.GreaterOrEqual(t, bud.used, int64(2*len(raw)/16))
 	n, _, found := embeddedRaw(v)
