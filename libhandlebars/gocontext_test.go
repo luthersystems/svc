@@ -679,7 +679,14 @@ func TestJSONContextNumberAlloc(t *testing.T) {
 	_, want := json.Marshal(ctx)
 	var gerr error
 	alloc := allocDuringGo(func() { _, gerr = libhandlebars.RenderWith(tpl, ctx, libhandlebars.WithJSONContext()) })
-	require.EqualError(t, gerr, want.Error())
+	require.Error(t, want)
+	if libhandlebars.JSONV2EngineForTest() {
+		// v2's text for an invalid json.Number differs from the v1 text
+		// the walk copies (#147).
+		require.ErrorContains(t, gerr, `json: invalid number literal "1`)
+	} else {
+		require.EqualError(t, gerr, want.Error())
+	}
 	require.Less(t, alloc, uint64(48<<20), "the 16 MB text, built at its size and copied once")
 }
 

@@ -30,7 +30,7 @@ plugin-linux: ${SUBSTRATE_PLUGIN_LINUX}
 plugin-darwin: ${SUBSTRATE_PLUGIN_DARWIN}
 
 .PHONY: citest
-citest: plugin go-test
+citest: plugin go-test go-test-json-v1
 	@
 
 GO_TEST_BASE=go test ${GO_TEST_FLAGS}
@@ -39,6 +39,13 @@ GO_TEST_TIMEOUT_10=${GO_TEST_BASE} -timeout 10m
 .PHONY: go-test
 go-test:
 	${GO_TEST_TIMEOUT_10} ./...
+
+# libhandlebars copies encoding/json's v1 engine; Go 1.27 defaults to v2
+# (luthersystems/svc#147). Its tests compare with encoding/json only on v1,
+# so run them on v1 too.
+.PHONY: go-test-json-v1
+go-test-json-v1:
+	GOEXPERIMENT=nojsonv2 ${GO_TEST_TIMEOUT_10} ./libhandlebars/...
 
 # Lint as CI does (golangci-lint v2.15.0, the pin of the shared Quality workflow in .github/workflows/quality.yml).
 # `config verify` checks .golangci.yml against golangci-lint's schema first:

@@ -722,7 +722,7 @@ func TestEncodeNativesBounded(t *testing.T) {
 		ctx.MapSetString("a", lisp.Native(reflect.MakeChan(reflect.ChanOf(reflect.BothDir, elem), 0).Interface()))
 		env.Put(lisp.Symbol("ctx"), ctx)
 		res, _, _ := checkEncodeFailureParity(t, env, "")
-		require.Contains(t, res.Cells[0].Str, "json: unsupported type: chan struct")
+		require.Contains(t, res.Cells[0].Str, "unable to encode native value: unsupported type chan struct")
 	})
 }
 
@@ -749,7 +749,7 @@ func TestEncodeNativesStringOption(t *testing.T) {
 	env.Put(lisp.Symbol("ctx"), ctx)
 	res, _ = eval(t, env, `(handlebars:render "" ctx)`)
 	require.Equal(t, lisp.LError, res.Type)
-	require.Equal(t, "error while serializing: json: unsupported value: NaN", res.Cells[0].Str)
+	require.Equal(t, "error while serializing: unable to encode native value: unsupported number NaN", res.Cells[0].Str)
 }
 
 // TestNativeColdEmbedding: the first use of a deeply embedded struct type
@@ -852,11 +852,11 @@ func TestNativeResourceReview(t *testing.T) {
 		native  func() any // a fresh value each run: a cold type stays cold
 		wantErr string
 	}{
-		"invalid json.Number":   {func() any { return map[string]any{"n": json.Number("1" + strings.Repeat("\x00", 4<<20))} }, "invalid number literal"},
+		"invalid json.Number":   {func() any { return map[string]any{"n": json.Number("1" + strings.Repeat("\x00", 4<<20))} }, "invalid json.Number"},
 		"map of hidden structs": {func() any { return map[string]hiddenBig{"a": {}} }, ""},
 		"5000 pointer hops":     {func() any { return hops }, ""},
 		"omitzero 4 MiB x200":   {func() any { return rows }, ""},
-		"4 MiB key then chan":   {func() any { return map[string]any{strings.Repeat("k", 4<<20): make(chan int)} }, "unsupported type: chan int"},
+		"4 MiB key then chan":   {func() any { return map[string]any{strings.Repeat("k", 4<<20): make(chan int)} }, "unsupported type chan int"},
 		"cold 2000-level chain": {func() any {
 			cold++
 			return reflect.New(reflect.StructOf([]reflect.StructField{{Name: "C", Type: embedChain(2000), Anonymous: true}, {Name: "Cold" + strconv.Itoa(cold), Type: reflect.TypeFor[int]()}})).Elem().Interface()
@@ -1098,44 +1098,48 @@ func TestNativeEscapedNameUnderCap(t *testing.T) {
 }
 
 // TestNativeAddressableMarshalerText: an addressable RawMessage (a slice
-// element) fails with json.Marshal's own text, which names the value's
-// type, not its pointer's.
+// element) holding invalid JSON fails with elps libjson's own text,
+// the same on both JSON engines (elps v1.97.0, luthersystems/elps#928).
 func TestNativeAddressableMarshalerText(t *testing.T) {
 	native := []json.RawMessage{json.RawMessage("x")}
-	_, merr := json.Marshal(native)
-	require.Error(t, merr)
 	env := newEnv(t)
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("n", lisp.Native(native))
 	env.Put(lisp.Symbol("ctx"), ctx)
 	res, _ := eval(t, env, `(handlebars:render "x" ctx)`)
 	require.Equal(t, lisp.LError, res.Type, "%v", res)
-	require.Contains(t, res.String(), "error while serializing: "+merr.Error())
+	require.Contains(t, res.String(), "error while serializing: unable to encode native value: a marshal method returned JSON that is not valid or nests more than 10000 levels deep")
 }
 
 // TestNativeRawMessageCharged: a RawMessage as a native, behind a pointer
-// or in a json.Marshaler field inherits ELPS's work charge and reports
-// encoding/json's error text.
+// or in a json.Marshaler field inherits ELPS's work charge. Under elps
+// v1.97.0 the 64 KiB limit refuses the 4 MiB message when elps copies it;
+// an embedded one is checked first and fails with elps's own text.
 func TestNativeRawMessageCharged(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
-	for name, native := range map[string]any{
-		"raw":                raw,
-		"pointer":            &raw,
-		"marshaler field":    struct{ R json.Marshaler }{raw},
-		"raw field":          struct{ R json.RawMessage }{raw},
-		"embedded":           struct{ json.RawMessage }{raw},
-		"embedded pointer":   struct{ *json.RawMessage }{&raw},
-		"embedded marshaler": struct{ json.Marshaler }{raw},
+	const (
+		overLimit = "allocation size exceeds maximum (65536)"
+		invalid   = "error while serializing: unable to encode native value: a marshal method returned JSON that is not valid or nests more than 10000 levels deep"
+	)
+	for name, c := range map[string]struct {
+		native any
+		want   string
+	}{
+		"raw":                {raw, overLimit},
+		"pointer":            {&raw, overLimit},
+		"marshaler field":    {struct{ R json.Marshaler }{raw}, overLimit},
+		"raw field":          {struct{ R json.RawMessage }{raw}, overLimit},
+		"embedded":           {struct{ json.RawMessage }{raw}, invalid},
+		"embedded pointer":   {struct{ *json.RawMessage }{&raw}, invalid},
+		"embedded marshaler": {struct{ json.Marshaler }{raw}, invalid},
 	} {
-		_, merr := json.Marshal(native)
-		require.Error(t, merr, name)
 		env := newEnv(t)
 		env.Runtime.MaxAlloc = 64 << 10
 		ctx := lisp.SortedMap()
-		ctx.MapSetString("r", lisp.Native(native))
+		ctx.MapSetString("r", lisp.Native(c.native))
 		env.Put(lisp.Symbol("ctx"), ctx)
 		res, _, _ := checkEncodeFailureParity(t, env, "")
-		require.Contains(t, res.String(), "error while serializing: "+merr.Error(), name)
+		require.Contains(t, res.String(), c.want, name)
 	}
 }
 
@@ -1276,7 +1280,7 @@ func TestEncodeMapKeysChargedBeforeValues(t *testing.T) {
 	}
 	env.Put(lisp.Symbol("ctx"), ctx)
 	res, _, _ := checkEncodeFailureParity(t, env, "")
-	require.Contains(t, res.String(), "unsupported type: chan int")
+	require.Contains(t, res.String(), "unsupported type chan int")
 }
 
 // TestEncodeKeyCollisionBeforeNatives: libjson refuses an int key spelling
@@ -1379,7 +1383,7 @@ func TestEncodeErrorOrder(t *testing.T) {
 		return ctx
 	}
 	check(t, floatsThenChan(), 32, "allocation size exceeds maximum (32)")
-	check(t, floatsThenChan(), 1<<20, "unsupported type: chan int")
+	check(t, floatsThenChan(), 1<<20, "unsupported type chan int")
 }
 
 // TestEncodeErrorOrderNearCap keeps render's error precedence identical to

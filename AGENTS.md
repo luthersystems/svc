@@ -39,6 +39,9 @@ make citest
 # Run Go tests only (no plugin download)
 go test -timeout 10m ./...
 
+# libhandlebars tests on Go 1.27's v1 JSON engine (citest runs it; #147)
+make go-test-json-v1
+
 # Run a single package's tests
 go test -timeout 10m ./libdates/...
 

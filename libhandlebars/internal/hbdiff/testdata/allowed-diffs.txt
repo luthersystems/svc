@@ -46,6 +46,13 @@ kinds:*->limit && candmsg:rendered output exceeds the maximum of 16777216 bytes 
 # convert by the same pinned rule. On amd64 nothing here matches.
 arch:!amd64 && field:out && candout:-9223372036854775808 | never | #110 | to-int, or an int literal near 2^63, on a non-finite or out-of-range float: the engine pins the amd64 result math.MinInt64
 
+# Go 1.27's v2 JSON engine names the field when json.Unmarshal into the
+# reference's map[string]interface{} meets a number out of float64's range
+# ("Go struct field .a of type float64"); hbs.FromJSON keeps the v1 text
+# ("Go value of type float64"), as substrate's peers run it today. On v1
+# nothing here matches.
+kinds:unmarshal->unmarshal && field:msg && candmsg:into Go value of type float64 | never | #147 | JSON v2 engine: the reference's out-of-range number error names the field
+
 # Outside the harness (it renders through hbs.FromJSON, as handlebars:render
 # does): libhandlebars.Render, the Go API, reads a Go context lazily with
 # raymond's Go semantics by default, and handlebars:render :strict true keeps

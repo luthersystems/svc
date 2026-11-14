@@ -2,7 +2,7 @@ module github.com/luthersystems/svc
 
 go 1.26.0
 
-toolchain go1.26.11
+toolchain go1.27.4
 
 require (
 	buf.build/gen/go/luthersystems/protos/protocolbuffers/go v1.36.12-20261106161512-517840fd7c10.2
@@ -19,7 +19,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
-	github.com/luthersystems/elps v1.96.0
+	github.com/luthersystems/elps v1.97.0
 	github.com/luthersystems/lutherauth-sdk-go v0.0.12
 	github.com/luthersystems/shiroclient-sdk-go v0.19.0
 	github.com/nyaruka/phonenumbers v1.8.1
