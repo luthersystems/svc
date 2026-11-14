@@ -85,7 +85,7 @@ func (g Golden) Matches(r Result) bool {
 // struct field .a of type float64"), v1 does not ("Go value of type
 // float64"). The reference decodes with json.Unmarshal, so its error text
 // depends on the engine the test runs on.
-var unmarshalField = regexp.MustCompile(`into Go struct field \.[^ ]* of type `)
+var unmarshalField = regexp.MustCompile(`into Go struct field \..*? of type `)
 
 // engineNeutral rewrites msg to the v1 engine's text, so that a golden
 // recorded on either engine matches a run on either.

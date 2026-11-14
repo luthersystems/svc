@@ -1098,12 +1098,10 @@ func TestNativeEscapedNameUnderCap(t *testing.T) {
 }
 
 // TestNativeAddressableMarshalerText: an addressable RawMessage (a slice
-// element) that json.Marshal refuses fails with elps libjson's own text,
+// element) holding invalid JSON fails with elps libjson's own text,
 // the same on both JSON engines (elps v1.97.0, luthersystems/elps#928).
 func TestNativeAddressableMarshalerText(t *testing.T) {
 	native := []json.RawMessage{json.RawMessage("x")}
-	_, merr := json.Marshal(native)
-	require.Error(t, merr)
 	env := newEnv(t)
 	ctx := lisp.SortedMap()
 	ctx.MapSetString("n", lisp.Native(native))
@@ -1114,32 +1112,34 @@ func TestNativeAddressableMarshalerText(t *testing.T) {
 }
 
 // TestNativeRawMessageCharged: a RawMessage as a native, behind a pointer
-// or in a json.Marshaler field inherits ELPS's work charge and reports
-// encoding/json's error text.
+// or in a json.Marshaler field inherits ELPS's work charge. Under elps
+// v1.97.0 the 64 KiB limit refuses the 4 MiB message when elps copies it;
+// an embedded one is checked first and fails with elps's own text.
 func TestNativeRawMessageCharged(t *testing.T) {
 	raw := json.RawMessage(`"` + strings.Repeat("a", 4<<20))
-	for name, native := range map[string]any{
-		"raw":                raw,
-		"pointer":            &raw,
-		"marshaler field":    struct{ R json.Marshaler }{raw},
-		"raw field":          struct{ R json.RawMessage }{raw},
-		"embedded":           struct{ json.RawMessage }{raw},
-		"embedded pointer":   struct{ *json.RawMessage }{&raw},
-		"embedded marshaler": struct{ json.Marshaler }{raw},
+	const (
+		overLimit = "allocation size exceeds maximum (65536)"
+		invalid   = "error while serializing: unable to encode native value: a marshal method returned JSON that is not valid or nests more than 10000 levels deep"
+	)
+	for name, c := range map[string]struct {
+		native any
+		want   string
+	}{
+		"raw":                {raw, overLimit},
+		"pointer":            {&raw, overLimit},
+		"marshaler field":    {struct{ R json.Marshaler }{raw}, overLimit},
+		"raw field":          {struct{ R json.RawMessage }{raw}, overLimit},
+		"embedded":           {struct{ json.RawMessage }{raw}, invalid},
+		"embedded pointer":   {struct{ *json.RawMessage }{&raw}, invalid},
+		"embedded marshaler": {struct{ json.Marshaler }{raw}, invalid},
 	} {
-		_, merr := json.Marshal(native)
-		require.Error(t, merr, name)
 		env := newEnv(t)
 		env.Runtime.MaxAlloc = 64 << 10
 		ctx := lisp.SortedMap()
-		ctx.MapSetString("r", lisp.Native(native))
+		ctx.MapSetString("r", lisp.Native(c.native))
 		env.Put(lisp.Symbol("ctx"), ctx)
 		res, _, _ := checkEncodeFailureParity(t, env, "")
-		// elps v1.97.0 charges the RawMessage's bytes before it checks
-		// them, so the 64 KiB limit can refuse it first.
-		msg := res.String()
-		require.True(t, strings.Contains(msg, "allocation size exceeds maximum") ||
-			strings.Contains(msg, "a marshal method returned JSON that is not valid"), "%s: %.300s", name, msg)
+		require.Contains(t, res.String(), c.want, name)
 	}
 }
 
